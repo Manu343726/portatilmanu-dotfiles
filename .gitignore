@@ -1,0 +1,25 @@
+/*
+!/.gitignore
+!/.gitmodules
+
+# dotfiles
+!/.zshrc
+!/.bashrc
+!/.profile
+!/.xprofile
+!/.tmux.conf
+!/.dircolors
+!/.local/bin/
+
+# config directories
+!/.config/
+/.config/*
+!/.config/tmux/
+/.config/tmux/*
+!/.config/tmux/tmux.conf.local
+!/.config/kitty/
+/.config/kitty/*
+!/.config/kitty/kitty.conf
+!.i3/
+/.i3/*
+!/.i3/config
