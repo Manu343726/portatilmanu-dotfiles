@@ -23,3 +23,6 @@
 !.i3/
 /.i3/*
 !/.i3/config
+!/.config/i3status/
+/.config/i3status/*
+!/.config/i3status/config
