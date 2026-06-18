@@ -9,6 +9,8 @@
 !/.xprofile
 !/.tmux.conf
 !/.dircolors
+!/.local/
+/.local/*
 !/.local/bin/
 
 # config directories
