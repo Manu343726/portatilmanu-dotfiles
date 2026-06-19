@@ -68,17 +68,19 @@ install:
 
 # -- Proto ------------------------------------------------------------------
 
-PROTO_SRC := proto/dotfilesd/v1/dotfilesdv1/service.proto
-PROTO_OUT := proto/dotfilesd/v1/dotfilesdv1/service.pb.go
-CONNECT_OUT := proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/service.connect.go
+PROTO_DIR := proto/dotfilesd/v1/dotfilesdv1
+PROTO_SRCS := $(wildcard $(PROTO_DIR)/*.proto)
+PROTO_PB_GO := $(patsubst $(PROTO_DIR)/%.proto, $(PROTO_DIR)/%.pb.go, $(PROTO_SRCS))
+PROTO_CONNECT_DIR := $(PROTO_DIR)/dotfilesdv1connect
+PROTO_CONNECT_GO := $(patsubst $(PROTO_DIR)/%.proto, $(PROTO_CONNECT_DIR)/%.connect.go, $(PROTO_SRCS))
 
-proto: $(PROTO_OUT) $(CONNECT_OUT)
+proto: $(PROTO_PB_GO) $(PROTO_CONNECT_GO)
 
-$(PROTO_OUT) $(CONNECT_OUT): $(PROTO_SRC)
+$(PROTO_PB_GO) $(PROTO_CONNECT_GO): $(PROTO_SRCS)
 	PATH="$(HOME)/go/bin:$(PATH)" protoc \
 		--go_out=. --go_opt=paths=source_relative \
 		--connect-go_out=. --connect-go_opt=paths=source_relative \
-		$<
+		$(PROTO_SRCS)
 
 proto-tools:
 	@echo "installing protoc-gen-go and protoc-gen-connect-go..."

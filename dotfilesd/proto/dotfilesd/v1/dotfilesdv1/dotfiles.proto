@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// DotfilesService - dotfiles repository management.
+service DotfilesService {
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc Git(GitRequest) returns (GitResponse);
+}
+
+enum GitAction {
+  GIT_ACTION_UNSPECIFIED = 0;
+  GIT_ACTION_STATUS = 1;
+  GIT_ACTION_DIFF = 2;
+  GIT_ACTION_ADD = 3;
+  GIT_ACTION_COMMIT = 4;
+  GIT_ACTION_PUSH = 5;
+  GIT_ACTION_LOG = 6;
+}
+
+message StatusRequest {}
+message StatusResponse {
+  bool git_clean = 1;
+  string git_branch = 2;
+  int32 git_ahead = 3;
+  int32 git_behind = 4;
+  string last_commit = 5;
+  string uptime = 6;
+  string hostname = 7;
+}
+
+message GitRequest {
+  GitAction action = 1;
+  string message = 2;
+  string paths = 3;
+}
+
+message GitResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}

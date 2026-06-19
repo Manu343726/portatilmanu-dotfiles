@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// ConfigService - dotfiles configuration reload, daemon reconfiguration, and restart.
+service ConfigService {
+  rpc Reload(ReloadRequest) returns (ReloadResponse);
+  rpc Reconfigure(ReconfigureRequest) returns (ReconfigureResponse);
+  rpc Restart(RestartRequest) returns (RestartResponse);
+}
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_TRACE = 1;
+  LOG_LEVEL_DEBUG = 2;
+  LOG_LEVEL_INFO = 3;
+  LOG_LEVEL_WARN = 4;
+  LOG_LEVEL_ERROR = 5;
+}
+
+enum ReloadTarget {
+  RELOAD_TARGET_UNSPECIFIED = 0;
+  RELOAD_TARGET_TMUX = 1;
+  RELOAD_TARGET_I3 = 2;
+  RELOAD_TARGET_KITTY = 3;
+  RELOAD_TARGET_ALL = 4;
+}
+
+message ReloadRequest {
+  ReloadTarget target = 1;
+}
+
+message ReloadResponse {
+  message ReloadResult {
+    string target = 1;
+    bool success = 2;
+    string message = 3;
+  }
+  repeated ReloadResult results = 1;
+}
+
+message ReconfigureRequest {
+  LogLevel log_level = 1;
+}
+
+message ReconfigureResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RestartRequest {}
+
+message RestartResponse {
+  string message = 1;
+}

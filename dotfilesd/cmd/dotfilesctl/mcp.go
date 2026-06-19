@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"github.com/spf13/cobra"
 )
 
 type mcpRequest struct {
@@ -113,6 +114,18 @@ var mcpTools = []toolDef{
 		Description: "Gracefully restart the dotfilesd daemon",
 		InputSchema: toolSchema{Type: "object"},
 	},
+}
+
+func newMCPCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "mcp",
+		Short: "start MCP stdio server",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			runMCP()
+			return nil
+		},
+	}
 }
 
 func runMCP() {

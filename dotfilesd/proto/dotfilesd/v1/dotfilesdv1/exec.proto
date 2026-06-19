@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// ExecService - command execution.
+service ExecService {
+  // Simple unary exec (no sudo).
+  rpc Exec(ExecRequest) returns (ExecResponse);
+  // Challenge-response sudo. The first call omits password; if the daemon
+  // needs auth it returns AuthChallenge. The client retries with the password.
+  rpc SudoExec(SudoExecRequest) returns (SudoExecResponse);
+}
+
+enum SudoMethod {
+  SUDO_METHOD_UNSPECIFIED = 0;
+  SUDO_METHOD_TERMINAL = 1;
+  SUDO_METHOD_GRAPHICAL = 2;
+  SUDO_METHOD_NOPASS = 3;
+}
+
+message ExecRequest {
+  string command = 1;
+  bool sudo = 2;
+}
+
+message ExecResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}
+
+// --- SudoExec protocol (challenge-response over unary RPC) -----------------
+
+message SudoExecRequest {
+  string command = 1;
+  string password = 2;
+  SudoMethod preferred_method = 3;
+}
+
+message SudoExecResponse {
+  oneof outcome {
+    SudoResult result = 1;
+    AuthChallenge auth_challenge = 2;
+  }
+}
+
+message AuthChallenge {
+  repeated string methods = 1;
+  string prompt = 2;
+}
+
+message SudoResult {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  bool auth_cancelled = 4;
+}
