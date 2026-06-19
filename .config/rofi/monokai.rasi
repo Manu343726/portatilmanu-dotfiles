@@ -1,75 +1,47 @@
-* {
-    background:                  #272822;
-    foreground:                  #F8F8F2;
-    lightfg:                     #A6E22E;
-    lightbg:                     #383830;
-    red:                         #F92672;
-    blue:                        #66D9EF;
-    separatorcolor:              #75715E;
-
-    normal-background:           var(background);
-    normal-foreground:           var(foreground);
-    alternate-normal-background: var(lightbg);
-    alternate-normal-foreground: var(foreground);
-    selected-normal-background:  var(lightfg);
-    selected-normal-foreground:  var(foreground);
-
-    urgent-background:           var(red);
-    urgent-foreground:           var(foreground);
-    alternate-urgent-background: var(lightbg);
-    alternate-urgent-foreground: var(red);
-    selected-urgent-background:  var(red);
-    selected-urgent-foreground:  var(foreground);
-
-    active-background:           var(blue);
-    active-foreground:           var(foreground);
-    alternate-active-background: var(lightbg);
-    alternate-active-foreground: var(blue);
-    selected-active-background:  var(blue);
-    selected-active-foreground:  var(foreground);
-
-    background-color:            transparent;
-    border-color:                var(lightfg);
-}
-
 window {
-    background-color: var(background);
+    background-color: #272822;
     border:           1;
-    border-color:     var(lightfg);
+    border-color:     #A6E22E;
 }
 
 mainbox {
-    background-color: var(background);
+    background-color: #272822;
 }
 
 inputbar {
-    background-color: var(lightbg);
-    text-color:       var(foreground);
+    background-color: #383830;
+    text-color:       #F8F8F2;
 }
 
 prompt {
-    text-color: var(lightfg);
+    text-color: #A6E22E;
 }
 
 entry {
-    text-color:   var(foreground);
-    cursor-color: var(lightfg);
-}
-
-element-text {
-    background-color: transparent;
-    text-color:       inherit;
-}
-
-element-icon {
-    background-color: transparent;
+    text-color:   #F8F8F2;
+    cursor-color: #A6E22E;
+    placeholder-color: #75715E;
 }
 
 listview {
-    background-color: var(background);
+    background-color: #272822;
+}
+
+element {
+    background-color: #272822;
+    text-color:       #F8F8F2;
+}
+
+element selected.normal {
+    background-color: #A6E22E;
+    text-color:       #F8F8F2;
+}
+
+element urgent.normal {
+    text-color: #F92672;
 }
 
 message {
-    background-color: var(background);
-    text-color:       var(separatorcolor);
+    background-color: #272822;
+    text-color:       #75715E;
 }
