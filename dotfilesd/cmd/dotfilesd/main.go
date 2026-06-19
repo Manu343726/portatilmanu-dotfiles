@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
@@ -63,34 +62,34 @@ func main() {
 
 			setupLogging(logDir, logLevel, logMaxMB, logBackup, logAge)
 
-	sysSvc := &systemServer{startedAt: time.Now()}
-	dotSvc := &dotfilesServer{}
-	execSvc := &execServer{}
-	cfgSvc := &configServer{}
+			sysSvc := &systemServer{startedAt: time.Now()}
+			dotSvc := &dotfilesServer{}
+			execSvc := &execServer{}
+			cfgSvc := &configServer{}
 
-	mux := http.NewServeMux()
-	{
-		p, h := dotfilesdv1connect.NewSystemServiceHandler(sysSvc)
-		mux.Handle(p, h)
-	}
-	{
-		p, h := dotfilesdv1connect.NewDotfilesServiceHandler(dotSvc)
-		mux.Handle(p, h)
-	}
-	{
-		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
-		mux.Handle(p, h)
-	}
-	{
-		p, h := dotfilesdv1connect.NewConfigServiceHandler(cfgSvc)
-		mux.Handle(p, h)
-	}
+			mux := http.NewServeMux()
+			{
+				p, h := dotfilesdv1connect.NewSystemServiceHandler(sysSvc)
+				mux.Handle(p, h)
+			}
+			{
+				p, h := dotfilesdv1connect.NewDotfilesServiceHandler(dotSvc)
+				mux.Handle(p, h)
+			}
+			{
+				p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
+				mux.Handle(p, h)
+			}
+			{
+				p, h := dotfilesdv1connect.NewConfigServiceHandler(cfgSvc)
+				mux.Handle(p, h)
+			}
 
-	rpcAddr := fmt.Sprintf("127.0.0.1:%s", rpcPort)
-	rpcServer := &http.Server{
-		Addr:    rpcAddr,
-		Handler: withLogging(mux),
-	}
+			rpcAddr := fmt.Sprintf("127.0.0.1:%s", rpcPort)
+			rpcServer := &http.Server{
+				Addr:    rpcAddr,
+				Handler: mux,
+			}
 
 			go func() {
 				slog.Info("serving connect rpc", "addr", rpcAddr)
@@ -198,47 +197,4 @@ func checkBuildHash(noVerify bool, name string) {
 		fmt.Fprintf(os.Stderr, "WARNING: %s source changed since build (built: %s, current: %s)\n", name, buildHash, current)
 		fmt.Fprintf(os.Stderr, "  run 'make install' to rebuild, or use --no-verify to silence\n")
 	}
-}
-
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-	body       bytes.Buffer
-}
-
-func (w *loggingResponseWriter) WriteHeader(code int) {
-	w.statusCode = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *loggingResponseWriter) Write(b []byte) (int, error) {
-	w.body.Write(b)
-	return w.ResponseWriter.Write(b)
-}
-
-func withLogging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		body, _ := io.ReadAll(r.Body)
-		r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(body))
-
-		lw := &loggingResponseWriter{ResponseWriter: w, statusCode: 200}
-		next.ServeHTTP(lw, r)
-
-		attrs := []any{
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", lw.statusCode,
-			"duration", time.Since(start),
-			"request_body", string(body),
-			"response_body", lw.body.String(),
-		}
-		for k, v := range r.Header {
-			attrs = append(attrs, "header_"+k, strings.Join(v, ", "))
-		}
-
-		slog.Log(r.Context(), levelTrace, "http request", attrs...)
-	})
 }

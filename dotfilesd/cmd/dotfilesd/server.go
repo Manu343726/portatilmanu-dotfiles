@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -21,14 +22,21 @@ type systemServer struct {
 }
 
 func (s *systemServer) Ping(ctx context.Context, req *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
-	return connect.NewResponse(&dotfilesdv1.PingResponse{
+	slog.Log(ctx, levelTrace, "Ping", "request", req.Msg)
+
+	resp := connect.NewResponse(&dotfilesdv1.PingResponse{
 		Version:    "0.1.0",
 		Pid:        int64(os.Getpid()),
 		UptimeSecs: int64(time.Since(s.startedAt).Seconds()),
-	}), nil
+	})
+
+	slog.Log(ctx, levelTrace, "Ping done", "response", resp.Msg)
+	return resp, nil
 }
 
 func (s *systemServer) SystemInfo(ctx context.Context, req *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
+	slog.Log(ctx, levelTrace, "SystemInfo", "request", req.Msg)
+
 	kernel, _ := runCmd("uname", "-r")
 	shell := os.Getenv("SHELL")
 	desktop := os.Getenv("XDG_CURRENT_DESKTOP")
@@ -46,7 +54,7 @@ func (s *systemServer) SystemInfo(ctx context.Context, req *connect.Request[dotf
 	fmt.Sscanf(strings.TrimSpace(memAvail), "%d", &memAvailKb)
 	fmt.Sscanf(strings.TrimSpace(load1), "%f", &cpuLoad)
 
-	return connect.NewResponse(&dotfilesdv1.SystemInfoResponse{
+	resp := connect.NewResponse(&dotfilesdv1.SystemInfoResponse{
 		Os:            "linux",
 		Kernel:        strings.TrimSpace(kernel),
 		Shell:         shell,
@@ -57,10 +65,15 @@ func (s *systemServer) SystemInfo(ctx context.Context, req *connect.Request[dotf
 		TmuxVersion:   strings.TrimSpace(tmuxVer),
 		KittyVersion:  strings.TrimSpace(kittyVer),
 		I3Version:     strings.TrimSpace(i3Ver),
-	}), nil
+	})
+
+	slog.Log(ctx, levelTrace, "SystemInfo done", "response", resp.Msg)
+	return resp, nil
 }
 
 func (s *systemServer) SudoMethods(ctx context.Context, req *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
+	slog.Log(ctx, levelTrace, "SudoMethods", "request", req.Msg)
+
 	var available []string
 	for _, name := range []string{"pkexec", "sudo"} {
 		if _, err := exec.LookPath(name); err == nil {
@@ -72,11 +85,14 @@ func (s *systemServer) SudoMethods(ctx context.Context, req *connect.Request[dot
 		current = "pkexec"
 	}
 
-	return connect.NewResponse(&dotfilesdv1.SudoMethodsResponse{
+	resp := connect.NewResponse(&dotfilesdv1.SudoMethodsResponse{
 		AvailableMethods: available,
 		CurrentMethod:    current,
 		HasElevation:     len(available) > 0,
-	}), nil
+	})
+
+	slog.Log(ctx, levelTrace, "SudoMethods done", "response", resp.Msg)
+	return resp, nil
 }
 
 // --- DotfilesService -------------------------------------------------------
@@ -84,6 +100,8 @@ func (s *systemServer) SudoMethods(ctx context.Context, req *connect.Request[dot
 type dotfilesServer struct{}
 
 func (s *dotfilesServer) Status(ctx context.Context, req *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error) {
+	slog.Log(ctx, levelTrace, "Dotfiles.Status", "request", req.Msg)
+
 	home := os.Getenv("HOME")
 	hostname, _ := os.Hostname()
 	uptimeRaw, _ := runCmd("uptime", "-p")
@@ -96,16 +114,21 @@ func (s *dotfilesServer) Status(ctx context.Context, req *connect.Request[dotfil
 	gitBranch = strings.TrimSpace(gitBranch)
 	gitLog = strings.TrimSpace(gitLog)
 
-	return connect.NewResponse(&dotfilesdv1.StatusResponse{
+	resp := connect.NewResponse(&dotfilesdv1.StatusResponse{
 		GitClean:   gitClean,
 		GitBranch:  gitBranch,
 		LastCommit: gitLog,
 		Uptime:     strings.TrimSpace(uptimeRaw),
 		Hostname:   strings.TrimSpace(hostname),
-	}), nil
+	})
+
+	slog.Log(ctx, levelTrace, "Dotfiles.Status done", "response", resp.Msg)
+	return resp, nil
 }
 
 func (s *dotfilesServer) Git(ctx context.Context, req *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error) {
+	slog.Log(ctx, levelTrace, "Dotfiles.Git", "action", req.Msg.Action, "paths", req.Msg.Paths)
+
 	home := os.Getenv("HOME")
 	action := req.Msg.Action
 
@@ -123,7 +146,9 @@ func (s *dotfilesServer) Git(ctx context.Context, req *connect.Request[dotfilesd
 		}
 	case "commit":
 		if req.Msg.Message == "" {
-			return connect.NewResponse(&dotfilesdv1.GitResponse{ExitCode: 1, Stderr: "commit message required"}), nil
+			resp := connect.NewResponse(&dotfilesdv1.GitResponse{ExitCode: 1, Stderr: "commit message required"})
+			slog.Log(ctx, levelTrace, "Dotfiles.Git done", "response", resp.Msg)
+			return resp, nil
 		}
 		args = []string{"-C", home, "commit", "-m", req.Msg.Message}
 	case "push":
@@ -131,18 +156,23 @@ func (s *dotfilesServer) Git(ctx context.Context, req *connect.Request[dotfilesd
 	case "log":
 		args = []string{"-C", home, "log", "--oneline", "-10"}
 	default:
-		return connect.NewResponse(&dotfilesdv1.GitResponse{
+		resp := connect.NewResponse(&dotfilesdv1.GitResponse{
 			ExitCode: 1,
 			Stderr:   fmt.Sprintf("unknown action: %s", action),
-		}), nil
+		})
+		slog.Log(ctx, levelTrace, "Dotfiles.Git done", "response", resp.Msg)
+		return resp, nil
 	}
 
 	stdout, stderr, code := runCmdFull("git", args...)
-	return connect.NewResponse(&dotfilesdv1.GitResponse{
+	resp := connect.NewResponse(&dotfilesdv1.GitResponse{
 		ExitCode: int32(code),
 		Stdout:   stdout,
 		Stderr:   stderr,
-	}), nil
+	})
+
+	slog.Log(ctx, levelTrace, "Dotfiles.Git done", "action", action, "exit_code", code, "stderr_truncated", truncate(stderr, 200))
+	return resp, nil
 }
 
 // --- ExecService -----------------------------------------------------------
@@ -150,6 +180,7 @@ func (s *dotfilesServer) Git(ctx context.Context, req *connect.Request[dotfilesd
 type execServer struct{}
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
+	slog.Log(ctx, levelTrace, "Exec", "command", req.Msg.Command, "sudo", req.Msg.Sudo)
 	return s.ExecRaw(ctx, req.Msg.Command, req.Msg.Sudo)
 }
 
@@ -157,38 +188,42 @@ func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*c
 	cmdStr := command
 	if sudo {
 		cmdStr = fmt.Sprintf("pkexec sh -c '%s'", strings.ReplaceAll(cmdStr, "'", "'\\''"))
+		slog.Debug("Exec wrapping with pkexec", "original_command", command)
 	}
 
 	stdout, stderr, exitCode := runCmdFull("sh", "-c", cmdStr)
-	return connect.NewResponse(&dotfilesdv1.ExecResponse{
+
+	if exitCode != 0 {
+		slog.Warn("Exec command failed", "command", command, "sudo", sudo, "exit_code", exitCode, "stderr", truncate(stderr, 200))
+	}
+
+	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
 		ExitCode: int32(exitCode),
 		Stdout:   stdout,
 		Stderr:   stderr,
-	}), nil
+	})
+
+	slog.Log(ctx, levelTrace, "Exec done", "command", command, "exit_code", exitCode)
+	return resp, nil
 }
 
 func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
 	r := req.Msg
-	command := r.Command
 	password := r.Password
 	method := r.PreferredMethod
-	if method == "" {
-		method = "terminal"
-	}
 
-	_, pkexecErr := exec.LookPath("pkexec")
-	_, sudoErr := exec.LookPath("sudo")
-	hasPkexec := pkexecErr == nil
-	hasSudo := sudoErr == nil
+	hasPassword := password != ""
+	slog.Log(ctx, levelTrace, "SudoExec", "command", r.Command, "method", method, "has_password", hasPassword)
 
-	if password != "" {
-		if !hasSudo {
+	if hasPassword {
+		if !hasSudo() {
+			slog.Warn("SudoExec: sudo not available for password auth")
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "sudo not available"},
 			}}), nil
 		}
 		var stdout, stderr strings.Builder
-		cmd := exec.Command("sudo", "-S", "sh", "-c", command)
+		cmd := exec.Command("sudo", "-S", "sh", "-c", r.Command)
 		cmd.Stdin = strings.NewReader(password + "\n")
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -201,41 +236,60 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 				exitCode = -1
 			}
 		}
-		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+		if exitCode != 0 {
+			slog.Warn("SudoExec password auth failed", "command", r.Command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
+		}
+		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(exitCode), Stdout: stdout.String(), Stderr: stderr.String()},
-		}}), nil
+		}})
+		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", exitCode)
+		return resp, nil
 	}
 
 	switch method {
 	case "nopass":
-		if !hasSudo {
+		if !hasSudo() {
+			slog.Warn("SudoExec: sudo not available for nopass method")
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "sudo not available"},
 			}}), nil
 		}
-		stdout, stderr, code := runCmdFull("sudo", "-n", "sh", "-c", command)
-		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+		stdout, stderr, code := runCmdFull("sudo", "-n", "sh", "-c", r.Command)
+		if code != 0 {
+			slog.Warn("SudoExec nopass failed", "command", r.Command, "exit_code", code, "stderr", truncate(stderr, 200))
+		}
+		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
-		}}), nil
+		}})
+		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", code)
+		return resp, nil
 
 	case "graphical":
-		if !hasPkexec {
+		if !hasPkexec() {
+			slog.Warn("SudoExec: pkexec not available for graphical method")
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "pkexec not available"},
 			}}), nil
 		}
-		cmdStr := fmt.Sprintf("pkexec sh -c '%s'", strings.ReplaceAll(command, "'", "'\\''"))
+		cmdStr := fmt.Sprintf("pkexec sh -c '%s'", strings.ReplaceAll(r.Command, "'", "'\\''"))
 		stdout, stderr, code := runCmdFull("sh", "-c", cmdStr)
-		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+		if code == -1 {
+			slog.Warn("SudoExec graphical auth cancelled or failed", "command", r.Command, "exit_code", code)
+		} else if code != 0 {
+			slog.Warn("SudoExec graphical command failed", "command", r.Command, "exit_code", code, "stderr", truncate(stderr, 200))
+		}
+		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
-		}}), nil
+		}})
+		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", code)
+		return resp, nil
 	}
 
 	var methods []string
-	if hasSudo {
+	if hasSudo() {
 		methods = append(methods, "terminal")
 	}
-	if hasPkexec {
+	if hasPkexec() {
 		methods = append(methods, "graphical")
 	}
 	user := os.Getenv("USER")
@@ -243,6 +297,8 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		user = "unknown"
 	}
 	prompt := fmt.Sprintf("[sudo] password for %s: ", user)
+
+	slog.Debug("SudoExec issued auth challenge", "command", r.Command, "methods", methods)
 
 	return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_AuthChallenge{
 		AuthChallenge: &dotfilesdv1.AuthChallenge{Methods: methods, Prompt: prompt},
@@ -254,6 +310,8 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 type configServer struct{}
 
 func (s *configServer) Reload(ctx context.Context, req *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
+	slog.Log(ctx, levelTrace, "Config.Reload", "target", req.Msg.Target)
+
 	target := req.Msg.Target
 
 	type result struct {
@@ -295,10 +353,29 @@ func (s *configServer) Reload(ctx context.Context, req *connect.Request[dotfiles
 			Message: r.message,
 		})
 	}
+
+	slog.Log(ctx, levelTrace, "Config.Reload done", "results", resp.Results)
 	return connect.NewResponse(resp), nil
 }
 
 // --- Shared helpers --------------------------------------------------------
+
+func hasSudo() bool {
+	_, err := exec.LookPath("sudo")
+	return err == nil
+}
+
+func hasPkexec() bool {
+	_, err := exec.LookPath("pkexec")
+	return err == nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}
 
 func runCmd(name string, args ...string) (string, error) {
 	out, err := exec.Command(name, args...).CombinedOutput()
