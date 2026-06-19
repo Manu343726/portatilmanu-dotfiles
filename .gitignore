@@ -4,6 +4,7 @@
 
 # dotfiles
 !/README.md
+/.nvm/
 !/.docs/
 /.docs/*
 !/.docs/*.md
