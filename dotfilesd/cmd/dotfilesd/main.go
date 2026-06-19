@@ -65,6 +65,7 @@ func main() {
 			}
 			if logDir == "" {
 				logDir = viper.GetString("log.dir")
+				logDir = strings.Replace(logDir, "~", os.Getenv("HOME"), 1)
 				if logDir == "" {
 					logDir = os.Getenv("HOME") + "/dotfilesd/logs"
 				}
