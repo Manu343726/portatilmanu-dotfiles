@@ -7,19 +7,23 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 
 	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
-	verbose bool
-	port    string
-	client  dotfilesdv1connect.DotfilesServiceClient
+	buildHash string
+	verbose   bool
+	noVerify  bool
+	port      string
+	client    dotfilesdv1connect.DotfilesServiceClient
 )
 
 func newRootCmd() *cobra.Command {
@@ -27,6 +31,31 @@ func newRootCmd() *cobra.Command {
 		Use:   "dotfilesctl",
 		Short: "dotfiles runtime CLI",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			checkBuildHash(noVerify, "dotfilesctl")
+
+			viper.SetConfigName("config")
+			viper.SetConfigType("yaml")
+			viper.AddConfigPath("$HOME/.config/dotfilesctl")
+			viper.AutomaticEnv()
+			viper.SetEnvPrefix("DOTFILESCTL")
+
+			viper.BindPFlag("verbose", cmd.Root().PersistentFlags().Lookup("verbose"))
+			viper.BindPFlag("no_verify", cmd.Root().PersistentFlags().Lookup("no-verify"))
+			viper.BindPFlag("port", cmd.Root().PersistentFlags().Lookup("port"))
+
+			if err := viper.ReadInConfig(); err != nil {
+				if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+					fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+				}
+			}
+
+			if !cmd.Flags().Changed("port") {
+				port = viper.GetString("port")
+			}
+			if !cmd.Flags().Changed("verbose") {
+				verbose = viper.GetBool("verbose")
+			}
+
 			setupLogging(verbose)
 			if port == "" {
 				port = os.Getenv("DOTFILESD_PORT")
@@ -46,6 +75,7 @@ func newRootCmd() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose logging to stderr")
+	cmd.PersistentFlags().BoolVar(&noVerify, "no-verify", false, "skip source version check")
 	cmd.PersistentFlags().StringVarP(&port, "port", "p", "", "daemon port (default DOTFILESD_PORT env or 9105)")
 
 	cmd.AddCommand(newPingCmd())
@@ -99,6 +129,22 @@ func setupLogging(v bool) {
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+func checkBuildHash(noVerify bool, name string) {
+	if buildHash == "" || buildHash == "dev" {
+		return
+	}
+	srcDir := os.Getenv("HOME") + "/dotfilesd"
+	out, err := exec.Command("git", "-C", srcDir, "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return
+	}
+	current := strings.TrimSpace(string(out))
+	if current != buildHash && !noVerify {
+		fmt.Fprintf(os.Stderr, "WARNING: %s source changed since build (built: %s, current: %s)\n", name, buildHash, current)
+		fmt.Fprintf(os.Stderr, "  run 'make install' to rebuild, or use --no-verify to silence\n")
+	}
 }
 
 func newPingCmd() *cobra.Command {

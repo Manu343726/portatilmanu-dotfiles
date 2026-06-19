@@ -1,0 +1,4 @@
+# dotfilesctl CLI configuration
+port: 9105
+verbose: false
+no_verify: false

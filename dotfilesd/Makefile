@@ -1,16 +1,16 @@
 # dotfilesd - dotfiles runtime daemon & CLI
 #
 # Targets:
-#   build          Build daemon and CLI binaries
-#   install        Install binaries to ~/.local/bin/
+#   setup          Full install: build + install + service + start
+#   build          Build daemon and CLI binaries (with version hash)
+#   install        Fast install: skip if hash unchanged
 #   proto          Regenerate protocol buffer code
 #   deps           Install Go dependencies
-#   clean          Remove build artifacts
-#   setup          Full install: build + install + service + start
 #   service-install  Install systemd user service
 #   service-start    Enable and start the daemon
 #   service-stop     Stop and disable the daemon
 #   service-logs     View daemon logs
+#   clean          Remove build artifacts
 #
 
 BINARY_DIR  := $(HOME)/.local/bin
@@ -18,9 +18,12 @@ DAEMON_BIN  := $(BINARY_DIR)/dotfilesd
 CLI_BIN     := $(BINARY_DIR)/dotfilesctl
 SERVICE_DIR := $(HOME)/.config/systemd/user
 SERVICE_FILE := $(SERVICE_DIR)/dotfilesd.service
-GO          := go
-GOFLAGS     := -ldflags="-s -w"
 CMD_DIR     := ./cmd
+GO          := go
+HASH_FILE   := $(BINARY_DIR)/.dotfilesd.hash
+
+BUILD_HASH  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
+GOFLAGS     := -ldflags="-s -w -X main.buildHash=$(BUILD_HASH)"
 
 export PATH := $(HOME)/go/bin:$(PATH)
 
@@ -28,26 +31,40 @@ export PATH := $(HOME)/go/bin:$(PATH)
 
 all: build
 
+# -- Setup ------------------------------------------------------------------
+
+setup: install service-install service-start
+	@echo ""
+	@echo "dotfilesd setup complete!"
+	@echo "  daemon:   $(DAEMON_BIN)"
+	@echo "  cli:      $(CLI_BIN)"
+	@echo ""
+	@echo "quick test: dotfilesctl ping"
+
 # -- Build -------------------------------------------------------------------
 
-build: $(DAEMON_BIN) $(CLI_BIN)
-
-$(DAEMON_BIN):
+build:
 	@mkdir -p $(BINARY_DIR)
-	$(GO) build $(GOFLAGS) -o $@ $(CMD_DIR)/dotfilesd
+	$(GO) build $(GOFLAGS) -o $(DAEMON_BIN) $(CMD_DIR)/dotfilesd
+	$(GO) build $(GOFLAGS) -o $(CLI_BIN) $(CMD_DIR)/dotfilesctl
+	@mkdir -p $(dir $(HASH_FILE))
+	@echo "$(BUILD_HASH)" > $(HASH_FILE)
+	@echo "  built (hash: $(BUILD_HASH))"
 
-$(CLI_BIN):
-	@mkdir -p $(BINARY_DIR)
-	$(GO) build $(GOFLAGS) -o $@ $(CMD_DIR)/dotfilesctl
+# -- Install (fast: skip if hash unchanged) -----------------------------------
 
-build-dev:
-	$(GO) build -o $(DAEMON_BIN) $(CMD_DIR)/dotfilesd
-	$(GO) build -o $(CLI_BIN) $(CMD_DIR)/dotfilesctl
-
-# -- Install ----------------------------------------------------------------
-
-install: build
-	@echo "binaries installed to $(BINARY_DIR)/"
+install:
+	@h=$$(git rev-parse --short HEAD 2>/dev/null || echo "dev"); \
+	if [ -f $(HASH_FILE) ] && [ "$$(cat $(HASH_FILE))" = "$$h" ] && [ -x $(DAEMON_BIN) ] && [ -x $(CLI_BIN) ]; then \
+		echo "  binaries up to date (hash: $$h)"; \
+	else \
+		echo "  building (hash: $$h)..."; \
+		$(GO) build $(GOFLAGS) -o $(DAEMON_BIN) $(CMD_DIR)/dotfilesd; \
+		$(GO) build $(GOFLAGS) -o $(CLI_BIN) $(CMD_DIR)/dotfilesctl; \
+		echo "$$h" > $(HASH_FILE); \
+	fi
+	@mkdir -p $(HOME)/.config/dotfilesd $(HOME)/.config/dotfilesctl
+	@echo "  installed"
 
 # -- Proto ------------------------------------------------------------------
 
@@ -95,20 +112,10 @@ service-stop:
 service-logs:
 	journalctl --user -u dotfilesd.service -f
 
-# -- Setup ------------------------------------------------------------------
-
-setup: deps build install service-start
-	@echo ""
-	@echo "dotfilesd setup complete!"
-	@echo "  daemon:   $(DAEMON_BIN) (running)"
-	@echo "  cli:      $(CLI_BIN)"
-	@echo ""
-	@echo "quick test: dotfilesctl ping"
-
 # -- Clean ------------------------------------------------------------------
 
 clean:
-	rm -f $(DAEMON_BIN) $(CLI_BIN)
+	rm -f $(DAEMON_BIN) $(CLI_BIN) $(HASH_FILE)
 	@echo "binaries removed."
 
 clean-all: clean

@@ -1,0 +1,8 @@
+# dotfilesd daemon configuration
+port: 9105
+log:
+  dir: ~/dotfilesd/logs
+  level: info
+  max_size_mb: 10
+  max_backups: 5
+  max_age_days: 30

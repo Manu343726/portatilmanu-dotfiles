@@ -44,3 +44,12 @@
 !/.config/opencode/
 /.config/opencode/*
 !/.config/opencode/opencode.jsonc
+
+# dotfilesd config
+!/.config/dotfilesd/
+/.config/dotfilesd/*
+!/.config/dotfilesd/config.yaml
+
+!/.config/dotfilesctl/
+/.config/dotfilesctl/*
+!/.config/dotfilesctl/config.yaml
