@@ -1,0 +1,26 @@
+#!/usr/bin/env zsh
+# Rofi mode script: Chrome most-visited pages.
+# Called by rofi to get the entry list, or by app-launcher to resolve actions.
+typeset -a items actions
+hist=/tmp/chrome-history
+
+if cp ~/.config/google-chrome/Default/History "$hist" 2>/dev/null; then
+  while IFS='|' read -r url title count; do
+    [[ -z "$url" ]] && continue
+    [[ -z "$title" ]] && title="$url"
+    items+=("$title  (${url#https://})")
+    actions+=("url:$url")
+  done < <(sqlite3 "$hist" "SELECT url, title, visit_count FROM urls ORDER BY visit_count DESC LIMIT 25;")
+fi
+
+case "${1:-list}" in
+  list)
+    printf '%s\n' "${items[@]}"
+    ;;
+  count)
+    echo "${#items[@]}"
+    ;;
+  action)
+    echo "${actions[$(( $2 + 1 ))]}"
+    ;;
+esac

@@ -1,0 +1,20 @@
+#!/usr/bin/env zsh
+# Rofi mode script: system configuration tools.
+# Called by rofi to get the entry list, or by app-launcher to resolve actions.
+typeset -a items actions
+items+=("⚙ ROG Control Center");       actions+=("cfg:rog-control-center")
+items+=("⚙ Audio (Pavucontrol)");      actions+=("cfg:org.pulseaudio.pavucontrol")
+items+=("⚙ Displays (ARandR)");        actions+=("cfg:arandr")
+items+=("⚙ Package Manager (Pamac)");  actions+=("cfg:org.manjaro.pamac.manager.desktop")
+
+case "${1:-list}" in
+  list)
+    printf '%s\n' "${items[@]}"
+    ;;
+  count)
+    echo "${#items[@]}"
+    ;;
+  action)
+    echo "${actions[$(( $2 + 1 ))]}"
+    ;;
+esac

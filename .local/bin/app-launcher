@@ -2,89 +2,67 @@
 #
 # app-launcher
 # ------------
-# Unified launcher: desktop apps + Chrome most-visited pages.
-# Uses rofi with the monokai theme.
+# Unified launcher with tabbed sections:
+#   drun      — desktop apps (native rofi mode)
+#   config    — system configuration tools
+#   chrome    — Chrome most-visited pages
+#
+# Switch sections with Ctrl+Tab (or the sidebar).
+# Uses the monokai rofi theme.
 # Replaces dmenu_recency in the i3 keybinding ($mod+d).
 #
-# Each item in the menu maps to an action type:
-#   app:<desktop-file>  — launched via gtk-launch
-#   url:<url>           — opened in Google Chrome
+# Each custom mode is a separate script that outputs entries for rofi.
+# When the user selects an entry in a custom mode, rofi outputs the
+# selected display text. This script looks up the display text in the
+# mode's item list to find the corresponding action.
 
-typeset -a items actions
-
-# ---- System configuration tools ----
-# Convenience section for frequently-used settings programs so they're always
-# at the top of the menu, regardless of alphabetical order.
-items+=("⚙ ROG Control Center");       actions+=("cfg:rog-control-center")
-items+=("⚙ Audio (Pavucontrol)");      actions+=("cfg:org.pulseaudio.pavucontrol")
-items+=("⚙ Displays (ARandR)");        actions+=("cfg:arandr")
-items+=("⚙ Package Manager (Pamac)");  actions+=("cfg:org.manjaro.pamac.manager.desktop")
-
-# Separator line — if the user clicks it by accident, just re-open the menu.
-items+=("──────────────────────"); actions+=("sep")
-
-# ---- Desktop apps ----
-# Scan both system and user .desktop files.
-# Uses the filename stem for gtk-launch, displays the app's Name=.
-for dir in /usr/share/applications ~/.local/share/applications; do
-  [[ -d "$dir" ]] || continue
-  for f in "$dir"/*.desktop; do
-    [[ -f "$f" ]] || continue
-    name=$(sed -n 's/^Name=//p' "$f" | head -1)
-    no_display=$(sed -n 's/^NoDisplay=//p' "$f" | head -1)
-    [[ "$no_display" == "true" ]] && continue
-    [[ -z "$name" ]] && continue
-    desktop=$(basename "$f")
-    # Skip tools already listed in the config section to avoid duplicates
-    case "$desktop" in
-      rog-control-center*|*pavucontrol*|arandr*|org.manjaro.pamac.manager*) continue ;;
-    esac
-    items+=("$name")
-    actions+=("app:$desktop")
-  done
-done
-
-# ---- Chrome most-visited pages ----
-# Chrome keeps a SQLite history database, but it's locked while Chrome runs.
-# We copy it to /tmp to query safely.
-hist=/tmp/chrome-history
-if cp ~/.config/google-chrome/Default/History "$hist" 2>/dev/null; then
-  while IFS='|' read -r url title count; do
-    [[ -z "$url" ]] && continue
-    [[ -z "$title" ]] && title="$url"
-    items+=("$title  (${url#https://})")
-    actions+=("url:$url")
-  done < <(sqlite3 "$hist" "SELECT url, title, visit_count FROM urls ORDER BY visit_count DESC LIMIT 25;")
-fi
-
-# ---- Rofi menu ----
-# -format i gives us the 0-based index of the selected row.
-# We use that index to look up the action in the actions array.
 theme=/home/manu343726/.config/rofi/monokai.rasi
-selection=$(printf '%s\n' "${items[@]}" | rofi -dmenu -format i -p "Launch" -l 15 -theme "$theme")
+config_script=app-launcher-config
+chrome_script=app-launcher-chrome
 
-# Exit if nothing was selected (Esc / click outside)
+selection=$(rofi \
+  -modi "drun,config:$config_script,chrome:$chrome_script" \
+  -show drun \
+  -sidebar-mode \
+  -kb-mode-next "Control+Tab" \
+  -theme "$theme" 2>/dev/null)
+
 [[ -z "$selection" ]] && exit 0
 
-# zsh arrays are 1-indexed; add 1 to the rofi index
-selected_action="${actions[$((selection + 1))]}"
-[[ -z "$selected_action" ]] && exit 1
+# ---- Resolve selection to an action ----
+# Cache lists from custom modes so we only call each script once.
+cfg_items=("${(@f)$($config_script list)}")
+cfg_count=$($config_script count)
+
+chrome_items=("${(@f)$($chrome_script list)}")
+chrome_count=$($chrome_script count)
+
+action=
+
+for ((i = 0; i < cfg_count; i++)); do
+  if [[ "$selection" == "$cfg_items[$((i + 1))]" ]]; then
+    action=$($config_script action "$i")
+    break
+  fi
+done
+
+if [[ -z "$action" ]]; then
+  for ((i = 0; i < chrome_count; i++)); do
+    if [[ "$selection" == "$chrome_items[$((i + 1))]" ]]; then
+      action=$($chrome_script action "$i")
+      break
+    fi
+  done
+fi
+
+[[ -z "$action" ]] && exit 1
 
 # ---- Dispatch ----
-case "$selected_action" in
-  app:*)
-    desktop="${selected_action#app:}"
-    gtk-launch "$desktop"
-    ;;
+case "$action" in
   cfg:*)
-    desktop="${selected_action#cfg:}"
-    gtk-launch "$desktop"
+    gtk-launch "${action#cfg:}"
     ;;
   url:*)
-    url="${selected_action#url:}"
-    google-chrome-stable "$url"
-    ;;
-  sep)
-    exec "$0"
+    google-chrome-stable "${action#url:}"
     ;;
 esac
