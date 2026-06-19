@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -16,13 +15,11 @@ import (
 )
 
 func main() {
-	setupLogging(false)
+	setupLogging()
 
 	rpcPort := getEnv("DOTFILESD_PORT", "9105")
-	mcpPort := getEnv("DOTFILESD_MCP_PORT", "9106")
 
 	svc := &dotfilesServer{startedAt: time.Now()}
-	mcpSrv := NewMCPServer(svc, 9106)
 
 	mux := http.NewServeMux()
 	path, handler := dotfilesdv1connect.NewDotfilesServiceHandler(svc)
@@ -34,22 +31,10 @@ func main() {
 		Handler: withLogging(mux),
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
 	go func() {
-		defer wg.Done()
 		slog.Info("serving connect rpc", "addr", rpcAddr, "path", path)
 		if err := rpcServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("rpc server error", "error", err)
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		slog.Info("serving mcp", "addr", fmt.Sprintf("127.0.0.1:%s", mcpPort))
-		if err := mcpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("mcp server error", "error", err)
 		}
 	}()
 
@@ -59,11 +44,10 @@ func main() {
 
 	slog.Info("shutting down")
 	rpcServer.Close()
-	wg.Wait()
 	slog.Info("done")
 }
 
-func setupLogging(_ bool) {
+func setupLogging() {
 	logDir := os.Getenv("DOTFILESD_LOG_DIR")
 	if logDir == "" {
 		logDir = os.Getenv("HOME") + "/dotfilesd/logs"

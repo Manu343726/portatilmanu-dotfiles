@@ -89,7 +89,6 @@ The daemon reads these environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DOTFILESD_PORT` | `9105` | Connect RPC port |
-| `DOTFILESD_MCP_PORT` | `9106` | MCP SSE port |
 | `DOTFILESD_LOG_DIR` | `~/dotfilesd/logs` | Log output directory |
 
 ## Running without systemd

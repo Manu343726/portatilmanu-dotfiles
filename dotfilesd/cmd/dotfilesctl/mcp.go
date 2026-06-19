@@ -1,0 +1,311 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"strconv"
+	"strings"
+
+	"connectrpc.com/connect"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+)
+
+type mcpRequest struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+type mcpResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *mcpError       `json:"error,omitempty"`
+}
+
+type mcpError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+type toolDef struct {
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	InputSchema toolSchema `json:"inputSchema"`
+}
+
+type toolSchema struct {
+	Type       string                    `json:"type"`
+	Properties map[string]propSchema     `json:"properties"`
+	Required   []string                  `json:"required,omitempty"`
+}
+
+type propSchema struct {
+	Type        string   `json:"type"`
+	Description string   `json:"description"`
+	Enum        []string `json:"enum,omitempty"`
+}
+
+var mcpTools = []toolDef{
+	{
+		Name:        "dotfiles_status",
+		Description: "Show dotfiles repo status and system info",
+		InputSchema: toolSchema{Type: "object"},
+	},
+	{
+		Name:        "dotfiles_reload",
+		Description: "Reload dotfiles configs (tmux, i3, kitty)",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"target": {Type: "string", Enum: []string{"tmux", "i3", "kitty", "all"}},
+		}},
+	},
+	{
+		Name:        "dotfiles_git",
+		Description: "Git operations on the dotfiles repo",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"action":  {Type: "string", Enum: []string{"status", "diff", "add", "commit", "push", "log"}},
+			"message": {Type: "string"},
+			"paths":   {Type: "string"},
+		}, Required: []string{"action"}},
+	},
+	{
+		Name:        "system_exec",
+		Description: "Execute a shell command",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"command": {Type: "string"},
+			"sud":     {Type: "string", Enum: []string{"true", "false"}},
+		}, Required: []string{"command"}},
+	},
+	{
+		Name:        "system_info",
+		Description: "Detailed system information",
+		InputSchema: toolSchema{Type: "object"},
+	},
+}
+
+func runMCP() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		raw, err := readMCPFrame(reader)
+		if err != nil {
+			if err == io.EOF {
+				return
+			}
+			slog.Error("read frame", "error", err)
+			return
+		}
+
+		var req mcpRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			slog.Error("parse request", "error", err)
+			continue
+		}
+
+		if req.ID == nil || len(req.ID) == 0 {
+			continue
+		}
+
+		resp := dispatchMCP(req)
+		if resp != nil {
+			writeMCPFrame(os.Stdout, resp)
+		}
+	}
+}
+
+func readMCPFrame(reader *bufio.Reader) ([]byte, error) {
+	var contentLength int
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			break
+		}
+		if strings.HasPrefix(line, "Content-Length: ") {
+			contentLength, _ = strconv.Atoi(strings.TrimPrefix(line, "Content-Length: "))
+		}
+	}
+	if contentLength == 0 {
+		return nil, fmt.Errorf("no Content-Length header")
+	}
+	body := make([]byte, contentLength)
+	_, err := io.ReadFull(reader, body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func writeMCPFrame(w io.Writer, resp *mcpResponse) {
+	data, _ := json.Marshal(resp)
+	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(data))
+	w.Write([]byte(header))
+	w.Write(data)
+}
+
+func dispatchMCP(req mcpRequest) *mcpResponse {
+	switch req.Method {
+	case "initialize":
+		return mcpResp(req.ID, map[string]any{
+			"protocolVersion": "2024-11-05",
+			"capabilities": map[string]any{
+				"tools": map[string]bool{"listChanged": false},
+			},
+			"serverInfo": map[string]string{
+				"name":    "dotfilesctl",
+				"version": "0.1.0",
+			},
+		})
+
+	case "tools/list":
+		return mcpResp(req.ID, map[string]any{"tools": mcpTools})
+
+	case "tools/call":
+		var params struct {
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
+		}
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return mcpErr(req.ID, -32602, "invalid params")
+		}
+		return callTool(req.ID, params.Name, params.Arguments)
+
+	default:
+		return mcpErr(req.ID, -32601, fmt.Sprintf("unknown method: %s", req.Method))
+	}
+}
+
+func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpResponse {
+	switch name {
+	case "dotfiles_status":
+		resp, err := client.Status(context.Background(), connect.NewRequest(&dotfilesdv1.StatusRequest{}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		s := resp.Msg
+		text := fmt.Sprintf("branch: %s\nclean: %v\nlast: %s\nhost: %s\nuptime: %s",
+			s.GitBranch, s.GitClean, s.LastCommit, s.Hostname, s.Uptime)
+		return mcpResp(id, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": text}},
+		})
+
+	case "dotfiles_reload":
+		var p struct{ Target string `json:"target"` }
+		json.Unmarshal(args, &p)
+		if p.Target == "" {
+			p.Target = "all"
+		}
+		resp, err := client.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: p.Target}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		var lines []string
+		for _, r := range resp.Msg.Results {
+			s := "ok"
+			if !r.Success {
+				s = "err"
+			}
+			lines = append(lines, fmt.Sprintf("%s: %s (%s)", r.Target, s, r.Message))
+		}
+		return mcpResp(id, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": linesJoin(lines, "\n")}},
+		})
+
+	case "dotfiles_git":
+		var p struct {
+			Action  string `json:"action"`
+			Message string `json:"message"`
+			Paths   string `json:"paths"`
+		}
+		json.Unmarshal(args, &p)
+		resp, err := client.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{Action: p.Action, Message: p.Message, Paths: p.Paths}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		if resp.Msg.ExitCode != 0 {
+			return mcpResp(id, map[string]any{
+				"content": []map[string]any{{"type": "text", "text": resp.Msg.Stderr}},
+				"isError": true,
+			})
+		}
+		return mcpResp(id, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": resp.Msg.Stdout}},
+		})
+
+	case "system_exec":
+		var p struct {
+			Command string `json:"command"`
+			Sudo    string `json:"sudo"`
+		}
+		json.Unmarshal(args, &p)
+		resp, err := client.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command, Sudo: p.Sudo == "true"}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		text := resp.Msg.Stdout
+		if resp.Msg.Stderr != "" {
+			text += "\nstderr:\n" + resp.Msg.Stderr
+		}
+		isErr := resp.Msg.ExitCode != 0
+		return mcpResp(id, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": text}},
+			"isError": isErr,
+		})
+
+	case "system_info":
+		resp, err := client.SystemInfo(context.Background(), connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		s := resp.Msg
+		text := fmt.Sprintf("os: %s\nkernel: %s\nshell: %s\ndesktop: %s\nmemory: %d MB total / %d MB avail\ncpu: %.2f load\n%s\n%s\n%s",
+			s.Os, s.Kernel, s.Shell, s.Desktop,
+			s.MemoryTotalKb/1024, s.MemoryAvailKb/1024,
+			s.CpuLoad_1M,
+			s.TmuxVersion, s.KittyVersion, s.I3Version)
+		return mcpResp(id, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": text}},
+		})
+
+	default:
+		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
+	}
+}
+
+func mcpResp(id json.RawMessage, result any) *mcpResponse {
+	data, _ := json.Marshal(result)
+	return &mcpResponse{JSONRPC: "2.0", ID: id, Result: data}
+}
+
+func mcpErr(id json.RawMessage, code int, msg string) *mcpResponse {
+	return &mcpResponse{JSONRPC: "2.0", ID: id, Error: &mcpError{Code: code, Message: msg}}
+}
+
+func linesJoin(elems []string, sep string) string {
+	if len(elems) == 0 {
+		return ""
+	}
+	n := len(sep) * (len(elems) - 1)
+	for _, e := range elems {
+		n += len(e)
+	}
+	b := make([]byte, n)
+	i := 0
+	for idx, e := range elems {
+		if idx > 0 {
+			i += copy(b[i:], sep)
+		}
+		i += copy(b[i:], e)
+	}
+	return string(b)
+}

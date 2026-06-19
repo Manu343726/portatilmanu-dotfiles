@@ -1,6 +1,5 @@
 [Unit]
-Description=dotfiles runtime daemon (Connect RPC + MCP)
-Documentation=https://github.com/gpakosz/.tmux
+Description=dotfiles runtime daemon (Connect RPC)
 After=network.target
 
 [Service]
@@ -9,7 +8,6 @@ ExecStart={{BINARY_DIR}}/dotfilesd
 Restart=on-failure
 RestartSec=5
 Environment=DOTFILESD_PORT=9105
-Environment=DOTFILESD_MCP_PORT=9106
 
 [Install]
 WantedBy=default.target

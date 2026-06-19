@@ -56,8 +56,8 @@ make deps           # go mod tidy + go mod download
 |------|---------|---------|
 | `cmd/dotfilesd/main.go` | `main` | Daemon entry, logging setup, server start |
 | `cmd/dotfilesd/server.go` | `main` | Connect RPC handler implementations |
-| `cmd/dotfilesd/mcp.go` | `main` | MCP SSE server, JSON-RPC dispatch |
 | `cmd/dotfilesctl/main.go` | `main` | CLI client, subcommands |
+| `cmd/dotfilesctl/mcp.go` | `main` | MCP stdio server, JSON-RPC dispatch |
 | `proto/dotfilesd/v1/dotfilesdv1/service.proto` | `dotfilesdv1` | Protobuf service definition |
 
 ## Adding a new RPC
@@ -66,7 +66,7 @@ make deps           # go mod tidy + go mod download
 2. Run `make proto`
 3. Implement the handler method on `dotfilesServer` in `server.go`
 4. Add a CLI subcommand in `cmd/dotfilesctl/main.go`
-5. Add an MCP tool mapping in `mcp.go`'s `callTool` method
+5. Add an MCP tool mapping in `cmd/dotfilesctl/mcp.go`'s `callTool` function
 
 ## Logging
 

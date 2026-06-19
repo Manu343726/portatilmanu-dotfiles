@@ -52,17 +52,17 @@ dotfilesctl sudo
 
 If `pkexec` is problematic, edit `server.go` to prefer `sudo` instead.
 
-### MCP connection refused
+### MCP not working
 
-If the agent reports "MCP server not found":
+If the agent reports an MCP error, test the stdio server directly:
 
 ```sh
-curl -N http://127.0.0.1:9106/sse
+printf "Content-Length: 46\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}" | dotfilesctl mcp
 ```
 
-Should return an SSE stream. If connection refused, the daemon is not running.
+Should return a JSON response with the tool list. If nothing is returned, rebuild the CLI.
 
-### Binary version mismatch
+### Daemon unreachable from client
 
 ```sh
 dotfilesctl ping   # shows daemon pid and uptime
@@ -92,7 +92,7 @@ dotfilesctl sudo
 
 ## Development debugging
 
-Run the daemon in the foreground with verbose logging:
+Run the daemon in the foreground:
 
 ```sh
 cd ~/dotfilesd
@@ -103,16 +103,12 @@ In another terminal:
 
 ```sh
 dotfilesctl ping
+dotfilesctl info
+dotfilesctl reload tmux
 ```
 
-Or test the MCP SSE endpoint directly:
+Test the MCP stdio server:
 
 ```sh
-# Open SSE stream
-curl -N http://127.0.0.1:9106/sse
-
-# Send a message (get session_id from SSE output first)
-curl -X POST "http://127.0.0.1:9106/message?session_id=xxx" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+printf "Content-Length: 46\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}" | go run ./cmd/dotfilesctl mcp
 ```

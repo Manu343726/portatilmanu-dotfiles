@@ -2,7 +2,7 @@
 
 Go daemon for managing dotfiles on `portatilmanu` (ASUS ROG Flow X13, Manjaro i3).
 
-Exposes dotfiles management through a Connect RPC API (port 9105) and an MCP SSE server (port 9106) for AI agent integration.
+Exposes dotfiles management through a Connect RPC daemon (port 9105) and a CLI client with an MCP stdio server for AI agent integration.
 
 ## Quick start
 
@@ -36,7 +36,7 @@ dotfilesctl git status        # git operations
 ## Project layout
 
 ```
-cmd/dotfilesd/     # Daemon entry point + Connect RPC server + MCP server
+cmd/dotfilesd/     # Daemon (Connect RPC server only)
 cmd/dotfilesctl/   # CLI client
 proto/             # Protobuf definitions and generated code
 service/           # Systemd user service template
@@ -48,6 +48,6 @@ Makefile           # Build, install, service management
 
 - **Go 1.26** — Standard library slog, net/http
 - **Connect RPC** — gRPC-compatible HTTP API on port 9105
-- **MCP** — Model Context Protocol SSE on port 9106
+- **MCP** — Model Context Protocol stdio (via `dotfilesctl mcp`)
 - **lumberjack** — Log file rotation
 - **systemd** — User service for auto-start

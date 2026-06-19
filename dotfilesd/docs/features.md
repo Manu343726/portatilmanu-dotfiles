@@ -84,9 +84,19 @@ dotfilesctl sudo
 # → available: pkexec, sudo
 ```
 
+### `mcp`
+
+Start the MCP stdio server for AI agent integration. Reads JSON-RPC 2.0 messages from stdin and writes responses to stdout (Content-Length framing). Logs to stderr.
+
+```sh
+dotfilesctl mcp
+```
+
+Not meant to be invoked directly by a human — opencode launches it as a subprocess, configured in `opencode.jsonc` as a local MCP server.
+
 ## MCP tools (for AI agents)
 
-Available through the MCP SSE endpoint on port 9106. Documented in the MCP server's `tools/list` response.
+Available when opencode launches `dotfilesctl mcp` as a stdio subprocess.
 
 ### `dotfiles_status`
 

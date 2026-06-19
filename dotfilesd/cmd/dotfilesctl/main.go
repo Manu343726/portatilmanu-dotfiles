@@ -60,6 +60,8 @@ func main() {
 		doGit(cmdArgs)
 	case "sudo":
 		doSudo()
+	case "mcp":
+		runMCP()
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -270,6 +272,7 @@ func printUsage() {
 	fmt.Println("  dotfilesctl reload [target]   reload configs (tmux|i3|kitty|all)")
 	fmt.Println("  dotfilesctl git <action>      git operations")
 	fmt.Println("  dotfilesctl sudo              show sudo methods")
+	fmt.Println("  dotfilesctl mcp               start MCP stdio server (for AI agents)")
 	fmt.Println("  -v, --verbose                 verbose logging to stderr")
 }
 

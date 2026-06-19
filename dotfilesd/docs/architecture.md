@@ -1,45 +1,38 @@
 # Architecture
 
-dotfilesd is a Go daemon that exposes dotfiles management via two protocols:
+dotfilesd has two components: a daemon and a CLI client that also serves as the MCP gateway.
 
 ```
 ┌─────────────┐     Connect RPC (gRPC/HTTP)     ┌──────────────┐
-│ dotfilesctl ├───── port 9105 ─────────────────▶│              │
-│ (CLI)       │                                  │  dotfilesd   │
-└─────────────┘                                  │  (daemon)    │
-                                                 │              │
-┌─────────────┐     MCP SSE (JSON-RPC)           │              │
-│ opencode    ├───── port 9106 ─────────────────▶│              │
-│ (AI agent)  │     /sse + /message              └──────┬───────┘
-└─────────────┘                                        │
-                                                ┌───────┴───────┐
-                                                │  System calls │
-                                                │  (shell, git, │
-                                                │   i3, tmux,   │
-                                                │   pkexec)     │
-                                                └───────────────┘
+│ dotfilesctl ├───── port 9105 ─────────────────▶│  dotfilesd   │
+│ (CLI)       │                                  │  (daemon)    │
+└──────┬──────┘                                  └──────────────┘
+       │                                                    │
+       │ MCP (stdio)                              ┌─────────┴─────────┐
+┌──────┴──────┐                                   │  System calls     │
+│ opencode    │                                   │  (shell, git,     │
+│ (AI agent)  │                                   │   i3, tmux,       │
+└─────────────┘                                   │   pkexec)         │
+                                                   └───────────────────┘
 ```
 
-## Ports
+## Port
 
-| Port | Protocol | Endpoint | Purpose |
-|------|----------|----------|---------|
-| 9105 | Connect RPC | `http://127.0.0.1:9105/` | Tool/service API (gRPC-compatible) |
-| 9106 | MCP SSE | `http://127.0.0.1:9106/sse` | AI agent integration |
-
-Both bind to `127.0.0.1` only (no remote access).
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 9105 | Connect RPC | Tool/service API (gRPC-compatible), `127.0.0.1` only |
 
 ## Components
 
 ### Daemon (`cmd/dotfilesd/`)
 
-- **`main.go`** — Entry point. Starts both the Connect RPC HTTP server and the MCP SSE server. Sets up slog logging (JSON to stdout + rotated file).
+- **`main.go`** — Entry point. Starts the Connect RPC HTTP server. Sets up slog logging (JSON to stdout + rotated file).
 - **`server.go`** — Connect RPC handler implementations (`dotfilesServer` struct). Implements the `DotfilesService` protobuf interface.
-- **`mcp.go`** — MCP server. Accepts SSE connections, dispatches JSON-RPC 2.0 messages, and wraps Connect RPC client calls in-process.
 
 ### CLI (`cmd/dotfilesctl/`)
 
 - **`main.go`** — Command-line client that makes Connect RPC calls to the daemon. Outputs to stdout only (no log noise). Supports `--verbose` for debugging.
+- **`mcp.go`** — MCP stdio server. Runs in-process when invoked as `dotfilesctl mcp`. Reads JSON-RPC 2.0 messages from stdin (Content-Length framing), dispatches to tool handlers that call the daemon via Connect RPC, and writes responses to stdout.
 
 ### Proto (`proto/dotfilesd/v1/dotfilesdv1/`)
 
@@ -63,7 +56,7 @@ service DotfilesService {
 
 ## MCP tools
 
-The MCP server exposes these tools:
+The MCP stdio server (launched via `dotfilesctl mcp`) exposes these tools:
 
 | Tool | Description |
 |------|-------------|
@@ -76,8 +69,8 @@ The MCP server exposes these tools:
 ## Data flow
 
 ```
-dotfilesctl  ──Connect RPC──▶  dotfilesd  ──exec.Command()──▶  git/i3/tmux/kitty/shell
-opencode     ────MCP SSE────▶  dotfilesd  ──in-process RPC──▶  dotfilesServer methods
+dotfilesctl        ──Connect RPC──▶  dotfilesd  ──exec.Command()──▶  git/i3/tmux/kitty/shell
+opencode ──stdio──▶  dotfilesctl mcp  ──Connect RPC──▶  dotfilesd
 ```
 
 ## Directory layout
@@ -85,8 +78,8 @@ opencode     ────MCP SSE────▶  dotfilesd  ──in-process RPC
 ```
 ~/dotfilesd/
 ├── cmd/
-│   ├── dotfilesd/           # Daemon entry point + server + MCP
-│   └── dotfilesctl/         # CLI client
+│   ├── dotfilesd/           # Daemon (Connect RPC server only)
+│   └── dotfilesctl/         # CLI client + MCP stdio server
 ├── docs/                    # Documentation
 ├── proto/                   # Protobuf definitions + generated code
 │   └── dotfilesd/v1/dotfilesdv1/
