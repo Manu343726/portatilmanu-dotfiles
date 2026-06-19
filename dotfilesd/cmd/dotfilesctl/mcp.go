@@ -41,9 +41,9 @@ type toolDef struct {
 }
 
 type toolSchema struct {
-	Type       string                    `json:"type"`
-	Properties map[string]propSchema     `json:"properties"`
-	Required   []string                  `json:"required,omitempty"`
+	Type       string                `json:"type"`
+	Properties map[string]propSchema `json:"properties"`
+	Required   []string              `json:"required,omitempty"`
 }
 
 type propSchema struct {
@@ -53,17 +53,27 @@ type propSchema struct {
 }
 
 var mcpTools = []toolDef{
+	// system
 	{
-		Name:        "dotfiles_status",
-		Description: "Show dotfiles repo status and system info",
+		Name:        "system_ping",
+		Description: "Check daemon health",
 		InputSchema: toolSchema{Type: "object"},
 	},
 	{
-		Name:        "dotfiles_reload",
-		Description: "Reload dotfiles configs (tmux, i3, kitty)",
-		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"target": {Type: "string", Enum: []string{"tmux", "i3", "kitty", "all"}},
-		}},
+		Name:        "system_info",
+		Description: "Detailed system information",
+		InputSchema: toolSchema{Type: "object"},
+	},
+	{
+		Name:        "system_sudo",
+		Description: "Show available sudo methods",
+		InputSchema: toolSchema{Type: "object"},
+	},
+	// dotfiles
+	{
+		Name:        "dotfiles_status",
+		Description: "Show dotfiles repo status",
+		InputSchema: toolSchema{Type: "object"},
 	},
 	{
 		Name:        "dotfiles_git",
@@ -74,18 +84,22 @@ var mcpTools = []toolDef{
 			"paths":   {Type: "string"},
 		}, Required: []string{"action"}},
 	},
+	// exec
 	{
-		Name:        "system_exec",
+		Name:        "exec_run",
 		Description: "Execute a shell command",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
 			"command": {Type: "string"},
-			"sud":     {Type: "string", Enum: []string{"true", "false"}},
+			"sudo":    {Type: "string", Enum: []string{"true", "false"}},
 		}, Required: []string{"command"}},
 	},
+	// config
 	{
-		Name:        "system_info",
-		Description: "Detailed system information",
-		InputSchema: toolSchema{Type: "object"},
+		Name:        "config_reload",
+		Description: "Reload dotfiles configs (tmux, i3, kitty)",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"target": {Type: "string", Enum: []string{"tmux", "i3", "kitty", "all"}},
+		}},
 	},
 }
 
@@ -187,39 +201,49 @@ func dispatchMCP(req mcpRequest) *mcpResponse {
 
 func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpResponse {
 	switch name {
+	// system
+	case "system_ping":
+		resp, err := sysClient.Ping(context.Background(), connect.NewRequest(&dotfilesdv1.PingRequest{}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		s := resp.Msg
+		text := fmt.Sprintf("dotfilesd v%s (pid %d, up %ds)", s.Version, s.Pid, s.UptimeSecs)
+		return mcpToolResult(id, text)
+
+	case "system_info":
+		resp, err := sysClient.SystemInfo(context.Background(), connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		s := resp.Msg
+		text := fmt.Sprintf("os: %s\nkernel: %s\nshell: %s\ndesktop: %s\nmemory: %d MB total / %d MB avail\ncpu: %.2f load\n%s\n%s\n%s",
+			s.Os, s.Kernel, s.Shell, s.Desktop,
+			s.MemoryTotalKb/1024, s.MemoryAvailKb/1024,
+			s.CpuLoad_1M,
+			s.TmuxVersion, s.KittyVersion, s.I3Version)
+		return mcpToolResult(id, text)
+
+	case "system_sudo":
+		resp, err := sysClient.SudoMethods(context.Background(), connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		text := fmt.Sprintf("current: %s\nhas sudo: %v\navailable: %s",
+			resp.Msg.CurrentMethod, resp.Msg.HasElevation,
+			strings.Join(resp.Msg.AvailableMethods, ", "))
+		return mcpToolResult(id, text)
+
+	// dotfiles
 	case "dotfiles_status":
-		resp, err := client.Status(context.Background(), connect.NewRequest(&dotfilesdv1.StatusRequest{}))
+		resp, err := dotClient.Status(context.Background(), connect.NewRequest(&dotfilesdv1.StatusRequest{}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
 		s := resp.Msg
 		text := fmt.Sprintf("branch: %s\nclean: %v\nlast: %s\nhost: %s\nuptime: %s",
 			s.GitBranch, s.GitClean, s.LastCommit, s.Hostname, s.Uptime)
-		return mcpResp(id, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": text}},
-		})
-
-	case "dotfiles_reload":
-		var p struct{ Target string `json:"target"` }
-		json.Unmarshal(args, &p)
-		if p.Target == "" {
-			p.Target = "all"
-		}
-		resp, err := client.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: p.Target}))
-		if err != nil {
-			return mcpErr(id, -32603, err.Error())
-		}
-		var lines []string
-		for _, r := range resp.Msg.Results {
-			s := "ok"
-			if !r.Success {
-				s = "err"
-			}
-			lines = append(lines, fmt.Sprintf("%s: %s (%s)", r.Target, s, r.Message))
-		}
-		return mcpResp(id, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": linesJoin(lines, "\n")}},
-		})
+		return mcpToolResult(id, text)
 
 	case "dotfiles_git":
 		var p struct {
@@ -228,7 +252,7 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 			Paths   string `json:"paths"`
 		}
 		json.Unmarshal(args, &p)
-		resp, err := client.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{Action: p.Action, Message: p.Message, Paths: p.Paths}))
+		resp, err := dotClient.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{Action: p.Action, Message: p.Message, Paths: p.Paths}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -238,17 +262,16 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 				"isError": true,
 			})
 		}
-		return mcpResp(id, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": resp.Msg.Stdout}},
-		})
+		return mcpToolResult(id, resp.Msg.Stdout)
 
-	case "system_exec":
+	// exec
+	case "exec_run":
 		var p struct {
 			Command string `json:"command"`
 			Sudo    string `json:"sudo"`
 		}
 		json.Unmarshal(args, &p)
-		resp, err := client.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command, Sudo: p.Sudo == "true"}))
+		resp, err := execClient.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command, Sudo: p.Sudo == "true"}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -262,24 +285,36 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 			"isError": isErr,
 		})
 
-	case "system_info":
-		resp, err := client.SystemInfo(context.Background(), connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
+	// config
+	case "config_reload":
+		var p struct{ Target string `json:"target"` }
+		json.Unmarshal(args, &p)
+		if p.Target == "" {
+			p.Target = "all"
+		}
+		resp, err := cfgClient.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: p.Target}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
-		s := resp.Msg
-		text := fmt.Sprintf("os: %s\nkernel: %s\nshell: %s\ndesktop: %s\nmemory: %d MB total / %d MB avail\ncpu: %.2f load\n%s\n%s\n%s",
-			s.Os, s.Kernel, s.Shell, s.Desktop,
-			s.MemoryTotalKb/1024, s.MemoryAvailKb/1024,
-			s.CpuLoad_1M,
-			s.TmuxVersion, s.KittyVersion, s.I3Version)
-		return mcpResp(id, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": text}},
-		})
+		var lines []string
+		for _, r := range resp.Msg.Results {
+			s := "ok"
+			if !r.Success {
+				s = "err"
+			}
+			lines = append(lines, fmt.Sprintf("%s: %s (%s)", r.Target, s, r.Message))
+		}
+		return mcpToolResult(id, linesJoin(lines, "\n"))
 
 	default:
 		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
 	}
+}
+
+func mcpToolResult(id json.RawMessage, text string) *mcpResponse {
+	return mcpResp(id, map[string]any{
+		"content": []map[string]any{{"type": "text", "text": text}},
+	})
 }
 
 func mcpResp(id json.RawMessage, result any) *mcpResponse {

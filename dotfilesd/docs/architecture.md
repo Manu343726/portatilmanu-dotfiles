@@ -58,13 +58,15 @@ service DotfilesService {
 
 The MCP stdio server (launched via `dotfilesctl mcp`) exposes these tools:
 
-| Tool | Description |
-|------|-------------|
-| `dotfiles_status` | Dotfiles repo status + system info |
-| `dotfiles_reload` | Reload dotfiles configs (tmux, i3, kitty) |
-| `dotfiles_git` | Git operations on the dotfiles repo |
-| `system_exec` | Execute shell commands |
-| `system_info` | Detailed system information |
+| Tool | Service | Description |
+|------|---------|-------------|
+| `system_ping` | SystemService | Daemon health check |
+| `system_info` | SystemService | Detailed system information |
+| `system_sudo` | SystemService | Available sudo methods |
+| `dotfiles_status` | DotfilesService | Dotfiles repo status |
+| `dotfiles_git` | DotfilesService | Git operations on the dotfiles repo |
+| `exec_run` | ExecService | Execute shell commands |
+| `config_reload` | ConfigService | Reload dotfiles configs |
 
 ## Data flow
 

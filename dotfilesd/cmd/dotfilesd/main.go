@@ -63,11 +63,28 @@ func main() {
 
 			setupLogging(logDir, logLevel, logMaxMB, logBackup, logAge)
 
-			svc := &dotfilesServer{startedAt: time.Now()}
+	sysSvc := &systemServer{startedAt: time.Now()}
+	dotSvc := &dotfilesServer{}
+	execSvc := &execServer{}
+	cfgSvc := &configServer{}
 
-			mux := http.NewServeMux()
-			path, handler := dotfilesdv1connect.NewDotfilesServiceHandler(svc)
-			mux.Handle(path, handler)
+	mux := http.NewServeMux()
+	{
+		p, h := dotfilesdv1connect.NewSystemServiceHandler(sysSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewDotfilesServiceHandler(dotSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewConfigServiceHandler(cfgSvc)
+		mux.Handle(p, h)
+	}
 
 			rpcAddr := fmt.Sprintf("127.0.0.1:%s", rpcPort)
 			rpcServer := &http.Server{
@@ -76,7 +93,7 @@ func main() {
 			}
 
 			go func() {
-				slog.Info("serving connect rpc", "addr", rpcAddr, "path", path)
+				slog.Info("serving connect rpc", "addr", rpcAddr)
 				if err := rpcServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 					slog.Error("rpc server error", "error", err)
 				}

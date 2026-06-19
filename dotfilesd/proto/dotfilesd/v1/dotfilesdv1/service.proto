@@ -4,26 +4,27 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
-// DotfilesService is the central API for the dotfiles runtime daemon.
-service DotfilesService {
-  // General
+// SystemService - daemon health and system information.
+service SystemService {
   rpc Ping(PingRequest) returns (PingResponse);
-  rpc Status(StatusRequest) returns (StatusResponse);
-
-  // Command execution
-  rpc Exec(ExecRequest) returns (ExecResponse);
-
-  // Config reload
-  rpc Reload(ReloadRequest) returns (ReloadResponse);
-
-  // Git operations on the dotfiles repo
-  rpc Git(GitRequest) returns (GitResponse);
-
-  // System info
   rpc SystemInfo(SystemInfoRequest) returns (SystemInfoResponse);
-
-  // Sudo method negotiation
   rpc SudoMethods(SudoMethodsRequest) returns (SudoMethodsResponse);
+}
+
+// DotfilesService - dotfiles repository management.
+service DotfilesService {
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc Git(GitRequest) returns (GitResponse);
+}
+
+// ExecService - command execution.
+service ExecService {
+  rpc Exec(ExecRequest) returns (ExecResponse);
+}
+
+// ConfigService - dotfiles configuration reload.
+service ConfigService {
+  rpc Reload(ReloadRequest) returns (ReloadResponse);
 }
 
 message PingRequest {}

@@ -98,25 +98,33 @@ Not meant to be invoked directly by a human — opencode launches it as a subpro
 
 Available when opencode launches `dotfilesctl mcp` as a stdio subprocess.
 
-### `dotfiles_status`
+### `system_ping`
 
-Returns repo status, branch, last commit, hostname, uptime. Maps to `dotfilesctl status`.
-
-### `dotfiles_reload`
-
-Reloads configuration files. Takes a `target` parameter (`tmux`, `i3`, `kitty`, `all`).
-
-### `dotfiles_git`
-
-Git operations. Parameters: `action` (required), `message`, `paths`.
-
-### `system_exec`
-
-Execute shell commands. Parameters: `command` (required), `sudo`. Returns stdout, stderr, and exit code.
+Daemon health check. Maps to `dotfilesctl system ping`.
 
 ### `system_info`
 
-Returns detailed system information. Maps to `dotfilesctl info`.
+Returns detailed system information. Maps to `dotfilesctl system info`.
+
+### `system_sudo`
+
+Shows available sudo methods. Maps to `dotfilesctl system sudo`.
+
+### `dotfiles_status`
+
+Returns repo status, branch, last commit, hostname, uptime. Maps to `dotfilesctl dotfiles status`.
+
+### `dotfiles_git`
+
+Git operations. Parameters: `action` (required), `message`, `paths`. Maps to `dotfilesctl dotfiles git`.
+
+### `exec_run`
+
+Execute shell commands. Parameters: `command` (required), `sudo`. Returns stdout, stderr, and exit code. Maps to `dotfilesctl exec`.
+
+### `config_reload`
+
+Reloads configuration files. Takes a `target` parameter (`tmux`, `i3`, `kitty`, `all`). Maps to `dotfilesctl config reload`.
 
 ## RPC API
 

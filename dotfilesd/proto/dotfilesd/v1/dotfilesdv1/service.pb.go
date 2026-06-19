@@ -938,16 +938,19 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
-	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xfa\x03\n" +
-	"\x0fDotfilesService\x12=\n" +
-	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12C\n" +
-	"\x06Status\x12\x1b.dotfilesd.v1.StatusRequest\x1a\x1c.dotfilesd.v1.StatusResponse\x12=\n" +
-	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse\x12C\n" +
-	"\x06Reload\x12\x1b.dotfilesd.v1.ReloadRequest\x1a\x1c.dotfilesd.v1.ReloadResponse\x12:\n" +
-	"\x03Git\x12\x18.dotfilesd.v1.GitRequest\x1a\x19.dotfilesd.v1.GitResponse\x12O\n" +
+	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xf3\x01\n" +
+	"\rSystemService\x12=\n" +
+	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
 	"\n" +
 	"SystemInfo\x12\x1f.dotfilesd.v1.SystemInfoRequest\x1a .dotfilesd.v1.SystemInfoResponse\x12R\n" +
-	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponse2\x92\x01\n" +
+	"\x0fDotfilesService\x12C\n" +
+	"\x06Status\x12\x1b.dotfilesd.v1.StatusRequest\x1a\x1c.dotfilesd.v1.StatusResponse\x12:\n" +
+	"\x03Git\x12\x18.dotfilesd.v1.GitRequest\x1a\x19.dotfilesd.v1.GitResponse2L\n" +
+	"\vExecService\x12=\n" +
+	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse2T\n" +
+	"\rConfigService\x12C\n" +
+	"\x06Reload\x12\x1b.dotfilesd.v1.ReloadRequest\x1a\x1c.dotfilesd.v1.ReloadResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescOnce sync.Once
@@ -981,20 +984,20 @@ var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes = []any{
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_depIdxs = []int32{
 	14, // 0: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
-	0,  // 1: dotfilesd.v1.DotfilesService.Ping:input_type -> dotfilesd.v1.PingRequest
-	2,  // 2: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
-	4,  // 3: dotfilesd.v1.DotfilesService.Exec:input_type -> dotfilesd.v1.ExecRequest
-	6,  // 4: dotfilesd.v1.DotfilesService.Reload:input_type -> dotfilesd.v1.ReloadRequest
+	0,  // 1: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
+	10, // 2: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
+	12, // 3: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
+	2,  // 4: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
 	8,  // 5: dotfilesd.v1.DotfilesService.Git:input_type -> dotfilesd.v1.GitRequest
-	10, // 6: dotfilesd.v1.DotfilesService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
-	12, // 7: dotfilesd.v1.DotfilesService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
-	1,  // 8: dotfilesd.v1.DotfilesService.Ping:output_type -> dotfilesd.v1.PingResponse
-	3,  // 9: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
-	5,  // 10: dotfilesd.v1.DotfilesService.Exec:output_type -> dotfilesd.v1.ExecResponse
-	7,  // 11: dotfilesd.v1.DotfilesService.Reload:output_type -> dotfilesd.v1.ReloadResponse
+	4,  // 6: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
+	6,  // 7: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
+	1,  // 8: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
+	11, // 9: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	13, // 10: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	3,  // 11: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
 	9,  // 12: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
-	11, // 13: dotfilesd.v1.DotfilesService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
-	13, // 14: dotfilesd.v1.DotfilesService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	5,  // 13: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
+	7,  // 14: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
 	8,  // [8:15] is the sub-list for method output_type
 	1,  // [1:8] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
@@ -1015,7 +1018,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_service_proto_init() {
 			NumEnums:      0,
 			NumMessages:   15,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   4,
 		},
 		GoTypes:           file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes,
 		DependencyIndexes: file_proto_dotfilesd_v1_dotfilesdv1_service_proto_depIdxs,

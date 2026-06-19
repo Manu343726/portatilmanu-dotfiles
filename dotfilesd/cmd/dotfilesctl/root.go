@@ -19,11 +19,14 @@ import (
 )
 
 var (
-	buildHash string
-	verbose   bool
-	noVerify  bool
-	port      string
-	client    dotfilesdv1connect.DotfilesServiceClient
+	buildHash  string
+	verbose    bool
+	noVerify   bool
+	port       string
+	sysClient  dotfilesdv1connect.SystemServiceClient
+	dotClient  dotfilesdv1connect.DotfilesServiceClient
+	execClient dotfilesdv1connect.ExecServiceClient
+	cfgClient  dotfilesdv1connect.ConfigServiceClient
 )
 
 func newRootCmd() *cobra.Command {
@@ -38,10 +41,6 @@ func newRootCmd() *cobra.Command {
 			viper.AddConfigPath("$HOME/.config/dotfilesctl")
 			viper.AutomaticEnv()
 			viper.SetEnvPrefix("DOTFILESCTL")
-
-			viper.BindPFlag("verbose", cmd.Root().PersistentFlags().Lookup("verbose"))
-			viper.BindPFlag("no_verify", cmd.Root().PersistentFlags().Lookup("no-verify"))
-			viper.BindPFlag("port", cmd.Root().PersistentFlags().Lookup("port"))
 
 			if err := viper.ReadInConfig(); err != nil {
 				if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -64,7 +63,11 @@ func newRootCmd() *cobra.Command {
 				}
 			}
 			baseURL := fmt.Sprintf("http://127.0.0.1:%s", port)
-			client = dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, baseURL)
+			httpClient := http.DefaultClient
+			sysClient = dotfilesdv1connect.NewSystemServiceClient(httpClient, baseURL)
+			dotClient = dotfilesdv1connect.NewDotfilesServiceClient(httpClient, baseURL)
+			execClient = dotfilesdv1connect.NewExecServiceClient(httpClient, baseURL)
+			cfgClient = dotfilesdv1connect.NewConfigServiceClient(httpClient, baseURL)
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -78,13 +81,10 @@ func newRootCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(&noVerify, "no-verify", false, "skip source version check")
 	cmd.PersistentFlags().StringVarP(&port, "port", "p", "", "daemon port (default DOTFILESD_PORT env or 9105)")
 
-	cmd.AddCommand(newPingCmd())
-	cmd.AddCommand(newStatusCmd())
-	cmd.AddCommand(newInfoCmd())
+	cmd.AddCommand(newSystemCmd())
+	cmd.AddCommand(newDotfilesCmd())
 	cmd.AddCommand(newExecCmd())
-	cmd.AddCommand(newReloadCmd())
-	cmd.AddCommand(newGitCmd())
-	cmd.AddCommand(newSudoCmd())
+	cmd.AddCommand(newConfigCmd())
 	cmd.AddCommand(newMCPCmd())
 
 	return cmd
@@ -147,13 +147,22 @@ func checkBuildHash(noVerify bool, name string) {
 	}
 }
 
-func newPingCmd() *cobra.Command {
-	return &cobra.Command{
+// --- system subcommand group ------------------------------------------------
+
+func newSystemCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "system",
+		Short: "daemon health and system information",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(&cobra.Command{
 		Use:   "ping",
 		Short: "check daemon is running",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := client.Ping(context.Background(), connect.NewRequest(&dotfilesdv1.PingRequest{}))
+			resp, err := sysClient.Ping(context.Background(), connect.NewRequest(&dotfilesdv1.PingRequest{}))
 			if err != nil {
 				return fmt.Errorf("ping failed: %w", err)
 			}
@@ -161,40 +170,13 @@ func newPingCmd() *cobra.Command {
 			fmt.Printf("dotfilesd v%s (pid %d, up %ds)\n", s.Version, s.Pid, s.UptimeSecs)
 			return nil
 		},
-	}
-}
-
-func newStatusCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "show dotfiles repo status",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := client.Status(context.Background(), connect.NewRequest(&dotfilesdv1.StatusRequest{}))
-			if err != nil {
-				return fmt.Errorf("status failed: %w", err)
-			}
-			s := resp.Msg
-			clean := "clean"
-			if !s.GitClean {
-				clean = "dirty"
-			}
-			fmt.Printf("branch: %s (%s)\n", s.GitBranch, clean)
-			fmt.Printf("last:   %s\n", s.LastCommit)
-			fmt.Printf("host:   %s\n", s.Hostname)
-			fmt.Printf("uptime: %s\n", s.Uptime)
-			return nil
-		},
-	}
-}
-
-func newInfoCmd() *cobra.Command {
-	return &cobra.Command{
+	})
+	cmd.AddCommand(&cobra.Command{
 		Use:   "info",
 		Short: "detailed system information",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := client.SystemInfo(context.Background(), connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
+			resp, err := sysClient.SystemInfo(context.Background(), connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
 			if err != nil {
 				return fmt.Errorf("info failed: %w", err)
 			}
@@ -210,65 +192,58 @@ func newInfoCmd() *cobra.Command {
 			fmt.Printf("I3:      %s\n", s.I3Version)
 			return nil
 		},
-	}
-}
-
-func newExecCmd() *cobra.Command {
-	var sudo bool
-
-	cmd := &cobra.Command{
-		Use:   "exec [--sudo] <command>",
-		Short: "run a shell command",
-		Args:  cobra.MinimumNArgs(1),
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "sudo",
+		Short: "show available sudo methods",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			command := strings.Join(args, " ")
-			resp, err := client.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{
-				Command: command, Sudo: sudo,
-			}))
+			resp, err := sysClient.SudoMethods(context.Background(), connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{}))
 			if err != nil {
-				return fmt.Errorf("exec failed: %w", err)
+				return fmt.Errorf("sudo methods failed: %w", err)
 			}
-			if resp.Msg.Stdout != "" {
-				fmt.Print(resp.Msg.Stdout)
-			}
-			if resp.Msg.Stderr != "" {
-				fmt.Fprint(os.Stderr, resp.Msg.Stderr)
-			}
-			if resp.Msg.ExitCode != 0 {
-				os.Exit(int(resp.Msg.ExitCode))
-			}
+			fmt.Printf("current:  %s\n", resp.Msg.CurrentMethod)
+			fmt.Printf("has sudo: %v\n", resp.Msg.HasElevation)
+			fmt.Printf("available: %s\n", strings.Join(resp.Msg.AvailableMethods, ", "))
 			return nil
 		},
-	}
-
-	cmd.Flags().BoolVar(&sudo, "sudo", false, "run with pkexec")
+	})
 	return cmd
 }
 
-func newReloadCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "reload [target]",
-		Short: "reload configs (tmux, i3, kitty, all)",
-		Args:  cobra.MaximumNArgs(1),
+// --- dotfiles subcommand group ---------------------------------------------
+
+func newDotfilesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dotfiles",
+		Short: "dotfiles repository management",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target := "all"
-			if len(args) > 0 {
-				target = args[0]
-			}
-			resp, err := client.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target}))
-			if err != nil {
-				return fmt.Errorf("reload failed: %w", err)
-			}
-			for _, r := range resp.Msg.Results {
-				status := "ok"
-				if !r.Success {
-					status = "error"
-				}
-				fmt.Printf("%-6s %s: %s\n", status, r.Target, r.Message)
-			}
-			return nil
+			return cmd.Help()
 		},
 	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "show dotfiles repo status",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resp, err := dotClient.Status(context.Background(), connect.NewRequest(&dotfilesdv1.StatusRequest{}))
+			if err != nil {
+				return fmt.Errorf("status failed: %w", err)
+			}
+			s := resp.Msg
+			clean := "clean"
+			if !s.GitClean {
+				clean = "dirty"
+			}
+			fmt.Printf("branch: %s (%s)\n", s.GitBranch, clean)
+			fmt.Printf("last:   %s\n", s.LastCommit)
+			fmt.Printf("host:   %s\n", s.Hostname)
+			fmt.Printf("uptime: %s\n", s.Uptime)
+			return nil
+		},
+	})
+	cmd.AddCommand(newGitCmd())
+	return cmd
 }
 
 func newGitCmd() *cobra.Command {
@@ -281,7 +256,7 @@ func newGitCmd() *cobra.Command {
 			message, _ := cmd.Flags().GetString("message")
 			paths, _ := cmd.Flags().GetString("paths")
 
-			resp, err := client.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{
+			resp, err := dotClient.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{
 				Action: action, Message: message, Paths: paths,
 			}))
 			if err != nil {
@@ -305,23 +280,77 @@ func newGitCmd() *cobra.Command {
 	return cmd
 }
 
-func newSudoCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "sudo",
-		Short: "show available sudo methods",
-		Args:  cobra.NoArgs,
+// --- exec subcommand -------------------------------------------------------
+
+func newExecCmd() *cobra.Command {
+	var sudo bool
+
+	cmd := &cobra.Command{
+		Use:   "exec [--sudo] <command>",
+		Short: "run a shell command",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := client.SudoMethods(context.Background(), connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{}))
+			command := strings.Join(args, " ")
+			resp, err := execClient.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{
+				Command: command, Sudo: sudo,
+			}))
 			if err != nil {
-				return fmt.Errorf("sudo methods failed: %w", err)
+				return fmt.Errorf("exec failed: %w", err)
 			}
-			fmt.Printf("current:  %s\n", resp.Msg.CurrentMethod)
-			fmt.Printf("has sudo: %v\n", resp.Msg.HasElevation)
-			fmt.Printf("available: %s\n", strings.Join(resp.Msg.AvailableMethods, ", "))
+			if resp.Msg.Stdout != "" {
+				fmt.Print(resp.Msg.Stdout)
+			}
+			if resp.Msg.Stderr != "" {
+				fmt.Fprint(os.Stderr, resp.Msg.Stderr)
+			}
+			if resp.Msg.ExitCode != 0 {
+				os.Exit(int(resp.Msg.ExitCode))
+			}
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVar(&sudo, "sudo", false, "run with pkexec")
+	return cmd
 }
+
+// --- config subcommand group -----------------------------------------------
+
+func newConfigCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "dotfiles configuration reload",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "reload [target]",
+		Short: "reload configs (tmux, i3, kitty, all)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := "all"
+			if len(args) > 0 {
+				target = args[0]
+			}
+			resp, err := cfgClient.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target}))
+			if err != nil {
+				return fmt.Errorf("reload failed: %w", err)
+			}
+			for _, r := range resp.Msg.Results {
+				status := "ok"
+				if !r.Success {
+					status = "error"
+				}
+				fmt.Printf("%-6s %s: %s\n", status, r.Target, r.Message)
+			}
+			return nil
+		},
+	})
+	return cmd
+}
+
+// --- mcp subcommand --------------------------------------------------------
 
 func newMCPCmd() *cobra.Command {
 	return &cobra.Command{

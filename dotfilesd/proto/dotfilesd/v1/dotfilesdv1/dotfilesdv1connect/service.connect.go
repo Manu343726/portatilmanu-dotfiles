@@ -21,8 +21,14 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
+	// SystemServiceName is the fully-qualified name of the SystemService service.
+	SystemServiceName = "dotfilesd.v1.SystemService"
 	// DotfilesServiceName is the fully-qualified name of the DotfilesService service.
 	DotfilesServiceName = "dotfilesd.v1.DotfilesService"
+	// ExecServiceName is the fully-qualified name of the ExecService service.
+	ExecServiceName = "dotfilesd.v1.ExecService"
+	// ConfigServiceName is the fully-qualified name of the ConfigService service.
+	ConfigServiceName = "dotfilesd.v1.ConfigService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -33,39 +39,150 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DotfilesServicePingProcedure is the fully-qualified name of the DotfilesService's Ping RPC.
-	DotfilesServicePingProcedure = "/dotfilesd.v1.DotfilesService/Ping"
+	// SystemServicePingProcedure is the fully-qualified name of the SystemService's Ping RPC.
+	SystemServicePingProcedure = "/dotfilesd.v1.SystemService/Ping"
+	// SystemServiceSystemInfoProcedure is the fully-qualified name of the SystemService's SystemInfo
+	// RPC.
+	SystemServiceSystemInfoProcedure = "/dotfilesd.v1.SystemService/SystemInfo"
+	// SystemServiceSudoMethodsProcedure is the fully-qualified name of the SystemService's SudoMethods
+	// RPC.
+	SystemServiceSudoMethodsProcedure = "/dotfilesd.v1.SystemService/SudoMethods"
 	// DotfilesServiceStatusProcedure is the fully-qualified name of the DotfilesService's Status RPC.
 	DotfilesServiceStatusProcedure = "/dotfilesd.v1.DotfilesService/Status"
-	// DotfilesServiceExecProcedure is the fully-qualified name of the DotfilesService's Exec RPC.
-	DotfilesServiceExecProcedure = "/dotfilesd.v1.DotfilesService/Exec"
-	// DotfilesServiceReloadProcedure is the fully-qualified name of the DotfilesService's Reload RPC.
-	DotfilesServiceReloadProcedure = "/dotfilesd.v1.DotfilesService/Reload"
 	// DotfilesServiceGitProcedure is the fully-qualified name of the DotfilesService's Git RPC.
 	DotfilesServiceGitProcedure = "/dotfilesd.v1.DotfilesService/Git"
-	// DotfilesServiceSystemInfoProcedure is the fully-qualified name of the DotfilesService's
-	// SystemInfo RPC.
-	DotfilesServiceSystemInfoProcedure = "/dotfilesd.v1.DotfilesService/SystemInfo"
-	// DotfilesServiceSudoMethodsProcedure is the fully-qualified name of the DotfilesService's
-	// SudoMethods RPC.
-	DotfilesServiceSudoMethodsProcedure = "/dotfilesd.v1.DotfilesService/SudoMethods"
+	// ExecServiceExecProcedure is the fully-qualified name of the ExecService's Exec RPC.
+	ExecServiceExecProcedure = "/dotfilesd.v1.ExecService/Exec"
+	// ConfigServiceReloadProcedure is the fully-qualified name of the ConfigService's Reload RPC.
+	ConfigServiceReloadProcedure = "/dotfilesd.v1.ConfigService/Reload"
 )
+
+// SystemServiceClient is a client for the dotfilesd.v1.SystemService service.
+type SystemServiceClient interface {
+	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
+	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
+	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
+}
+
+// NewSystemServiceClient constructs a client for the dotfilesd.v1.SystemService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SystemServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	systemServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("SystemService").Methods()
+	return &systemServiceClient{
+		ping: connect.NewClient[dotfilesdv1.PingRequest, dotfilesdv1.PingResponse](
+			httpClient,
+			baseURL+SystemServicePingProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
+		),
+		systemInfo: connect.NewClient[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse](
+			httpClient,
+			baseURL+SystemServiceSystemInfoProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("SystemInfo")),
+			connect.WithClientOptions(opts...),
+		),
+		sudoMethods: connect.NewClient[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse](
+			httpClient,
+			baseURL+SystemServiceSudoMethodsProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("SudoMethods")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// systemServiceClient implements SystemServiceClient.
+type systemServiceClient struct {
+	ping        *connect.Client[dotfilesdv1.PingRequest, dotfilesdv1.PingResponse]
+	systemInfo  *connect.Client[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse]
+	sudoMethods *connect.Client[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse]
+}
+
+// Ping calls dotfilesd.v1.SystemService.Ping.
+func (c *systemServiceClient) Ping(ctx context.Context, req *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
+	return c.ping.CallUnary(ctx, req)
+}
+
+// SystemInfo calls dotfilesd.v1.SystemService.SystemInfo.
+func (c *systemServiceClient) SystemInfo(ctx context.Context, req *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
+	return c.systemInfo.CallUnary(ctx, req)
+}
+
+// SudoMethods calls dotfilesd.v1.SystemService.SudoMethods.
+func (c *systemServiceClient) SudoMethods(ctx context.Context, req *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
+	return c.sudoMethods.CallUnary(ctx, req)
+}
+
+// SystemServiceHandler is an implementation of the dotfilesd.v1.SystemService service.
+type SystemServiceHandler interface {
+	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
+	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
+	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
+}
+
+// NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	systemServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("SystemService").Methods()
+	systemServicePingHandler := connect.NewUnaryHandler(
+		SystemServicePingProcedure,
+		svc.Ping,
+		connect.WithSchema(systemServiceMethods.ByName("Ping")),
+		connect.WithHandlerOptions(opts...),
+	)
+	systemServiceSystemInfoHandler := connect.NewUnaryHandler(
+		SystemServiceSystemInfoProcedure,
+		svc.SystemInfo,
+		connect.WithSchema(systemServiceMethods.ByName("SystemInfo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	systemServiceSudoMethodsHandler := connect.NewUnaryHandler(
+		SystemServiceSudoMethodsProcedure,
+		svc.SudoMethods,
+		connect.WithSchema(systemServiceMethods.ByName("SudoMethods")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/dotfilesd.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case SystemServicePingProcedure:
+			systemServicePingHandler.ServeHTTP(w, r)
+		case SystemServiceSystemInfoProcedure:
+			systemServiceSystemInfoHandler.ServeHTTP(w, r)
+		case SystemServiceSudoMethodsProcedure:
+			systemServiceSudoMethodsHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedSystemServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedSystemServiceHandler struct{}
+
+func (UnimplementedSystemServiceHandler) Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.Ping is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.SystemInfo is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.SudoMethods is not implemented"))
+}
 
 // DotfilesServiceClient is a client for the dotfilesd.v1.DotfilesService service.
 type DotfilesServiceClient interface {
-	// General
-	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
 	Status(context.Context, *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error)
-	// Command execution
-	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
-	// Config reload
-	Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error)
-	// Git operations on the dotfiles repo
 	Git(context.Context, *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error)
-	// System info
-	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
-	// Sudo method negotiation
-	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
 }
 
 // NewDotfilesServiceClient constructs a client for the dotfilesd.v1.DotfilesService service. By
@@ -79,28 +196,10 @@ func NewDotfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 	baseURL = strings.TrimRight(baseURL, "/")
 	dotfilesServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("DotfilesService").Methods()
 	return &dotfilesServiceClient{
-		ping: connect.NewClient[dotfilesdv1.PingRequest, dotfilesdv1.PingResponse](
-			httpClient,
-			baseURL+DotfilesServicePingProcedure,
-			connect.WithSchema(dotfilesServiceMethods.ByName("Ping")),
-			connect.WithClientOptions(opts...),
-		),
 		status: connect.NewClient[dotfilesdv1.StatusRequest, dotfilesdv1.StatusResponse](
 			httpClient,
 			baseURL+DotfilesServiceStatusProcedure,
 			connect.WithSchema(dotfilesServiceMethods.ByName("Status")),
-			connect.WithClientOptions(opts...),
-		),
-		exec: connect.NewClient[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse](
-			httpClient,
-			baseURL+DotfilesServiceExecProcedure,
-			connect.WithSchema(dotfilesServiceMethods.ByName("Exec")),
-			connect.WithClientOptions(opts...),
-		),
-		reload: connect.NewClient[dotfilesdv1.ReloadRequest, dotfilesdv1.ReloadResponse](
-			httpClient,
-			baseURL+DotfilesServiceReloadProcedure,
-			connect.WithSchema(dotfilesServiceMethods.ByName("Reload")),
 			connect.WithClientOptions(opts...),
 		),
 		git: connect.NewClient[dotfilesdv1.GitRequest, dotfilesdv1.GitResponse](
@@ -109,35 +208,13 @@ func NewDotfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(dotfilesServiceMethods.ByName("Git")),
 			connect.WithClientOptions(opts...),
 		),
-		systemInfo: connect.NewClient[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse](
-			httpClient,
-			baseURL+DotfilesServiceSystemInfoProcedure,
-			connect.WithSchema(dotfilesServiceMethods.ByName("SystemInfo")),
-			connect.WithClientOptions(opts...),
-		),
-		sudoMethods: connect.NewClient[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse](
-			httpClient,
-			baseURL+DotfilesServiceSudoMethodsProcedure,
-			connect.WithSchema(dotfilesServiceMethods.ByName("SudoMethods")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // dotfilesServiceClient implements DotfilesServiceClient.
 type dotfilesServiceClient struct {
-	ping        *connect.Client[dotfilesdv1.PingRequest, dotfilesdv1.PingResponse]
-	status      *connect.Client[dotfilesdv1.StatusRequest, dotfilesdv1.StatusResponse]
-	exec        *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
-	reload      *connect.Client[dotfilesdv1.ReloadRequest, dotfilesdv1.ReloadResponse]
-	git         *connect.Client[dotfilesdv1.GitRequest, dotfilesdv1.GitResponse]
-	systemInfo  *connect.Client[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse]
-	sudoMethods *connect.Client[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse]
-}
-
-// Ping calls dotfilesd.v1.DotfilesService.Ping.
-func (c *dotfilesServiceClient) Ping(ctx context.Context, req *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
-	return c.ping.CallUnary(ctx, req)
+	status *connect.Client[dotfilesdv1.StatusRequest, dotfilesdv1.StatusResponse]
+	git    *connect.Client[dotfilesdv1.GitRequest, dotfilesdv1.GitResponse]
 }
 
 // Status calls dotfilesd.v1.DotfilesService.Status.
@@ -145,46 +222,15 @@ func (c *dotfilesServiceClient) Status(ctx context.Context, req *connect.Request
 	return c.status.CallUnary(ctx, req)
 }
 
-// Exec calls dotfilesd.v1.DotfilesService.Exec.
-func (c *dotfilesServiceClient) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
-	return c.exec.CallUnary(ctx, req)
-}
-
-// Reload calls dotfilesd.v1.DotfilesService.Reload.
-func (c *dotfilesServiceClient) Reload(ctx context.Context, req *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
-	return c.reload.CallUnary(ctx, req)
-}
-
 // Git calls dotfilesd.v1.DotfilesService.Git.
 func (c *dotfilesServiceClient) Git(ctx context.Context, req *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error) {
 	return c.git.CallUnary(ctx, req)
 }
 
-// SystemInfo calls dotfilesd.v1.DotfilesService.SystemInfo.
-func (c *dotfilesServiceClient) SystemInfo(ctx context.Context, req *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
-	return c.systemInfo.CallUnary(ctx, req)
-}
-
-// SudoMethods calls dotfilesd.v1.DotfilesService.SudoMethods.
-func (c *dotfilesServiceClient) SudoMethods(ctx context.Context, req *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
-	return c.sudoMethods.CallUnary(ctx, req)
-}
-
 // DotfilesServiceHandler is an implementation of the dotfilesd.v1.DotfilesService service.
 type DotfilesServiceHandler interface {
-	// General
-	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
 	Status(context.Context, *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error)
-	// Command execution
-	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
-	// Config reload
-	Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error)
-	// Git operations on the dotfiles repo
 	Git(context.Context, *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error)
-	// System info
-	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
-	// Sudo method negotiation
-	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
 }
 
 // NewDotfilesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -194,28 +240,10 @@ type DotfilesServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDotfilesServiceHandler(svc DotfilesServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	dotfilesServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("DotfilesService").Methods()
-	dotfilesServicePingHandler := connect.NewUnaryHandler(
-		DotfilesServicePingProcedure,
-		svc.Ping,
-		connect.WithSchema(dotfilesServiceMethods.ByName("Ping")),
-		connect.WithHandlerOptions(opts...),
-	)
 	dotfilesServiceStatusHandler := connect.NewUnaryHandler(
 		DotfilesServiceStatusProcedure,
 		svc.Status,
 		connect.WithSchema(dotfilesServiceMethods.ByName("Status")),
-		connect.WithHandlerOptions(opts...),
-	)
-	dotfilesServiceExecHandler := connect.NewUnaryHandler(
-		DotfilesServiceExecProcedure,
-		svc.Exec,
-		connect.WithSchema(dotfilesServiceMethods.ByName("Exec")),
-		connect.WithHandlerOptions(opts...),
-	)
-	dotfilesServiceReloadHandler := connect.NewUnaryHandler(
-		DotfilesServiceReloadProcedure,
-		svc.Reload,
-		connect.WithSchema(dotfilesServiceMethods.ByName("Reload")),
 		connect.WithHandlerOptions(opts...),
 	)
 	dotfilesServiceGitHandler := connect.NewUnaryHandler(
@@ -224,34 +252,12 @@ func NewDotfilesServiceHandler(svc DotfilesServiceHandler, opts ...connect.Handl
 		connect.WithSchema(dotfilesServiceMethods.ByName("Git")),
 		connect.WithHandlerOptions(opts...),
 	)
-	dotfilesServiceSystemInfoHandler := connect.NewUnaryHandler(
-		DotfilesServiceSystemInfoProcedure,
-		svc.SystemInfo,
-		connect.WithSchema(dotfilesServiceMethods.ByName("SystemInfo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	dotfilesServiceSudoMethodsHandler := connect.NewUnaryHandler(
-		DotfilesServiceSudoMethodsProcedure,
-		svc.SudoMethods,
-		connect.WithSchema(dotfilesServiceMethods.ByName("SudoMethods")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/dotfilesd.v1.DotfilesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case DotfilesServicePingProcedure:
-			dotfilesServicePingHandler.ServeHTTP(w, r)
 		case DotfilesServiceStatusProcedure:
 			dotfilesServiceStatusHandler.ServeHTTP(w, r)
-		case DotfilesServiceExecProcedure:
-			dotfilesServiceExecHandler.ServeHTTP(w, r)
-		case DotfilesServiceReloadProcedure:
-			dotfilesServiceReloadHandler.ServeHTTP(w, r)
 		case DotfilesServiceGitProcedure:
 			dotfilesServiceGitHandler.ServeHTTP(w, r)
-		case DotfilesServiceSystemInfoProcedure:
-			dotfilesServiceSystemInfoHandler.ServeHTTP(w, r)
-		case DotfilesServiceSudoMethodsProcedure:
-			dotfilesServiceSudoMethodsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -261,30 +267,150 @@ func NewDotfilesServiceHandler(svc DotfilesServiceHandler, opts ...connect.Handl
 // UnimplementedDotfilesServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDotfilesServiceHandler struct{}
 
-func (UnimplementedDotfilesServiceHandler) Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.Ping is not implemented"))
-}
-
 func (UnimplementedDotfilesServiceHandler) Status(context.Context, *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.Status is not implemented"))
-}
-
-func (UnimplementedDotfilesServiceHandler) Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.Exec is not implemented"))
-}
-
-func (UnimplementedDotfilesServiceHandler) Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.Reload is not implemented"))
 }
 
 func (UnimplementedDotfilesServiceHandler) Git(context.Context, *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.Git is not implemented"))
 }
 
-func (UnimplementedDotfilesServiceHandler) SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.SystemInfo is not implemented"))
+// ExecServiceClient is a client for the dotfilesd.v1.ExecService service.
+type ExecServiceClient interface {
+	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
 }
 
-func (UnimplementedDotfilesServiceHandler) SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.SudoMethods is not implemented"))
+// NewExecServiceClient constructs a client for the dotfilesd.v1.ExecService service. By default, it
+// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ExecServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	execServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("ExecService").Methods()
+	return &execServiceClient{
+		exec: connect.NewClient[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse](
+			httpClient,
+			baseURL+ExecServiceExecProcedure,
+			connect.WithSchema(execServiceMethods.ByName("Exec")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// execServiceClient implements ExecServiceClient.
+type execServiceClient struct {
+	exec *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
+}
+
+// Exec calls dotfilesd.v1.ExecService.Exec.
+func (c *execServiceClient) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
+	return c.exec.CallUnary(ctx, req)
+}
+
+// ExecServiceHandler is an implementation of the dotfilesd.v1.ExecService service.
+type ExecServiceHandler interface {
+	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
+}
+
+// NewExecServiceHandler builds an HTTP handler from the service implementation. It returns the path
+// on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	execServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("ExecService").Methods()
+	execServiceExecHandler := connect.NewUnaryHandler(
+		ExecServiceExecProcedure,
+		svc.Exec,
+		connect.WithSchema(execServiceMethods.ByName("Exec")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/dotfilesd.v1.ExecService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ExecServiceExecProcedure:
+			execServiceExecHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedExecServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedExecServiceHandler struct{}
+
+func (UnimplementedExecServiceHandler) Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.Exec is not implemented"))
+}
+
+// ConfigServiceClient is a client for the dotfilesd.v1.ConfigService service.
+type ConfigServiceClient interface {
+	Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error)
+}
+
+// NewConfigServiceClient constructs a client for the dotfilesd.v1.ConfigService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewConfigServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ConfigServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	configServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("ConfigService").Methods()
+	return &configServiceClient{
+		reload: connect.NewClient[dotfilesdv1.ReloadRequest, dotfilesdv1.ReloadResponse](
+			httpClient,
+			baseURL+ConfigServiceReloadProcedure,
+			connect.WithSchema(configServiceMethods.ByName("Reload")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// configServiceClient implements ConfigServiceClient.
+type configServiceClient struct {
+	reload *connect.Client[dotfilesdv1.ReloadRequest, dotfilesdv1.ReloadResponse]
+}
+
+// Reload calls dotfilesd.v1.ConfigService.Reload.
+func (c *configServiceClient) Reload(ctx context.Context, req *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
+	return c.reload.CallUnary(ctx, req)
+}
+
+// ConfigServiceHandler is an implementation of the dotfilesd.v1.ConfigService service.
+type ConfigServiceHandler interface {
+	Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error)
+}
+
+// NewConfigServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	configServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_service_proto.Services().ByName("ConfigService").Methods()
+	configServiceReloadHandler := connect.NewUnaryHandler(
+		ConfigServiceReloadProcedure,
+		svc.Reload,
+		connect.WithSchema(configServiceMethods.ByName("Reload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/dotfilesd.v1.ConfigService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ConfigServiceReloadProcedure:
+			configServiceReloadHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedConfigServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedConfigServiceHandler struct{}
+
+func (UnimplementedConfigServiceHandler) Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ConfigService.Reload is not implemented"))
 }
