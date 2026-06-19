@@ -12,21 +12,21 @@
     alternate-normal-background: var(lightbg);
     alternate-normal-foreground: var(foreground);
     selected-normal-background:  var(lightfg);
-    selected-normal-foreground:  var(background);
+    selected-normal-foreground:  var(foreground);
 
     urgent-background:           var(red);
-    urgent-foreground:           var(background);
+    urgent-foreground:           var(foreground);
     alternate-urgent-background: var(lightbg);
     alternate-urgent-foreground: var(red);
     selected-urgent-background:  var(red);
-    selected-urgent-foreground:  var(background);
+    selected-urgent-foreground:  var(foreground);
 
     active-background:           var(blue);
-    active-foreground:           var(background);
+    active-foreground:           var(foreground);
     alternate-active-background: var(lightbg);
     alternate-active-foreground: var(blue);
     selected-active-background:  var(blue);
-    selected-active-foreground:  var(background);
+    selected-active-foreground:  var(foreground);
 
     background-color:            transparent;
     border-color:                var(lightfg);
@@ -34,6 +34,7 @@
 
 window {
     background-color: var(background);
+    border:           1;
     border-color:     var(lightfg);
 }
 
