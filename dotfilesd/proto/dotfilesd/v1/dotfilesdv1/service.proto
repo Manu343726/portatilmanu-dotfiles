@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// DotfilesService is the central API for the dotfiles runtime daemon.
+service DotfilesService {
+  // General
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+
+  // Command execution
+  rpc Exec(ExecRequest) returns (ExecResponse);
+
+  // Config reload
+  rpc Reload(ReloadRequest) returns (ReloadResponse);
+
+  // Git operations on the dotfiles repo
+  rpc Git(GitRequest) returns (GitResponse);
+
+  // System info
+  rpc SystemInfo(SystemInfoRequest) returns (SystemInfoResponse);
+
+  // Sudo method negotiation
+  rpc SudoMethods(SudoMethodsRequest) returns (SudoMethodsResponse);
+}
+
+message PingRequest {}
+message PingResponse {
+  string version = 1;
+  int64 pid = 2;
+  int64 uptime_secs = 3;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  bool git_clean = 1;
+  string git_branch = 2;
+  int32 git_ahead = 3;
+  int32 git_behind = 4;
+  string last_commit = 5;
+  string uptime = 6;
+  string hostname = 7;
+}
+
+message ExecRequest {
+  string command = 1;
+  bool sudo = 2;
+}
+
+message ExecResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}
+
+message ReloadRequest {
+  string target = 1; // "tmux", "i3", "kitty", "all"
+}
+
+message ReloadResponse {
+  message ReloadResult {
+    string target = 1;
+    bool success = 2;
+    string message = 3;
+  }
+  repeated ReloadResult results = 1;
+}
+
+message GitRequest {
+  string action = 1;  // "status", "diff", "add", "commit", "push", "log"
+  string message = 2; // commit message (required for "commit")
+  string paths = 3;   // space-separated (default: all tracked)
+}
+
+message GitResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}
+
+message SystemInfoRequest {}
+
+message SystemInfoResponse {
+  string os = 1;
+  string kernel = 2;
+  string shell = 3;
+  string desktop = 4;
+  int64 memory_total_kb = 5;
+  int64 memory_avail_kb = 6;
+  double cpu_load_1m = 7;
+  string tmux_version = 8;
+  string kitty_version = 9;
+  string i3_version = 10;
+}
+
+message SudoMethodsRequest {}
+
+message SudoMethodsResponse {
+  repeated string available_methods = 1;
+  string current_method = 2;
+  bool has_elevation = 3;
+}

@@ -21,6 +21,9 @@
 /.local/*
 !/.local/bin/
 
+# dotfilesd source
+!/dotfilesd/
+
 # config directories
 !/.config/
 /.config/*
