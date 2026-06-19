@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
 profiles=("Quiet" "Balanced" "Performance")
 current=$(asusctl profile get | head -1)
-choice=$(printf '%s\n' "${profiles[@]}" | rofi -dmenu -p "ASUS Profile" -mesg "Current: $current" -l 3)
+choice=$(printf '%s\n' "${profiles[@]}" | rofi -dmenu -p "ASUS Profile" -mesg "Current: $current" -l 3 -theme ~/.config/rofi/monokai.rasi)
 [[ -n "$choice" ]] && asusctl profile set "$choice" && notify-send "Profile" "$choice"

@@ -40,6 +40,10 @@
 /.config/i3status/*
 !/.config/i3status/config
 
+!/.config/rofi/
+/.config/rofi/*
+!/.config/rofi/monokai.rasi
+
 # opencode MCP config
 !/.config/opencode/
 /.config/opencode/*
