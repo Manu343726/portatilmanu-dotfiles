@@ -22,5 +22,6 @@ i3-msg reload
 | keyboard  | — | `.docs/keyboard.md` |
 | clipboard | — | `.docs/clipboard.md` |
 | palette   | — | `.docs/index.md` |
+| dotfilesd | `~/dotfilesd/` | `dotfilesd/README.md` + `dotfilesd/docs/` |
 
-See `.docs/` for full documentation.
+See `.docs/` for full documentation (also see `dotfilesd/docs/` for daemon docs).

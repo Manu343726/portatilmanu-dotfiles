@@ -39,3 +39,8 @@
 !/.config/i3status/
 /.config/i3status/*
 !/.config/i3status/config
+
+# opencode MCP config
+!/.config/opencode/
+/.config/opencode/*
+!/.config/opencode/opencode.jsonc

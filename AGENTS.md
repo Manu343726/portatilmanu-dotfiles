@@ -13,3 +13,10 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
 3. Keep changes idempotent — reloading configs should work cleanly.
 
 4. Follow the Monokai palette (`#272822` bg, `#A6E22E` accent, etc.) when adding visual configs.
+
+5. **Use the dotfilesd daemon for dotfiles operations.** The daemon runs as a systemd user service and exposes:
+   - **MCP** at `http://127.0.0.1:9106/sse` — for AI agents (tools: `dotfiles_status`, `dotfiles_reload`, `dotfiles_git`, `system_exec`, `system_info`).
+   - **Connect RPC** at `http://127.0.0.1:9105` — accessible via the `dotfilesctl` CLI client (`~/dotfilesd/cmd/dotfilesctl/main.go`).
+   - Prefer `dotfilesctl exec --sudo` for privileged commands instead of raw `pkexec`.
+   - When modifying dotfilesd source code, rebuild with `make build` and restart with `systemctl --user restart dotfilesd`.
+   - See `~/dotfilesd/docs/` for full daemon documentation.
