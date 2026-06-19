@@ -1,14 +1,5 @@
 #!/usr/bin/env zsh
 profiles=("Quiet" "Balanced" "Performance")
 current=$(asusctl profile get | head -1)
-theme='window { background-color: #272822; border: 1; border-color: #A6E22E; }
-mainbox { background-color: #272822; }
-inputbar { background-color: #383830; text-color: #F8F8F2; }
-prompt { text-color: #A6E22E; }
-entry { text-color: #F8F8F2; cursor-color: #A6E22E; }
-listview { background-color: #272822; }
-element { background-color: #272822; text-color: #F8F8F2; }
-element selected.normal { background-color: #A6E22E; text-color: #F8F8F2; }
-message { background-color: #272822; text-color: #75715E; }'
-choice=$(printf '%s\n' "${profiles[@]}" | rofi -dmenu -p "ASUS Profile" -mesg "Current: $current" -l 3 -theme-str "$theme")
+choice=$(printf '%s\n' "${profiles[@]}" | rofi -dmenu -p "ASUS Profile" -mesg "Current: $current" -l 3 -theme "$HOME/.config/rofi/monokai.rasi")
 [[ -n "$choice" ]] && asusctl profile set "$choice" && notify-send "Profile" "$choice"

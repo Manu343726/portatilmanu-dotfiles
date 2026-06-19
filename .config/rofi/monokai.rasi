@@ -1,47 +1,15 @@
-window {
-    background-color: #272822;
-    border:           1;
-    border-color:     #A6E22E;
-}
-
-mainbox {
-    background-color: #272822;
-}
-
-inputbar {
-    background-color: #383830;
-    text-color:       #F8F8F2;
-}
-
-prompt {
-    text-color: #A6E22E;
-}
-
-entry {
-    text-color:   #F8F8F2;
-    cursor-color: #A6E22E;
-    placeholder-color: #75715E;
-}
-
-listview {
-    background-color: #272822;
-}
-
-element {
-    background-color: #272822;
-    text-color:       #F8F8F2;
-}
-
-element selected.normal {
-    background-color: #A6E22E;
-    text-color:       #F8F8F2;
-}
-
-element urgent.normal {
-    text-color: #F92672;
-}
-
-message {
-    background-color: #272822;
-    text-color:       #75715E;
+* {
+    background-color:           #272822;
+    background:                 #272822;
+    foreground:                 #F8F8F2;
+    lightfg:                    #A6E22E;
+    lightbg:                    #383830;
+    red:                        #F92672;
+    separatorcolor:             #75715E;
+    normal-background:          #272822;
+    normal-foreground:          #F8F8F2;
+    selected-normal-background: #A6E22E;
+    selected-normal-foreground: #F8F8F2;
+    alternate-normal-background: #383830;
+    border-color:               #A6E22E;
 }
