@@ -1,8 +1,8 @@
 * {
-    selected-normal-foreground:  rgba ( 248, 248, 242, 100 % );
-    foreground:                  rgba ( 248, 248, 242, 100 % );
+    selected-normal-foreground:  rgba ( 39, 40, 34, 100 % );
+    foreground:                  rgba ( 255, 255, 255, 100 % );
     normal-foreground:           @foreground;
-    alternate-normal-background: rgba ( 39, 40, 34, 0 % );
+    alternate-normal-background: rgba ( 56, 56, 48, 100 % );
     red:                         rgba ( 220, 50, 47, 100 % );
     selected-urgent-foreground:  rgba ( 248, 248, 242, 100 % );
     blue:                        rgba ( 38, 139, 210, 100 % );
@@ -10,7 +10,7 @@
     alternate-urgent-background: rgba ( 39, 40, 34, 0 % );
     active-foreground:           rgba ( 166, 226, 42, 100 % );
     lightbg:                     rgba ( 238, 232, 213, 100 % );
-    selected-active-foreground:  rgba ( 248, 248, 242, 100 % );
+    selected-active-foreground:  rgba ( 39, 40, 34, 100 % );
     alternate-active-background: rgba ( 39, 40, 34, 0 % );
     background:                  rgba ( 39, 40, 34, 93 % );
     bordercolor:                 rgba ( 0, 43, 54, 100 % );
@@ -111,21 +111,21 @@
 }
 #inputbar {
     spacing:          0;
-    text-color:       @normal-foreground;
-    padding:          1px ;
-    background-color: @lightbg;
+    text-color:       rgba ( 39, 40, 34, 100 % );
+    padding:          3px ;
+    background-color: rgba ( 253, 151, 31, 100 % );
 }
 #case-indicator {
     spacing:    0;
-    text-color: @normal-foreground;
+    text-color: rgba ( 39, 40, 34, 100 % );
 }
 #entry {
     spacing:    0;
-    text-color: @normal-foreground;
+    text-color: rgba ( 39, 40, 34, 100 % );
 }
 #prompt {
     spacing:    0;
-    text-color: @active-foreground;
+    text-color: rgba ( 39, 40, 34, 100 % );
 }
 #inputbar {
     children:   [ prompt,textbox-prompt-colon,entry,case-indicator ];
@@ -134,5 +134,5 @@
     expand:     false;
     str:        ":";
     margin:     0px 0.3em 0em 0em ;
-    text-color: @normal-foreground;
+    text-color: rgba ( 39, 40, 34, 100 % );
 }
