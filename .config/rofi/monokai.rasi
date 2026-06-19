@@ -1,44 +1,74 @@
 * {
-    background:     #272822;
-    background-alt: #383830;
-    foreground:     #F8F8F2;
-    foreground-alt: #75715E;
-    accent:         #A6E22E;
-    urgent:         #F92672;
+    background:                  #272822;
+    foreground:                  #F8F8F2;
+    lightfg:                     #A6E22E;
+    lightbg:                     #383830;
+    red:                         #F92672;
+    blue:                        #66D9EF;
+    separatorcolor:              #75715E;
+
+    normal-background:           var(background);
+    normal-foreground:           var(foreground);
+    alternate-normal-background: var(lightbg);
+    alternate-normal-foreground: var(foreground);
+    selected-normal-background:  var(lightfg);
+    selected-normal-foreground:  var(background);
+
+    urgent-background:           var(red);
+    urgent-foreground:           var(background);
+    alternate-urgent-background: var(lightbg);
+    alternate-urgent-foreground: var(red);
+    selected-urgent-background:  var(red);
+    selected-urgent-foreground:  var(background);
+
+    active-background:           var(blue);
+    active-foreground:           var(background);
+    alternate-active-background: var(lightbg);
+    alternate-active-foreground: var(blue);
+    selected-active-background:  var(blue);
+    selected-active-foreground:  var(background);
+
+    background-color:            transparent;
+    border-color:                var(lightfg);
 }
 
 window {
-    background-color: @background;
-    border-color:     @accent;
+    background-color: var(background);
+    border-color:     var(lightfg);
+}
+
+mainbox {
+    background-color: var(background);
+}
+
+inputbar {
+    background-color: var(lightbg);
+    text-color:       var(foreground);
 }
 
 prompt {
-    text-color: @accent;
+    text-color: var(lightfg);
 }
 
 entry {
-    text-color:   @foreground;
-    cursor-color: @accent;
+    text-color:   var(foreground);
+    cursor-color: var(lightfg);
+}
+
+element-text {
+    background-color: transparent;
+    text-color:       inherit;
+}
+
+element-icon {
+    background-color: transparent;
 }
 
 listview {
-    background-color: @background;
-}
-
-element {
-    background-color: transparent;
-    text-color:       @foreground;
-}
-
-element selected.normal {
-    background-color: @accent;
-    text-color:       @background;
-}
-
-element urgent.normal {
-    text-color: @urgent;
+    background-color: var(background);
 }
 
 message {
-    text-color: @foreground-alt;
+    background-color: var(background);
+    text-color:       var(separatorcolor);
 }
