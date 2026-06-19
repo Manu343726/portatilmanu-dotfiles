@@ -409,6 +409,19 @@ set -g mouse on
 # display a message after toggling mouse support
 bind m run "cut -c3- '#{TMUX_CONF}' | sh -s _toggle_mouse" \; display 'mouse #{?#{mouse},on,off}'
 
+# clipboard integration
+set -g set-clipboard external
+
+# yank in copy mode → system clipboard (Ctrl+V)
+bind -T copy-mode-vi y send -X copy-pipe-and-cancel "xclip -in -selection clipboard"
+bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel "xclip -in -selection clipboard"
+
+# mouse drag in copy mode → primary selection (middle-click)
+bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe "xclip -in -selection primary"
+
+# paste from system clipboard: prefix + Ctrl+P
+bind C-p run "xclip -o -selection clipboard | tmux load-buffer - && tmux paste-buffer"
+
 # move status line to top
 #set -g status-position top
 
