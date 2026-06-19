@@ -1,0 +1,68 @@
+#!/usr/bin/env zsh
+#
+# app-launcher
+# ------------
+# Unified launcher: desktop apps + Chrome most-visited pages.
+# Uses rofi with the monokai theme.
+# Replaces dmenu_recency in the i3 keybinding ($mod+d).
+#
+# Each item in the menu maps to an action type:
+#   app:<desktop-file>  — launched via gtk-launch
+#   url:<url>           — opened in Google Chrome
+
+typeset -a items actions
+
+# ---- Desktop apps ----
+# Scan both system and user .desktop files.
+# Uses the filename stem for gtk-launch, displays the app's Name=.
+for dir in /usr/share/applications ~/.local/share/applications; do
+  [[ -d "$dir" ]] || continue
+  for f in "$dir"/*.desktop; do
+    [[ -f "$f" ]] || continue
+    name=$(sed -n 's/^Name=//p' "$f" | head -1)
+    no_display=$(sed -n 's/^NoDisplay=//p' "$f" | head -1)
+    [[ "$no_display" == "true" ]] && continue
+    [[ -z "$name" ]] && continue
+    desktop=$(basename "$f")
+    items+=("$name")
+    actions+=("app:$desktop")
+  done
+done
+
+# ---- Chrome most-visited pages ----
+# Chrome keeps a SQLite history database, but it's locked while Chrome runs.
+# We copy it to /tmp to query safely.
+hist=/tmp/chrome-history
+if cp ~/.config/google-chrome/Default/History "$hist" 2>/dev/null; then
+  while IFS='|' read -r url title count; do
+    [[ -z "$url" ]] && continue
+    [[ -z "$title" ]] && title="$url"
+    items+=("$title  (${url#https://})")
+    actions+=("url:$url")
+  done < <(sqlite3 "$hist" "SELECT url, title, visit_count FROM urls ORDER BY visit_count DESC LIMIT 25;")
+fi
+
+# ---- Rofi menu ----
+# -format i gives us the 0-based index of the selected row.
+# We use that index to look up the action in the actions array.
+theme=/home/manu343726/.config/rofi/monokai.rasi
+selection=$(printf '%s\n' "${items[@]}" | rofi -dmenu -format i -p "Launch" -l 15 -theme "$theme")
+
+# Exit if nothing was selected (Esc / click outside)
+[[ -z "$selection" ]] && exit 0
+
+# zsh arrays are 1-indexed; add 1 to the rofi index
+selected_action="${actions[$((selection + 1))]}"
+[[ -z "$selected_action" ]] && exit 1
+
+# ---- Dispatch ----
+case "$selected_action" in
+  app:*)
+    desktop="${selected_action#app:}"
+    gtk-launch "$desktop"
+    ;;
+  url:*)
+    url="${selected_action#url:}"
+    google-chrome-stable "$url"
+    ;;
+esac
