@@ -11,13 +11,35 @@ import (
 	"time"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+	"github.com/spf13/cobra"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func main() {
-	setupLogging()
+	var rpcPort string
 
-	rpcPort := getEnv("DOTFILESD_PORT", "9105")
+	cmd := &cobra.Command{
+		Use:   "dotfilesd",
+		Short: "dotfiles runtime daemon (Connect RPC)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if rpcPort == "" {
+				rpcPort = getEnv("DOTFILESD_PORT", "9105")
+			}
+			return runDaemon(rpcPort)
+		},
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+
+	cmd.Flags().StringVarP(&rpcPort, "port", "p", "", "RPC port (default DOTFILESD_PORT env or 9105)")
+
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func runDaemon(port string) error {
+	setupLogging()
 
 	svc := &dotfilesServer{startedAt: time.Now()}
 
@@ -25,7 +47,7 @@ func main() {
 	path, handler := dotfilesdv1connect.NewDotfilesServiceHandler(svc)
 	mux.Handle(path, handler)
 
-	rpcAddr := fmt.Sprintf("127.0.0.1:%s", rpcPort)
+	rpcAddr := fmt.Sprintf("127.0.0.1:%s", port)
 	rpcServer := &http.Server{
 		Addr:    rpcAddr,
 		Handler: withLogging(mux),
@@ -45,6 +67,7 @@ func main() {
 	slog.Info("shutting down")
 	rpcServer.Close()
 	slog.Info("done")
+	return nil
 }
 
 func setupLogging() {
