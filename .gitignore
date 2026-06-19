@@ -4,6 +4,9 @@
 
 # dotfiles
 !/README.md
+!/.docs/
+/.docs/*
+!/.docs/*.md
 !/.zshrc
 !/.bashrc
 !/.profile
