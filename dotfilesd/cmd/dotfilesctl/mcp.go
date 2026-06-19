@@ -101,6 +101,18 @@ var mcpTools = []toolDef{
 			"target": {Type: "string", Enum: []string{"tmux", "i3", "kitty", "all"}},
 		}},
 	},
+	{
+		Name:        "config_reconfigure",
+		Description: "Change daemon runtime configuration (e.g. log level)",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"log_level": {Type: "string", Description: "new log level", Enum: []string{"trace", "debug", "info", "warn", "error"}},
+		}, Required: []string{"log_level"}},
+	},
+	{
+		Name:        "config_restart",
+		Description: "Gracefully restart the dotfilesd daemon",
+		InputSchema: toolSchema{Type: "object"},
+	},
 }
 
 func runMCP() {
@@ -338,6 +350,31 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 			lines = append(lines, fmt.Sprintf("%s: %s (%s)", r.Target, s, r.Message))
 		}
 		return mcpToolResult(id, linesJoin(lines, "\n"))
+
+	case "config_reconfigure":
+		var p struct{ LogLevel string `json:"log_level"` }
+		json.Unmarshal(args, &p)
+		if p.LogLevel == "" {
+			return mcpErr(id, -32602, "log_level is required")
+		}
+		resp, err := cfgClient.Reconfigure(context.Background(), connect.NewRequest(&dotfilesdv1.ReconfigureRequest{LogLevel: p.LogLevel}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		if !resp.Msg.Success {
+			return mcpResp(id, map[string]any{
+				"content": []map[string]any{{"type": "text", "text": resp.Msg.Message}},
+				"isError": true,
+			})
+		}
+		return mcpToolResult(id, resp.Msg.Message)
+
+	case "config_restart":
+		resp, err := cfgClient.Restart(context.Background(), connect.NewRequest(&dotfilesdv1.RestartRequest{}))
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		return mcpToolResult(id, resp.Msg.Message)
 
 	default:
 		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))

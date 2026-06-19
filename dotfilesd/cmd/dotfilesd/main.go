@@ -22,6 +22,8 @@ var buildHash string
 
 const levelTrace = slog.Level(-8)
 
+var logLevelVar slog.LevelVar
+
 func main() {
 	var (
 		rpcPort   string
@@ -142,6 +144,23 @@ func firstNonZeroInt(vals ...int) int {
 	return 0
 }
 
+func parseLogLevel(level string) (slog.Level, bool) {
+	switch strings.ToLower(level) {
+	case "trace":
+		return levelTrace, true
+	case "debug":
+		return slog.LevelDebug, true
+	case "info":
+		return slog.LevelInfo, true
+	case "warn", "warning":
+		return slog.LevelWarn, true
+	case "error":
+		return slog.LevelError, true
+	default:
+		return slog.LevelInfo, false
+	}
+}
+
 func setupLogging(logDir, level string, maxMB, backups, age int) {
 	os.MkdirAll(logDir, 0755)
 
@@ -153,23 +172,15 @@ func setupLogging(logDir, level string, maxMB, backups, age int) {
 		Compress:   true,
 	}
 
-	var slogLevel slog.Level
-	switch strings.ToLower(level) {
-	case "trace":
-		slogLevel = levelTrace
-	case "debug":
-		slogLevel = slog.LevelDebug
-	case "warn", "warning":
-		slogLevel = slog.LevelWarn
-	case "error":
-		slogLevel = slog.LevelError
-	default:
-		slogLevel = slog.LevelInfo
+	lvl, ok := parseLogLevel(level)
+	if !ok {
+		lvl = slog.LevelInfo
 	}
+	logLevelVar.Set(lvl)
 
 	multi := io.MultiWriter(os.Stdout, fileWriter)
 	handler := slog.NewTextHandler(multi, &slog.HandlerOptions{
-		Level: slogLevel,
+		Level: &logLevelVar,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.LevelKey {
 				level := a.Value.Any().(slog.Level)
@@ -181,6 +192,30 @@ func setupLogging(logDir, level string, maxMB, backups, age int) {
 		},
 	})
 	slog.SetDefault(slog.New(handler))
+}
+
+func gracefulRestart(delay time.Duration) {
+	slog.Warn("daemon restart requested, starting new instance", "delay_ms", delay.Milliseconds())
+	time.Sleep(delay)
+
+	binary, err := os.Executable()
+	if err != nil {
+		slog.Error("restart: cannot find binary", "error", err)
+		os.Exit(1)
+	}
+
+	cmd := exec.Command(binary, os.Args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Start(); err != nil {
+		slog.Error("restart: failed to start new instance", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("new instance started, exiting old instance")
+	os.Exit(1)
 }
 
 func checkBuildHash(noVerify bool, name string) {

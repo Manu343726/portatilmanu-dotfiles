@@ -358,6 +358,40 @@ func (s *configServer) Reload(ctx context.Context, req *connect.Request[dotfiles
 	return connect.NewResponse(resp), nil
 }
 
+func (s *configServer) Reconfigure(ctx context.Context, req *connect.Request[dotfilesdv1.ReconfigureRequest]) (*connect.Response[dotfilesdv1.ReconfigureResponse], error) {
+	r := req.Msg
+	slog.Log(ctx, levelTrace, "Config.Reconfigure", "log_level", r.LogLevel)
+
+	newLevel, ok := parseLogLevel(r.LogLevel)
+	if !ok {
+		msg := fmt.Sprintf("invalid log level: %q (valid: trace, debug, info, warn, error)", r.LogLevel)
+		slog.Warn("Reconfigure: invalid log level", "log_level", r.LogLevel)
+		return connect.NewResponse(&dotfilesdv1.ReconfigureResponse{
+			Success: false,
+			Message: msg,
+		}), nil
+	}
+
+	logLevelVar.Set(newLevel)
+	msg := fmt.Sprintf("log level changed to %s", r.LogLevel)
+	slog.Warn("Reconfigure applied", "log_level", r.LogLevel)
+
+	return connect.NewResponse(&dotfilesdv1.ReconfigureResponse{
+		Success: true,
+		Message: msg,
+	}), nil
+}
+
+func (s *configServer) Restart(ctx context.Context, req *connect.Request[dotfilesdv1.RestartRequest]) (*connect.Response[dotfilesdv1.RestartResponse], error) {
+	slog.Warn("Restart requested")
+
+	go gracefulRestart(500 * time.Millisecond)
+
+	return connect.NewResponse(&dotfilesdv1.RestartResponse{
+		Message: "daemon restarting in 500ms, reconnect after ~3s",
+	}), nil
+}
+
 // --- Shared helpers --------------------------------------------------------
 
 func hasSudo() bool {

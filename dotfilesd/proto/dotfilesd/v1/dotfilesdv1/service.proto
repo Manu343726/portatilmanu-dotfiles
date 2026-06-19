@@ -26,9 +26,11 @@ service ExecService {
   rpc SudoExec(SudoExecRequest) returns (SudoExecResponse);
 }
 
-// ConfigService - dotfiles configuration reload.
+// ConfigService - dotfiles configuration reload, daemon reconfiguration, and restart.
 service ConfigService {
   rpc Reload(ReloadRequest) returns (ReloadResponse);
+  rpc Reconfigure(ReconfigureRequest) returns (ReconfigureResponse);
+  rpc Restart(RestartRequest) returns (RestartResponse);
 }
 
 message PingRequest {}
@@ -131,4 +133,21 @@ message SudoResult {
   string stdout = 2;
   string stderr = 3;
   bool auth_cancelled = 4;
+}
+
+// --- Reconfigure / Restart ---------------------------------------------------
+
+message ReconfigureRequest {
+  string log_level = 1; // "trace", "debug", "info", "warn", "error"
+}
+
+message ReconfigureResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RestartRequest {}
+
+message RestartResponse {
+  string message = 1;
 }

@@ -417,7 +417,7 @@ func sudoExec(ctx context.Context, command string) error {
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "dotfiles configuration reload",
+		Short: "dotfiles configuration reload, daemon reconfiguration, restart",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -442,6 +442,44 @@ func newConfigCmd() *cobra.Command {
 				}
 				fmt.Printf("%-6s %s: %s\n", status, r.Target, r.Message)
 			}
+			return nil
+		},
+	})
+	var reconfigureCmd = &cobra.Command{
+		Use:   "reconfigure --log-level <level>",
+		Short: "change daemon runtime configuration",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logLevel, _ := cmd.Flags().GetString("log-level")
+			if logLevel == "" {
+				return fmt.Errorf("--log-level is required (trace, debug, info, warn, error)")
+			}
+			resp, err := cfgClient.Reconfigure(context.Background(), connect.NewRequest(&dotfilesdv1.ReconfigureRequest{
+				LogLevel: logLevel,
+			}))
+			if err != nil {
+				return fmt.Errorf("reconfigure failed: %w", err)
+			}
+			fmt.Println(resp.Msg.Message)
+			if !resp.Msg.Success {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	reconfigureCmd.Flags().String("log-level", "", "new log level (trace, debug, info, warn, error)")
+	cmd.AddCommand(reconfigureCmd)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "restart",
+		Short: "gracefully restart the daemon",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resp, err := cfgClient.Restart(context.Background(), connect.NewRequest(&dotfilesdv1.RestartRequest{}))
+			if err != nil {
+				return fmt.Errorf("restart failed: %w", err)
+			}
+			fmt.Println(resp.Msg.Message)
 			return nil
 		},
 	})

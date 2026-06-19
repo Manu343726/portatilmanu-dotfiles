@@ -1075,6 +1075,182 @@ func (x *SudoResult) GetAuthCancelled() bool {
 	return false
 }
 
+type ReconfigureRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LogLevel      string                 `protobuf:"bytes,1,opt,name=log_level,json=logLevel,proto3" json:"log_level,omitempty"` // "trace", "debug", "info", "warn", "error"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReconfigureRequest) Reset() {
+	*x = ReconfigureRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReconfigureRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReconfigureRequest) ProtoMessage() {}
+
+func (x *ReconfigureRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReconfigureRequest.ProtoReflect.Descriptor instead.
+func (*ReconfigureRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ReconfigureRequest) GetLogLevel() string {
+	if x != nil {
+		return x.LogLevel
+	}
+	return ""
+}
+
+type ReconfigureResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReconfigureResponse) Reset() {
+	*x = ReconfigureResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReconfigureResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReconfigureResponse) ProtoMessage() {}
+
+func (x *ReconfigureResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReconfigureResponse.ProtoReflect.Descriptor instead.
+func (*ReconfigureResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReconfigureResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ReconfigureResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type RestartRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestartRequest) Reset() {
+	*x = RestartRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestartRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestartRequest) ProtoMessage() {}
+
+func (x *RestartRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestartRequest.ProtoReflect.Descriptor instead.
+func (*RestartRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{20}
+}
+
+type RestartResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestartResponse) Reset() {
+	*x = RestartResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestartResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestartResponse) ProtoMessage() {}
+
+func (x *RestartResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestartResponse.ProtoReflect.Descriptor instead.
+func (*RestartResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RestartResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 type ReloadResponse_ReloadResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Target        string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
@@ -1086,7 +1262,7 @@ type ReloadResponse_ReloadResult struct {
 
 func (x *ReloadResponse_ReloadResult) Reset() {
 	*x = ReloadResponse_ReloadResult{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[18]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1098,7 +1274,7 @@ func (x *ReloadResponse_ReloadResult) String() string {
 func (*ReloadResponse_ReloadResult) ProtoMessage() {}
 
 func (x *ReloadResponse_ReloadResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[18]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1217,7 +1393,15 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12%\n" +
-	"\x0eauth_cancelled\x18\x04 \x01(\bR\rauthCancelled2\xf3\x01\n" +
+	"\x0eauth_cancelled\x18\x04 \x01(\bR\rauthCancelled\"1\n" +
+	"\x12ReconfigureRequest\x12\x1b\n" +
+	"\tlog_level\x18\x01 \x01(\tR\blogLevel\"I\n" +
+	"\x13ReconfigureResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x10\n" +
+	"\x0eRestartRequest\"+\n" +
+	"\x0fRestartResponse\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2\xf3\x01\n" +
 	"\rSystemService\x12=\n" +
 	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
 	"\n" +
@@ -1228,9 +1412,11 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\x03Git\x12\x18.dotfilesd.v1.GitRequest\x1a\x19.dotfilesd.v1.GitResponse2\x97\x01\n" +
 	"\vExecService\x12=\n" +
 	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse\x12I\n" +
-	"\bSudoExec\x12\x1d.dotfilesd.v1.SudoExecRequest\x1a\x1e.dotfilesd.v1.SudoExecResponse2T\n" +
+	"\bSudoExec\x12\x1d.dotfilesd.v1.SudoExecRequest\x1a\x1e.dotfilesd.v1.SudoExecResponse2\xf0\x01\n" +
 	"\rConfigService\x12C\n" +
-	"\x06Reload\x12\x1b.dotfilesd.v1.ReloadRequest\x1a\x1c.dotfilesd.v1.ReloadResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\x06Reload\x12\x1b.dotfilesd.v1.ReloadRequest\x1a\x1c.dotfilesd.v1.ReloadResponse\x12R\n" +
+	"\vReconfigure\x12 .dotfilesd.v1.ReconfigureRequest\x1a!.dotfilesd.v1.ReconfigureResponse\x12F\n" +
+	"\aRestart\x12\x1c.dotfilesd.v1.RestartRequest\x1a\x1d.dotfilesd.v1.RestartResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescOnce sync.Once
@@ -1244,7 +1430,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes = []any{
 	(*PingRequest)(nil),                 // 0: dotfilesd.v1.PingRequest
 	(*PingResponse)(nil),                // 1: dotfilesd.v1.PingResponse
@@ -1264,10 +1450,14 @@ var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes = []any{
 	(*SudoExecResponse)(nil),            // 15: dotfilesd.v1.SudoExecResponse
 	(*AuthChallenge)(nil),               // 16: dotfilesd.v1.AuthChallenge
 	(*SudoResult)(nil),                  // 17: dotfilesd.v1.SudoResult
-	(*ReloadResponse_ReloadResult)(nil), // 18: dotfilesd.v1.ReloadResponse.ReloadResult
+	(*ReconfigureRequest)(nil),          // 18: dotfilesd.v1.ReconfigureRequest
+	(*ReconfigureResponse)(nil),         // 19: dotfilesd.v1.ReconfigureResponse
+	(*RestartRequest)(nil),              // 20: dotfilesd.v1.RestartRequest
+	(*RestartResponse)(nil),             // 21: dotfilesd.v1.RestartResponse
+	(*ReloadResponse_ReloadResult)(nil), // 22: dotfilesd.v1.ReloadResponse.ReloadResult
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_depIdxs = []int32{
-	18, // 0: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
+	22, // 0: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
 	17, // 1: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
 	16, // 2: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
 	0,  // 3: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
@@ -1278,16 +1468,20 @@ var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_depIdxs = []int32{
 	4,  // 8: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
 	14, // 9: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
 	6,  // 10: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
-	1,  // 11: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
-	11, // 12: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
-	13, // 13: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
-	3,  // 14: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
-	9,  // 15: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
-	5,  // 16: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
-	15, // 17: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
-	7,  // 18: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
-	11, // [11:19] is the sub-list for method output_type
-	3,  // [3:11] is the sub-list for method input_type
+	18, // 11: dotfilesd.v1.ConfigService.Reconfigure:input_type -> dotfilesd.v1.ReconfigureRequest
+	20, // 12: dotfilesd.v1.ConfigService.Restart:input_type -> dotfilesd.v1.RestartRequest
+	1,  // 13: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
+	11, // 14: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	13, // 15: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	3,  // 16: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
+	9,  // 17: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
+	5,  // 18: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
+	15, // 19: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
+	7,  // 20: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
+	19, // 21: dotfilesd.v1.ConfigService.Reconfigure:output_type -> dotfilesd.v1.ReconfigureResponse
+	21, // 22: dotfilesd.v1.ConfigService.Restart:output_type -> dotfilesd.v1.RestartResponse
+	13, // [13:23] is the sub-list for method output_type
+	3,  // [3:13] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -1308,7 +1502,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   4,
 		},
