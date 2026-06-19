@@ -65,6 +65,7 @@ Monokai-themed dotfiles for a Manjaro i3 setup on a ThinkPad.
 ~/.i3/config                    i3 window manager
 ~/.config/i3status/config       i3status bar
 ~/.tmux.conf                    Oh My Tmux! base
+~/.tmux.conf.local              → ~/.config/tmux/tmux.conf.local
 ~/.config/tmux/tmux.conf.local  Monokai tmux theme
 ~/.config/kitty/kitty.conf      Kitty terminal
 ~/.zshrc                        Zsh + Oh My Zsh

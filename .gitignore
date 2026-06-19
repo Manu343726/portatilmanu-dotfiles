@@ -9,6 +9,7 @@
 !/.profile
 !/.xprofile
 !/.tmux.conf
+!/.tmux.conf.local
 !/.dircolors
 !/.local/
 /.local/*
