@@ -1,33 +1,15 @@
 * {
-    bg:       #272822;
-    bg-alt:   #383830;
-    fg:       #F8F8F2;
-    fg-alt:   #75715E;
-    accent:   #A6E22E;
-    urgent:   #F92672;
+    background:     #272822;
+    background-alt: #383830;
+    foreground:     #F8F8F2;
+    foreground-alt: #75715E;
+    accent:         #A6E22E;
+    urgent:         #F92672;
 }
 
 window {
-    background-color: @bg;
-    border:           2px;
+    background-color: @background;
     border-color:     @accent;
-    border-radius:    0;
-    padding:          4px;
-    width:            400;
-}
-
-mainbox {
-    children: [inputbar, listview];
-    spacing:  8px;
-    padding:  8px;
-}
-
-inputbar {
-    background-color: @bg-alt;
-    text-color:       @fg;
-    padding:          8px;
-    spacing:          8px;
-    children:         [entry, prompt];
 }
 
 prompt {
@@ -35,33 +17,28 @@ prompt {
 }
 
 entry {
-    text-color: @fg;
+    text-color:   @foreground;
+    cursor-color: @accent;
 }
 
 listview {
-    spacing:      4px;
-    padding:      0;
-    lines:        3;
-    columns:      1;
-    fixed-height: false;
+    background-color: @background;
 }
 
 element {
     background-color: transparent;
-    text-color:       @fg;
-    padding:          8px;
+    text-color:       @foreground;
 }
 
-element selected {
+element selected.normal {
     background-color: @accent;
-    text-color:       @bg;
+    text-color:       @background;
 }
 
-element urgent {
+element urgent.normal {
     text-color: @urgent;
 }
 
 message {
-    text-color: @fg-alt;
-    padding:    8px;
+    text-color: @foreground-alt;
 }
