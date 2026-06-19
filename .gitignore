@@ -4,10 +4,12 @@
 
 # dotfiles
 !/README.md
-/.nvm/
+!/AGENTS.md
 !/.docs/
 /.docs/*
 !/.docs/*.md
+!/.agents/
+/.nvm/
 !/.zshrc
 !/.bashrc
 !/.profile
