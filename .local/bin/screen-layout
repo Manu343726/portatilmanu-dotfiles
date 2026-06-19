@@ -1,0 +1,37 @@
+#!/usr/bin/env zsh
+int="eDP"
+ext=$(xrandr | awk '/ connected / && !/^eDP/ {print $1}' | head -1)
+
+if [[ -z "$ext" ]]; then
+  notify-send "Screen Layout" "No external display detected"
+  exit 1
+fi
+
+layouts=(
+  "Laptop only"
+  "External only"
+  "Both (extended)"
+  "Both (mirror)"
+)
+
+choice=$(printf '%s\n' "${layouts[@]}" | rofi -dmenu -p "Screen Layout" -mesg "Internal: $int | External: $ext" -l 4 -theme /home/manu343726/.config/rofi/monokai.rasi)
+[[ -z "$choice" ]] && exit 0
+
+case "$choice" in
+  "Laptop only")
+    xrandr --output "$int" --auto --primary --output "$ext" --off
+    notify-send "Screen Layout" "Laptop only"
+    ;;
+  "External only")
+    xrandr --output "$ext" --auto --primary --output "$int" --off
+    notify-send "Screen Layout" "External only"
+    ;;
+  "Both (extended)")
+    xrandr --output "$int" --auto --primary --output "$ext" --auto --right-of "$int"
+    notify-send "Screen Layout" "Both extended"
+    ;;
+  "Both (mirror)")
+    xrandr --output "$int" --auto --primary --output "$ext" --auto --same-as "$int"
+    notify-send "Screen Layout" "Both mirrored"
+    ;;
+esac
