@@ -53,6 +53,8 @@ const (
 	DotfilesServiceGitProcedure = "/dotfilesd.v1.DotfilesService/Git"
 	// ExecServiceExecProcedure is the fully-qualified name of the ExecService's Exec RPC.
 	ExecServiceExecProcedure = "/dotfilesd.v1.ExecService/Exec"
+	// ExecServiceSudoExecProcedure is the fully-qualified name of the ExecService's SudoExec RPC.
+	ExecServiceSudoExecProcedure = "/dotfilesd.v1.ExecService/SudoExec"
 	// ConfigServiceReloadProcedure is the fully-qualified name of the ConfigService's Reload RPC.
 	ConfigServiceReloadProcedure = "/dotfilesd.v1.ConfigService/Reload"
 )
@@ -277,7 +279,11 @@ func (UnimplementedDotfilesServiceHandler) Git(context.Context, *connect.Request
 
 // ExecServiceClient is a client for the dotfilesd.v1.ExecService service.
 type ExecServiceClient interface {
+	// Simple unary exec (no sudo).
 	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
+	// Challenge-response sudo. The first call omits password; if the daemon
+	// needs auth it returns AuthChallenge. The client retries with the password.
+	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
 }
 
 // NewExecServiceClient constructs a client for the dotfilesd.v1.ExecService service. By default, it
@@ -297,12 +303,19 @@ func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(execServiceMethods.ByName("Exec")),
 			connect.WithClientOptions(opts...),
 		),
+		sudoExec: connect.NewClient[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse](
+			httpClient,
+			baseURL+ExecServiceSudoExecProcedure,
+			connect.WithSchema(execServiceMethods.ByName("SudoExec")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // execServiceClient implements ExecServiceClient.
 type execServiceClient struct {
-	exec *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
+	exec     *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
+	sudoExec *connect.Client[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse]
 }
 
 // Exec calls dotfilesd.v1.ExecService.Exec.
@@ -310,9 +323,18 @@ func (c *execServiceClient) Exec(ctx context.Context, req *connect.Request[dotfi
 	return c.exec.CallUnary(ctx, req)
 }
 
+// SudoExec calls dotfilesd.v1.ExecService.SudoExec.
+func (c *execServiceClient) SudoExec(ctx context.Context, req *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
+	return c.sudoExec.CallUnary(ctx, req)
+}
+
 // ExecServiceHandler is an implementation of the dotfilesd.v1.ExecService service.
 type ExecServiceHandler interface {
+	// Simple unary exec (no sudo).
 	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
+	// Challenge-response sudo. The first call omits password; if the daemon
+	// needs auth it returns AuthChallenge. The client retries with the password.
+	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
 }
 
 // NewExecServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -328,10 +350,18 @@ func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(execServiceMethods.ByName("Exec")),
 		connect.WithHandlerOptions(opts...),
 	)
+	execServiceSudoExecHandler := connect.NewUnaryHandler(
+		ExecServiceSudoExecProcedure,
+		svc.SudoExec,
+		connect.WithSchema(execServiceMethods.ByName("SudoExec")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dotfilesd.v1.ExecService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExecServiceExecProcedure:
 			execServiceExecHandler.ServeHTTP(w, r)
+		case ExecServiceSudoExecProcedure:
+			execServiceSudoExecHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -343,6 +373,10 @@ type UnimplementedExecServiceHandler struct{}
 
 func (UnimplementedExecServiceHandler) Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.Exec is not implemented"))
+}
+
+func (UnimplementedExecServiceHandler) SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.SudoExec is not implemented"))
 }
 
 // ConfigServiceClient is a client for the dotfilesd.v1.ConfigService service.

@@ -86,11 +86,11 @@ func main() {
 		mux.Handle(p, h)
 	}
 
-			rpcAddr := fmt.Sprintf("127.0.0.1:%s", rpcPort)
-			rpcServer := &http.Server{
-				Addr:    rpcAddr,
-				Handler: withLogging(mux),
-			}
+	rpcAddr := fmt.Sprintf("127.0.0.1:%s", rpcPort)
+	rpcServer := &http.Server{
+		Addr:    rpcAddr,
+		Handler: withLogging(mux),
+	}
 
 			go func() {
 				slog.Info("serving connect rpc", "addr", rpcAddr)

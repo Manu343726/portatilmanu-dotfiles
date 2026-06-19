@@ -19,7 +19,11 @@ service DotfilesService {
 
 // ExecService - command execution.
 service ExecService {
+  // Simple unary exec (no sudo).
   rpc Exec(ExecRequest) returns (ExecResponse);
+  // Challenge-response sudo. The first call omits password; if the daemon
+  // needs auth it returns AuthChallenge. The client retries with the password.
+  rpc SudoExec(SudoExecRequest) returns (SudoExecResponse);
 }
 
 // ConfigService - dotfiles configuration reload.
@@ -35,7 +39,6 @@ message PingResponse {
 }
 
 message StatusRequest {}
-
 message StatusResponse {
   bool git_clean = 1;
   string git_branch = 2;
@@ -83,7 +86,6 @@ message GitResponse {
 }
 
 message SystemInfoRequest {}
-
 message SystemInfoResponse {
   string os = 1;
   string kernel = 2;
@@ -98,9 +100,35 @@ message SystemInfoResponse {
 }
 
 message SudoMethodsRequest {}
-
 message SudoMethodsResponse {
   repeated string available_methods = 1;
   string current_method = 2;
   bool has_elevation = 3;
+}
+
+// --- SudoExec protocol (challenge-response over unary RPC) -----------------
+
+message SudoExecRequest {
+  string command = 1;
+  string password = 2;          // empty on first call, filled on retry
+  string preferred_method = 3;  // "terminal", "graphical", "nopass"
+}
+
+message SudoExecResponse {
+  oneof outcome {
+    SudoResult result = 1;
+    AuthChallenge auth_challenge = 2;
+  }
+}
+
+message AuthChallenge {
+  repeated string methods = 1;
+  string prompt = 2;
+}
+
+message SudoResult {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  bool auth_cancelled = 4;
 }

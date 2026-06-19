@@ -813,6 +813,268 @@ func (x *SudoMethodsResponse) GetHasElevation() bool {
 	return false
 }
 
+type SudoExecRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Command         string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	Password        string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`                                      // empty on first call, filled on retry
+	PreferredMethod string                 `protobuf:"bytes,3,opt,name=preferred_method,json=preferredMethod,proto3" json:"preferred_method,omitempty"` // "terminal", "graphical", "nopass"
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SudoExecRequest) Reset() {
+	*x = SudoExecRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SudoExecRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SudoExecRequest) ProtoMessage() {}
+
+func (x *SudoExecRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SudoExecRequest.ProtoReflect.Descriptor instead.
+func (*SudoExecRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SudoExecRequest) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *SudoExecRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *SudoExecRequest) GetPreferredMethod() string {
+	if x != nil {
+		return x.PreferredMethod
+	}
+	return ""
+}
+
+type SudoExecResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Outcome:
+	//
+	//	*SudoExecResponse_Result
+	//	*SudoExecResponse_AuthChallenge
+	Outcome       isSudoExecResponse_Outcome `protobuf_oneof:"outcome"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SudoExecResponse) Reset() {
+	*x = SudoExecResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SudoExecResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SudoExecResponse) ProtoMessage() {}
+
+func (x *SudoExecResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SudoExecResponse.ProtoReflect.Descriptor instead.
+func (*SudoExecResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SudoExecResponse) GetOutcome() isSudoExecResponse_Outcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return nil
+}
+
+func (x *SudoExecResponse) GetResult() *SudoResult {
+	if x != nil {
+		if x, ok := x.Outcome.(*SudoExecResponse_Result); ok {
+			return x.Result
+		}
+	}
+	return nil
+}
+
+func (x *SudoExecResponse) GetAuthChallenge() *AuthChallenge {
+	if x != nil {
+		if x, ok := x.Outcome.(*SudoExecResponse_AuthChallenge); ok {
+			return x.AuthChallenge
+		}
+	}
+	return nil
+}
+
+type isSudoExecResponse_Outcome interface {
+	isSudoExecResponse_Outcome()
+}
+
+type SudoExecResponse_Result struct {
+	Result *SudoResult `protobuf:"bytes,1,opt,name=result,proto3,oneof"`
+}
+
+type SudoExecResponse_AuthChallenge struct {
+	AuthChallenge *AuthChallenge `protobuf:"bytes,2,opt,name=auth_challenge,json=authChallenge,proto3,oneof"`
+}
+
+func (*SudoExecResponse_Result) isSudoExecResponse_Outcome() {}
+
+func (*SudoExecResponse_AuthChallenge) isSudoExecResponse_Outcome() {}
+
+type AuthChallenge struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methods       []string               `protobuf:"bytes,1,rep,name=methods,proto3" json:"methods,omitempty"`
+	Prompt        string                 `protobuf:"bytes,2,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthChallenge) Reset() {
+	*x = AuthChallenge{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthChallenge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthChallenge) ProtoMessage() {}
+
+func (x *AuthChallenge) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthChallenge.ProtoReflect.Descriptor instead.
+func (*AuthChallenge) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AuthChallenge) GetMethods() []string {
+	if x != nil {
+		return x.Methods
+	}
+	return nil
+}
+
+func (x *AuthChallenge) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+type SudoResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode      int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Stdout        string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr        string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	AuthCancelled bool                   `protobuf:"varint,4,opt,name=auth_cancelled,json=authCancelled,proto3" json:"auth_cancelled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SudoResult) Reset() {
+	*x = SudoResult{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SudoResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SudoResult) ProtoMessage() {}
+
+func (x *SudoResult) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SudoResult.ProtoReflect.Descriptor instead.
+func (*SudoResult) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SudoResult) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *SudoResult) GetStdout() string {
+	if x != nil {
+		return x.Stdout
+	}
+	return ""
+}
+
+func (x *SudoResult) GetStderr() string {
+	if x != nil {
+		return x.Stderr
+	}
+	return ""
+}
+
+func (x *SudoResult) GetAuthCancelled() bool {
+	if x != nil {
+		return x.AuthCancelled
+	}
+	return false
+}
+
 type ReloadResponse_ReloadResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Target        string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
@@ -824,7 +1086,7 @@ type ReloadResponse_ReloadResult struct {
 
 func (x *ReloadResponse_ReloadResult) Reset() {
 	*x = ReloadResponse_ReloadResult{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[14]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -836,7 +1098,7 @@ func (x *ReloadResponse_ReloadResult) String() string {
 func (*ReloadResponse_ReloadResult) ProtoMessage() {}
 
 func (x *ReloadResponse_ReloadResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[14]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -938,7 +1200,24 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
-	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xf3\x01\n" +
+	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation\"r\n" +
+	"\x0fSudoExecRequest\x12\x18\n" +
+	"\acommand\x18\x01 \x01(\tR\acommand\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12)\n" +
+	"\x10preferred_method\x18\x03 \x01(\tR\x0fpreferredMethod\"\x97\x01\n" +
+	"\x10SudoExecResponse\x122\n" +
+	"\x06result\x18\x01 \x01(\v2\x18.dotfilesd.v1.SudoResultH\x00R\x06result\x12D\n" +
+	"\x0eauth_challenge\x18\x02 \x01(\v2\x1b.dotfilesd.v1.AuthChallengeH\x00R\rauthChallengeB\t\n" +
+	"\aoutcome\"A\n" +
+	"\rAuthChallenge\x12\x18\n" +
+	"\amethods\x18\x01 \x03(\tR\amethods\x12\x16\n" +
+	"\x06prompt\x18\x02 \x01(\tR\x06prompt\"\x80\x01\n" +
+	"\n" +
+	"SudoResult\x12\x1b\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
+	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12%\n" +
+	"\x0eauth_cancelled\x18\x04 \x01(\bR\rauthCancelled2\xf3\x01\n" +
 	"\rSystemService\x12=\n" +
 	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
 	"\n" +
@@ -946,9 +1225,10 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponse2\x92\x01\n" +
 	"\x0fDotfilesService\x12C\n" +
 	"\x06Status\x12\x1b.dotfilesd.v1.StatusRequest\x1a\x1c.dotfilesd.v1.StatusResponse\x12:\n" +
-	"\x03Git\x12\x18.dotfilesd.v1.GitRequest\x1a\x19.dotfilesd.v1.GitResponse2L\n" +
+	"\x03Git\x12\x18.dotfilesd.v1.GitRequest\x1a\x19.dotfilesd.v1.GitResponse2\x97\x01\n" +
 	"\vExecService\x12=\n" +
-	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse2T\n" +
+	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse\x12I\n" +
+	"\bSudoExec\x12\x1d.dotfilesd.v1.SudoExecRequest\x1a\x1e.dotfilesd.v1.SudoExecResponse2T\n" +
 	"\rConfigService\x12C\n" +
 	"\x06Reload\x12\x1b.dotfilesd.v1.ReloadRequest\x1a\x1c.dotfilesd.v1.ReloadResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
@@ -964,7 +1244,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes = []any{
 	(*PingRequest)(nil),                 // 0: dotfilesd.v1.PingRequest
 	(*PingResponse)(nil),                // 1: dotfilesd.v1.PingResponse
@@ -980,29 +1260,37 @@ var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes = []any{
 	(*SystemInfoResponse)(nil),          // 11: dotfilesd.v1.SystemInfoResponse
 	(*SudoMethodsRequest)(nil),          // 12: dotfilesd.v1.SudoMethodsRequest
 	(*SudoMethodsResponse)(nil),         // 13: dotfilesd.v1.SudoMethodsResponse
-	(*ReloadResponse_ReloadResult)(nil), // 14: dotfilesd.v1.ReloadResponse.ReloadResult
+	(*SudoExecRequest)(nil),             // 14: dotfilesd.v1.SudoExecRequest
+	(*SudoExecResponse)(nil),            // 15: dotfilesd.v1.SudoExecResponse
+	(*AuthChallenge)(nil),               // 16: dotfilesd.v1.AuthChallenge
+	(*SudoResult)(nil),                  // 17: dotfilesd.v1.SudoResult
+	(*ReloadResponse_ReloadResult)(nil), // 18: dotfilesd.v1.ReloadResponse.ReloadResult
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_depIdxs = []int32{
-	14, // 0: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
-	0,  // 1: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
-	10, // 2: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
-	12, // 3: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
-	2,  // 4: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
-	8,  // 5: dotfilesd.v1.DotfilesService.Git:input_type -> dotfilesd.v1.GitRequest
-	4,  // 6: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
-	6,  // 7: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
-	1,  // 8: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
-	11, // 9: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
-	13, // 10: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
-	3,  // 11: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
-	9,  // 12: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
-	5,  // 13: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
-	7,  // 14: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
-	8,  // [8:15] is the sub-list for method output_type
-	1,  // [1:8] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	18, // 0: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
+	17, // 1: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
+	16, // 2: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
+	0,  // 3: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
+	10, // 4: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
+	12, // 5: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
+	2,  // 6: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
+	8,  // 7: dotfilesd.v1.DotfilesService.Git:input_type -> dotfilesd.v1.GitRequest
+	4,  // 8: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
+	14, // 9: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
+	6,  // 10: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
+	1,  // 11: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
+	11, // 12: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	13, // 13: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	3,  // 14: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
+	9,  // 15: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
+	5,  // 16: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
+	15, // 17: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
+	7,  // 18: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
+	11, // [11:19] is the sub-list for method output_type
+	3,  // [3:11] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_service_proto_init() }
@@ -1010,13 +1298,17 @@ func file_proto_dotfilesd_v1_dotfilesdv1_service_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_service_proto != nil {
 		return
 	}
+	file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes[15].OneofWrappers = []any{
+		(*SudoExecResponse_Result)(nil),
+		(*SudoExecResponse_AuthChallenge)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

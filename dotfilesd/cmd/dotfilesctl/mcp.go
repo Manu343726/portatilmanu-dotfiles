@@ -271,18 +271,51 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 			Sudo    string `json:"sudo"`
 		}
 		json.Unmarshal(args, &p)
-		resp, err := execClient.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command, Sudo: p.Sudo == "true"}))
+
+		if p.Sudo != "true" {
+			resp, err := execClient.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command}))
+			if err != nil {
+				return mcpErr(id, -32603, err.Error())
+			}
+			text := resp.Msg.Stdout
+			if resp.Msg.Stderr != "" {
+				text += "\nstderr:\n" + resp.Msg.Stderr
+			}
+			return mcpResp(id, map[string]any{
+				"content": []map[string]any{{"type": "text", "text": text}},
+				"isError": resp.Msg.ExitCode != 0,
+			})
+		}
+
+		// Sudo via unary SudoExec — use graphical (pkexec) for MCP.
+		resp, err := execClient.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
+			Command: p.Command, PreferredMethod: "graphical",
+		}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
-		text := resp.Msg.Stdout
-		if resp.Msg.Stderr != "" {
-			text += "\nstderr:\n" + resp.Msg.Stderr
+		result := resp.Msg.GetResult()
+		if result == nil {
+			// Auth challenge was returned — MCP can't interact, return error.
+			challenge := resp.Msg.GetAuthChallenge()
+			if challenge != nil {
+				return mcpErr(id, -32000, "auth required: cannot prompt in MCP context, use terminal")
+			}
+			return mcpErr(id, -32603, "unexpected response from daemon")
 		}
-		isErr := resp.Msg.ExitCode != 0
+		if result.AuthCancelled {
+			return mcpResp(id, map[string]any{
+				"content": []map[string]any{{"type": "text", "text": result.Stderr}},
+				"isError": true,
+			})
+		}
+		text := result.Stdout
+		if result.Stderr != "" {
+			text += "\nstderr:\n" + result.Stderr
+		}
 		return mcpResp(id, map[string]any{
 			"content": []map[string]any{{"type": "text", "text": text}},
-			"isError": isErr,
+			"isError": result.ExitCode != 0,
 		})
 
 	// config

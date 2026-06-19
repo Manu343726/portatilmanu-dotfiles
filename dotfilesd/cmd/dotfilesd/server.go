@@ -150,9 +150,11 @@ func (s *dotfilesServer) Git(ctx context.Context, req *connect.Request[dotfilesd
 type execServer struct{}
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
-	cmdStr := req.Msg.Command
-	sudo := req.Msg.Sudo
+	return s.ExecRaw(ctx, req.Msg.Command, req.Msg.Sudo)
+}
 
+func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*connect.Response[dotfilesdv1.ExecResponse], error) {
+	cmdStr := command
 	if sudo {
 		cmdStr = fmt.Sprintf("pkexec sh -c '%s'", strings.ReplaceAll(cmdStr, "'", "'\\''"))
 	}
@@ -163,6 +165,88 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 		Stdout:   stdout,
 		Stderr:   stderr,
 	}), nil
+}
+
+func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
+	r := req.Msg
+	command := r.Command
+	password := r.Password
+	method := r.PreferredMethod
+	if method == "" {
+		method = "terminal"
+	}
+
+	_, pkexecErr := exec.LookPath("pkexec")
+	_, sudoErr := exec.LookPath("sudo")
+	hasPkexec := pkexecErr == nil
+	hasSudo := sudoErr == nil
+
+	if password != "" {
+		if !hasSudo {
+			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "sudo not available"},
+			}}), nil
+		}
+		var stdout, stderr strings.Builder
+		cmd := exec.Command("sudo", "-S", "sh", "-c", command)
+		cmd.Stdin = strings.NewReader(password + "\n")
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		exitCode := 0
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = -1
+			}
+		}
+		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+			Result: &dotfilesdv1.SudoResult{ExitCode: int32(exitCode), Stdout: stdout.String(), Stderr: stderr.String()},
+		}}), nil
+	}
+
+	switch method {
+	case "nopass":
+		if !hasSudo {
+			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "sudo not available"},
+			}}), nil
+		}
+		stdout, stderr, code := runCmdFull("sudo", "-n", "sh", "-c", command)
+		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
+		}}), nil
+
+	case "graphical":
+		if !hasPkexec {
+			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "pkexec not available"},
+			}}), nil
+		}
+		cmdStr := fmt.Sprintf("pkexec sh -c '%s'", strings.ReplaceAll(command, "'", "'\\''"))
+		stdout, stderr, code := runCmdFull("sh", "-c", cmdStr)
+		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
+		}}), nil
+	}
+
+	var methods []string
+	if hasSudo {
+		methods = append(methods, "terminal")
+	}
+	if hasPkexec {
+		methods = append(methods, "graphical")
+	}
+	user := os.Getenv("USER")
+	if user == "" {
+		user = "unknown"
+	}
+	prompt := fmt.Sprintf("[sudo] password for %s: ", user)
+
+	return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_AuthChallenge{
+		AuthChallenge: &dotfilesdv1.AuthChallenge{Methods: methods, Prompt: prompt},
+	}}), nil
 }
 
 // --- ConfigService ---------------------------------------------------------
