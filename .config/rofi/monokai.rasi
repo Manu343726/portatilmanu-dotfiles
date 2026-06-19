@@ -61,7 +61,7 @@
 }
 #element.normal.normal {
     background-color: @normal-background;
-    text-color:       @normal-foreground;
+    text-color:       @urgent-foreground;
 }
 #element.normal.urgent {
     background-color: @urgent-background;
@@ -85,7 +85,7 @@
 }
 #element.alternate.normal {
     background-color: @alternate-normal-background;
-    text-color:       @alternate-normal-foreground;
+    text-color:       @urgent-foreground;
 }
 #element.alternate.urgent {
     background-color: @alternate-urgent-background;
