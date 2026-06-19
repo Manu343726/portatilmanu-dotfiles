@@ -2,7 +2,7 @@
 port: 9105
 log:
   dir: /home/manu343726/dotfilesd/logs
-  level: info
+  level: info  # trace | debug | info | warn | error
   max_size_mb: 10
   max_backups: 5
   max_age_days: 30

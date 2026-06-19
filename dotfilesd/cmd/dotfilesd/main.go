@@ -1,9 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
-	"log/slog"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,6 +20,8 @@ import (
 )
 
 var buildHash string
+
+const levelTrace = slog.Level(-8)
 
 func main() {
 	var (
@@ -43,57 +46,20 @@ func main() {
 			viper.AutomaticEnv()
 			viper.SetEnvPrefix("DOTFILESD")
 
-			viper.BindPFlag("port", cmd.Flags().Lookup("port"))
-			viper.BindPFlag("no_verify", cmd.Flags().Lookup("no-verify"))
-			viper.BindPFlag("log.dir", cmd.Flags().Lookup("log-dir"))
-			viper.BindPFlag("log.level", cmd.Flags().Lookup("log-level"))
-			viper.BindPFlag("log.max_size_mb", cmd.Flags().Lookup("log-max-size"))
-			viper.BindPFlag("log.max_backups", cmd.Flags().Lookup("log-max-backups"))
-			viper.BindPFlag("log.max_age_days", cmd.Flags().Lookup("log-max-age"))
-
 			if err := viper.ReadInConfig(); err != nil {
 				if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 					fmt.Fprintf(os.Stderr, "config error: %v\n", err)
 				}
 			}
 
-			if rpcPort == "" {
-				rpcPort = viper.GetString("port")
-				if rpcPort == "" {
-					rpcPort = "9105"
-				}
-			}
-			if logDir == "" {
-				logDir = viper.GetString("log.dir")
-				logDir = strings.Replace(logDir, "~", os.Getenv("HOME"), 1)
-				if logDir == "" {
-					logDir = os.Getenv("HOME") + "/dotfilesd/logs"
-				}
-			}
-			if logLevel == "" {
-				logLevel = viper.GetString("log.level")
-				if logLevel == "" {
-					logLevel = "info"
-				}
-			}
-			if logMaxMB == 0 {
-				logMaxMB = viper.GetInt("log.max_size_mb")
-				if logMaxMB == 0 {
-					logMaxMB = 10
-				}
-			}
-			if logBackup == 0 {
-				logBackup = viper.GetInt("log.max_backups")
-				if logBackup == 0 {
-					logBackup = 5
-				}
-			}
-			if logAge == 0 {
-				logAge = viper.GetInt("log.max_age_days")
-				if logAge == 0 {
-					logAge = 30
-				}
-			}
+			rpcPort = firstNonEmpty(rpcPort, viper.GetString("port"), os.Getenv("DOTFILESD_PORT"), "9105")
+			logDir = firstNonEmpty(logDir, viper.GetString("log.dir"), os.Getenv("DOTFILESD_LOG_DIR"), os.Getenv("HOME")+"/dotfilesd/logs")
+			logDir = strings.Replace(logDir, "~", os.Getenv("HOME"), 1)
+
+			logLevel = firstNonEmpty(logLevel, viper.GetString("log.level"), os.Getenv("DOTFILESD_LOG_LEVEL"), "info")
+			logMaxMB = firstNonZeroInt(logMaxMB, viper.GetInt("log.max_size_mb"), 10)
+			logBackup = firstNonZeroInt(logBackup, viper.GetInt("log.max_backups"), 5)
+			logAge = firstNonZeroInt(logAge, viper.GetInt("log.max_age_days"), 30)
 
 			setupLogging(logDir, logLevel, logMaxMB, logBackup, logAge)
 
@@ -132,7 +98,7 @@ func main() {
 	cmd.Flags().StringVarP(&rpcPort, "port", "p", "", "RPC port (env DOTFILESD_PORT, config: port)")
 	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "skip source version check")
 	cmd.Flags().StringVar(&logDir, "log-dir", "", "log directory (config: log.dir)")
-	cmd.Flags().StringVar(&logLevel, "log-level", "", "log level: debug|info|warn|error (config: log.level)")
+	cmd.Flags().StringVar(&logLevel, "log-level", "", "log level: trace|debug|info|warn|error (config: log.level)")
 	cmd.Flags().IntVar(&logMaxMB, "log-max-size", 0, "max MB per log file (config: log.max_size_mb)")
 	cmd.Flags().IntVar(&logBackup, "log-max-backups", 0, "max rotated files (config: log.max_backups)")
 	cmd.Flags().IntVar(&logAge, "log-max-age", 0, "max days to keep logs (config: log.max_age_days)")
@@ -140,6 +106,24 @@ func main() {
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func firstNonZeroInt(vals ...int) int {
+	for _, v := range vals {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
 }
 
 func setupLogging(logDir, level string, maxMB, backups, age int) {
@@ -155,6 +139,8 @@ func setupLogging(logDir, level string, maxMB, backups, age int) {
 
 	var slogLevel slog.Level
 	switch strings.ToLower(level) {
+	case "trace":
+		slogLevel = levelTrace
 	case "debug":
 		slogLevel = slog.LevelDebug
 	case "warn", "warning":
@@ -166,7 +152,18 @@ func setupLogging(logDir, level string, maxMB, backups, age int) {
 	}
 
 	multi := io.MultiWriter(os.Stdout, fileWriter)
-	handler := slog.NewJSONHandler(multi, &slog.HandlerOptions{Level: slogLevel})
+	handler := slog.NewJSONHandler(multi, &slog.HandlerOptions{
+		Level: slogLevel,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.LevelKey {
+				level := a.Value.Any().(slog.Level)
+				if level == levelTrace {
+					a.Value = slog.StringValue("TRACE")
+				}
+			}
+			return a
+		},
+	})
 	slog.SetDefault(slog.New(handler))
 }
 
@@ -186,21 +183,45 @@ func checkBuildHash(noVerify bool, name string) {
 	}
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	body       bytes.Buffer
+}
+
+func (w *loggingResponseWriter) WriteHeader(code int) {
+	w.statusCode = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *loggingResponseWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
 }
 
 func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		slog.Info("http request",
+
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		r.Body = io.NopCloser(bytes.NewReader(body))
+
+		lw := &loggingResponseWriter{ResponseWriter: w, statusCode: 200}
+		next.ServeHTTP(lw, r)
+
+		attrs := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
+			"status", lw.statusCode,
 			"duration", time.Since(start),
-		)
+			"request_body", string(body),
+			"response_body", lw.body.String(),
+		}
+		for k, v := range r.Header {
+			attrs = append(attrs, "header_"+k, strings.Join(v, ", "))
+		}
+
+		slog.Log(r.Context(), levelTrace, "http request", attrs...)
 	})
 }
