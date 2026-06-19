@@ -264,7 +264,11 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 			Paths   string `json:"paths"`
 		}
 		json.Unmarshal(args, &p)
-		resp, err := dotClient.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{Action: p.Action, Message: p.Message, Paths: p.Paths}))
+		action := parseGitAction(p.Action)
+		if action == dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED {
+			return mcpErr(id, -32602, fmt.Sprintf("unknown action: %s", p.Action))
+		}
+		resp, err := dotClient.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{Action: action, Message: p.Message, Paths: p.Paths}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -301,14 +305,13 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 
 		// Sudo via unary SudoExec — use graphical (pkexec) for MCP.
 		resp, err := execClient.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
-			Command: p.Command, PreferredMethod: "graphical",
+			Command: p.Command, PreferredMethod: dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL,
 		}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
 		result := resp.Msg.GetResult()
 		if result == nil {
-			// Auth challenge was returned — MCP can't interact, return error.
 			challenge := resp.Msg.GetAuthChallenge()
 			if challenge != nil {
 				return mcpErr(id, -32000, "auth required: cannot prompt in MCP context, use terminal")
@@ -334,10 +337,14 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 	case "config_reload":
 		var p struct{ Target string `json:"target"` }
 		json.Unmarshal(args, &p)
-		if p.Target == "" {
-			p.Target = "all"
+		target := dotfilesdv1.ReloadTarget_RELOAD_TARGET_ALL
+		if p.Target != "" {
+			target = parseReloadTarget(p.Target)
+			if target == dotfilesdv1.ReloadTarget_RELOAD_TARGET_UNSPECIFIED {
+				return mcpErr(id, -32602, fmt.Sprintf("unknown target: %s", p.Target))
+			}
 		}
-		resp, err := cfgClient.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: p.Target}))
+		resp, err := cfgClient.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -357,7 +364,11 @@ func callTool(id json.RawMessage, name string, args json.RawMessage) *mcpRespons
 		if p.LogLevel == "" {
 			return mcpErr(id, -32602, "log_level is required")
 		}
-		resp, err := cfgClient.Reconfigure(context.Background(), connect.NewRequest(&dotfilesdv1.ReconfigureRequest{LogLevel: p.LogLevel}))
+		logLevel := parseLogLevel(p.LogLevel)
+		if logLevel == dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED {
+			return mcpErr(id, -32602, fmt.Sprintf("invalid log level: %s", p.LogLevel))
+		}
+		resp, err := cfgClient.Reconfigure(context.Background(), connect.NewRequest(&dotfilesdv1.ReconfigureRequest{LogLevel: logLevel}))
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}

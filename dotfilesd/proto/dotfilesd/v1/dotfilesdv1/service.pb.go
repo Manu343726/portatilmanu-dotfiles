@@ -21,6 +21,232 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type LogLevel int32
+
+const (
+	LogLevel_LOG_LEVEL_UNSPECIFIED LogLevel = 0
+	LogLevel_LOG_LEVEL_TRACE       LogLevel = 1
+	LogLevel_LOG_LEVEL_DEBUG       LogLevel = 2
+	LogLevel_LOG_LEVEL_INFO        LogLevel = 3
+	LogLevel_LOG_LEVEL_WARN        LogLevel = 4
+	LogLevel_LOG_LEVEL_ERROR       LogLevel = 5
+)
+
+// Enum value maps for LogLevel.
+var (
+	LogLevel_name = map[int32]string{
+		0: "LOG_LEVEL_UNSPECIFIED",
+		1: "LOG_LEVEL_TRACE",
+		2: "LOG_LEVEL_DEBUG",
+		3: "LOG_LEVEL_INFO",
+		4: "LOG_LEVEL_WARN",
+		5: "LOG_LEVEL_ERROR",
+	}
+	LogLevel_value = map[string]int32{
+		"LOG_LEVEL_UNSPECIFIED": 0,
+		"LOG_LEVEL_TRACE":       1,
+		"LOG_LEVEL_DEBUG":       2,
+		"LOG_LEVEL_INFO":        3,
+		"LOG_LEVEL_WARN":        4,
+		"LOG_LEVEL_ERROR":       5,
+	}
+)
+
+func (x LogLevel) Enum() *LogLevel {
+	p := new(LogLevel)
+	*p = x
+	return p
+}
+
+func (x LogLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LogLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[0].Descriptor()
+}
+
+func (LogLevel) Type() protoreflect.EnumType {
+	return &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[0]
+}
+
+func (x LogLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LogLevel.Descriptor instead.
+func (LogLevel) EnumDescriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{0}
+}
+
+type GitAction int32
+
+const (
+	GitAction_GIT_ACTION_UNSPECIFIED GitAction = 0
+	GitAction_GIT_ACTION_STATUS      GitAction = 1
+	GitAction_GIT_ACTION_DIFF        GitAction = 2
+	GitAction_GIT_ACTION_ADD         GitAction = 3
+	GitAction_GIT_ACTION_COMMIT      GitAction = 4
+	GitAction_GIT_ACTION_PUSH        GitAction = 5
+	GitAction_GIT_ACTION_LOG         GitAction = 6
+)
+
+// Enum value maps for GitAction.
+var (
+	GitAction_name = map[int32]string{
+		0: "GIT_ACTION_UNSPECIFIED",
+		1: "GIT_ACTION_STATUS",
+		2: "GIT_ACTION_DIFF",
+		3: "GIT_ACTION_ADD",
+		4: "GIT_ACTION_COMMIT",
+		5: "GIT_ACTION_PUSH",
+		6: "GIT_ACTION_LOG",
+	}
+	GitAction_value = map[string]int32{
+		"GIT_ACTION_UNSPECIFIED": 0,
+		"GIT_ACTION_STATUS":      1,
+		"GIT_ACTION_DIFF":        2,
+		"GIT_ACTION_ADD":         3,
+		"GIT_ACTION_COMMIT":      4,
+		"GIT_ACTION_PUSH":        5,
+		"GIT_ACTION_LOG":         6,
+	}
+)
+
+func (x GitAction) Enum() *GitAction {
+	p := new(GitAction)
+	*p = x
+	return p
+}
+
+func (x GitAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GitAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[1].Descriptor()
+}
+
+func (GitAction) Type() protoreflect.EnumType {
+	return &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[1]
+}
+
+func (x GitAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GitAction.Descriptor instead.
+func (GitAction) EnumDescriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{1}
+}
+
+type SudoMethod int32
+
+const (
+	SudoMethod_SUDO_METHOD_UNSPECIFIED SudoMethod = 0
+	SudoMethod_SUDO_METHOD_TERMINAL    SudoMethod = 1
+	SudoMethod_SUDO_METHOD_GRAPHICAL   SudoMethod = 2
+	SudoMethod_SUDO_METHOD_NOPASS      SudoMethod = 3
+)
+
+// Enum value maps for SudoMethod.
+var (
+	SudoMethod_name = map[int32]string{
+		0: "SUDO_METHOD_UNSPECIFIED",
+		1: "SUDO_METHOD_TERMINAL",
+		2: "SUDO_METHOD_GRAPHICAL",
+		3: "SUDO_METHOD_NOPASS",
+	}
+	SudoMethod_value = map[string]int32{
+		"SUDO_METHOD_UNSPECIFIED": 0,
+		"SUDO_METHOD_TERMINAL":    1,
+		"SUDO_METHOD_GRAPHICAL":   2,
+		"SUDO_METHOD_NOPASS":      3,
+	}
+)
+
+func (x SudoMethod) Enum() *SudoMethod {
+	p := new(SudoMethod)
+	*p = x
+	return p
+}
+
+func (x SudoMethod) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SudoMethod) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[2].Descriptor()
+}
+
+func (SudoMethod) Type() protoreflect.EnumType {
+	return &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[2]
+}
+
+func (x SudoMethod) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SudoMethod.Descriptor instead.
+func (SudoMethod) EnumDescriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{2}
+}
+
+type ReloadTarget int32
+
+const (
+	ReloadTarget_RELOAD_TARGET_UNSPECIFIED ReloadTarget = 0
+	ReloadTarget_RELOAD_TARGET_TMUX        ReloadTarget = 1
+	ReloadTarget_RELOAD_TARGET_I3          ReloadTarget = 2
+	ReloadTarget_RELOAD_TARGET_KITTY       ReloadTarget = 3
+	ReloadTarget_RELOAD_TARGET_ALL         ReloadTarget = 4
+)
+
+// Enum value maps for ReloadTarget.
+var (
+	ReloadTarget_name = map[int32]string{
+		0: "RELOAD_TARGET_UNSPECIFIED",
+		1: "RELOAD_TARGET_TMUX",
+		2: "RELOAD_TARGET_I3",
+		3: "RELOAD_TARGET_KITTY",
+		4: "RELOAD_TARGET_ALL",
+	}
+	ReloadTarget_value = map[string]int32{
+		"RELOAD_TARGET_UNSPECIFIED": 0,
+		"RELOAD_TARGET_TMUX":        1,
+		"RELOAD_TARGET_I3":          2,
+		"RELOAD_TARGET_KITTY":       3,
+		"RELOAD_TARGET_ALL":         4,
+	}
+)
+
+func (x ReloadTarget) Enum() *ReloadTarget {
+	p := new(ReloadTarget)
+	*p = x
+	return p
+}
+
+func (x ReloadTarget) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReloadTarget) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[3].Descriptor()
+}
+
+func (ReloadTarget) Type() protoreflect.EnumType {
+	return &file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes[3]
+}
+
+func (x ReloadTarget) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReloadTarget.Descriptor instead.
+func (ReloadTarget) EnumDescriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{3}
+}
+
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -359,7 +585,7 @@ func (x *ExecResponse) GetStderr() string {
 
 type ReloadRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Target        string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"` // "tmux", "i3", "kitty", "all"
+	Target        ReloadTarget           `protobuf:"varint,1,opt,name=target,proto3,enum=dotfilesd.v1.ReloadTarget" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -394,11 +620,11 @@ func (*ReloadRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ReloadRequest) GetTarget() string {
+func (x *ReloadRequest) GetTarget() ReloadTarget {
 	if x != nil {
 		return x.Target
 	}
-	return ""
+	return ReloadTarget_RELOAD_TARGET_UNSPECIFIED
 }
 
 type ReloadResponse struct {
@@ -447,9 +673,9 @@ func (x *ReloadResponse) GetResults() []*ReloadResponse_ReloadResult {
 
 type GitRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Action        string                 `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`   // "status", "diff", "add", "commit", "push", "log"
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"` // commit message (required for "commit")
-	Paths         string                 `protobuf:"bytes,3,opt,name=paths,proto3" json:"paths,omitempty"`     // space-separated (default: all tracked)
+	Action        GitAction              `protobuf:"varint,1,opt,name=action,proto3,enum=dotfilesd.v1.GitAction" json:"action,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Paths         string                 `protobuf:"bytes,3,opt,name=paths,proto3" json:"paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -484,11 +710,11 @@ func (*GitRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *GitRequest) GetAction() string {
+func (x *GitRequest) GetAction() GitAction {
 	if x != nil {
 		return x.Action
 	}
-	return ""
+	return GitAction_GIT_ACTION_UNSPECIFIED
 }
 
 func (x *GitRequest) GetMessage() string {
@@ -816,8 +1042,8 @@ func (x *SudoMethodsResponse) GetHasElevation() bool {
 type SudoExecRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Command         string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
-	Password        string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`                                      // empty on first call, filled on retry
-	PreferredMethod string                 `protobuf:"bytes,3,opt,name=preferred_method,json=preferredMethod,proto3" json:"preferred_method,omitempty"` // "terminal", "graphical", "nopass"
+	Password        string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	PreferredMethod SudoMethod             `protobuf:"varint,3,opt,name=preferred_method,json=preferredMethod,proto3,enum=dotfilesd.v1.SudoMethod" json:"preferred_method,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -866,11 +1092,11 @@ func (x *SudoExecRequest) GetPassword() string {
 	return ""
 }
 
-func (x *SudoExecRequest) GetPreferredMethod() string {
+func (x *SudoExecRequest) GetPreferredMethod() SudoMethod {
 	if x != nil {
 		return x.PreferredMethod
 	}
-	return ""
+	return SudoMethod_SUDO_METHOD_UNSPECIFIED
 }
 
 type SudoExecResponse struct {
@@ -1077,7 +1303,7 @@ func (x *SudoResult) GetAuthCancelled() bool {
 
 type ReconfigureRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LogLevel      string                 `protobuf:"bytes,1,opt,name=log_level,json=logLevel,proto3" json:"log_level,omitempty"` // "trace", "debug", "info", "warn", "error"
+	LogLevel      LogLevel               `protobuf:"varint,1,opt,name=log_level,json=logLevel,proto3,enum=dotfilesd.v1.LogLevel" json:"log_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1112,11 +1338,11 @@ func (*ReconfigureRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *ReconfigureRequest) GetLogLevel() string {
+func (x *ReconfigureRequest) GetLogLevel() LogLevel {
 	if x != nil {
 		return x.LogLevel
 	}
-	return ""
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
 }
 
 type ReconfigureResponse struct {
@@ -1340,18 +1566,18 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\fExecResponse\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"'\n" +
-	"\rReloadRequest\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\"\xb1\x01\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"C\n" +
+	"\rReloadRequest\x122\n" +
+	"\x06target\x18\x01 \x01(\x0e2\x1a.dotfilesd.v1.ReloadTargetR\x06target\"\xb1\x01\n" +
 	"\x0eReloadResponse\x12C\n" +
 	"\aresults\x18\x01 \x03(\v2).dotfilesd.v1.ReloadResponse.ReloadResultR\aresults\x1aZ\n" +
 	"\fReloadResult\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"T\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"m\n" +
 	"\n" +
-	"GitRequest\x12\x16\n" +
-	"\x06action\x18\x01 \x01(\tR\x06action\x12\x18\n" +
+	"GitRequest\x12/\n" +
+	"\x06action\x18\x01 \x01(\x0e2\x17.dotfilesd.v1.GitActionR\x06action\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
 	"\x05paths\x18\x03 \x01(\tR\x05paths\"Z\n" +
 	"\vGitResponse\x12\x1b\n" +
@@ -1376,11 +1602,11 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
-	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation\"r\n" +
+	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation\"\x8c\x01\n" +
 	"\x0fSudoExecRequest\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\x12)\n" +
-	"\x10preferred_method\x18\x03 \x01(\tR\x0fpreferredMethod\"\x97\x01\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12C\n" +
+	"\x10preferred_method\x18\x03 \x01(\x0e2\x18.dotfilesd.v1.SudoMethodR\x0fpreferredMethod\"\x97\x01\n" +
 	"\x10SudoExecResponse\x122\n" +
 	"\x06result\x18\x01 \x01(\v2\x18.dotfilesd.v1.SudoResultH\x00R\x06result\x12D\n" +
 	"\x0eauth_challenge\x18\x02 \x01(\v2\x1b.dotfilesd.v1.AuthChallengeH\x00R\rauthChallengeB\t\n" +
@@ -1393,15 +1619,42 @@ const file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc = "" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12%\n" +
-	"\x0eauth_cancelled\x18\x04 \x01(\bR\rauthCancelled\"1\n" +
-	"\x12ReconfigureRequest\x12\x1b\n" +
-	"\tlog_level\x18\x01 \x01(\tR\blogLevel\"I\n" +
+	"\x0eauth_cancelled\x18\x04 \x01(\bR\rauthCancelled\"I\n" +
+	"\x12ReconfigureRequest\x123\n" +
+	"\tlog_level\x18\x01 \x01(\x0e2\x16.dotfilesd.v1.LogLevelR\blogLevel\"I\n" +
 	"\x13ReconfigureResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x10\n" +
 	"\x0eRestartRequest\"+\n" +
 	"\x0fRestartResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2\xf3\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage*\x8c\x01\n" +
+	"\bLogLevel\x12\x19\n" +
+	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fLOG_LEVEL_TRACE\x10\x01\x12\x13\n" +
+	"\x0fLOG_LEVEL_DEBUG\x10\x02\x12\x12\n" +
+	"\x0eLOG_LEVEL_INFO\x10\x03\x12\x12\n" +
+	"\x0eLOG_LEVEL_WARN\x10\x04\x12\x13\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x05*\xa7\x01\n" +
+	"\tGitAction\x12\x1a\n" +
+	"\x16GIT_ACTION_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11GIT_ACTION_STATUS\x10\x01\x12\x13\n" +
+	"\x0fGIT_ACTION_DIFF\x10\x02\x12\x12\n" +
+	"\x0eGIT_ACTION_ADD\x10\x03\x12\x15\n" +
+	"\x11GIT_ACTION_COMMIT\x10\x04\x12\x13\n" +
+	"\x0fGIT_ACTION_PUSH\x10\x05\x12\x12\n" +
+	"\x0eGIT_ACTION_LOG\x10\x06*v\n" +
+	"\n" +
+	"SudoMethod\x12\x1b\n" +
+	"\x17SUDO_METHOD_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14SUDO_METHOD_TERMINAL\x10\x01\x12\x19\n" +
+	"\x15SUDO_METHOD_GRAPHICAL\x10\x02\x12\x16\n" +
+	"\x12SUDO_METHOD_NOPASS\x10\x03*\x8b\x01\n" +
+	"\fReloadTarget\x12\x1d\n" +
+	"\x19RELOAD_TARGET_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12RELOAD_TARGET_TMUX\x10\x01\x12\x14\n" +
+	"\x10RELOAD_TARGET_I3\x10\x02\x12\x17\n" +
+	"\x13RELOAD_TARGET_KITTY\x10\x03\x12\x15\n" +
+	"\x11RELOAD_TARGET_ALL\x10\x042\xf3\x01\n" +
 	"\rSystemService\x12=\n" +
 	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
 	"\n" +
@@ -1430,61 +1683,70 @@ func file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDescData
 }
 
+var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes = []any{
-	(*PingRequest)(nil),                 // 0: dotfilesd.v1.PingRequest
-	(*PingResponse)(nil),                // 1: dotfilesd.v1.PingResponse
-	(*StatusRequest)(nil),               // 2: dotfilesd.v1.StatusRequest
-	(*StatusResponse)(nil),              // 3: dotfilesd.v1.StatusResponse
-	(*ExecRequest)(nil),                 // 4: dotfilesd.v1.ExecRequest
-	(*ExecResponse)(nil),                // 5: dotfilesd.v1.ExecResponse
-	(*ReloadRequest)(nil),               // 6: dotfilesd.v1.ReloadRequest
-	(*ReloadResponse)(nil),              // 7: dotfilesd.v1.ReloadResponse
-	(*GitRequest)(nil),                  // 8: dotfilesd.v1.GitRequest
-	(*GitResponse)(nil),                 // 9: dotfilesd.v1.GitResponse
-	(*SystemInfoRequest)(nil),           // 10: dotfilesd.v1.SystemInfoRequest
-	(*SystemInfoResponse)(nil),          // 11: dotfilesd.v1.SystemInfoResponse
-	(*SudoMethodsRequest)(nil),          // 12: dotfilesd.v1.SudoMethodsRequest
-	(*SudoMethodsResponse)(nil),         // 13: dotfilesd.v1.SudoMethodsResponse
-	(*SudoExecRequest)(nil),             // 14: dotfilesd.v1.SudoExecRequest
-	(*SudoExecResponse)(nil),            // 15: dotfilesd.v1.SudoExecResponse
-	(*AuthChallenge)(nil),               // 16: dotfilesd.v1.AuthChallenge
-	(*SudoResult)(nil),                  // 17: dotfilesd.v1.SudoResult
-	(*ReconfigureRequest)(nil),          // 18: dotfilesd.v1.ReconfigureRequest
-	(*ReconfigureResponse)(nil),         // 19: dotfilesd.v1.ReconfigureResponse
-	(*RestartRequest)(nil),              // 20: dotfilesd.v1.RestartRequest
-	(*RestartResponse)(nil),             // 21: dotfilesd.v1.RestartResponse
-	(*ReloadResponse_ReloadResult)(nil), // 22: dotfilesd.v1.ReloadResponse.ReloadResult
+	(LogLevel)(0),                       // 0: dotfilesd.v1.LogLevel
+	(GitAction)(0),                      // 1: dotfilesd.v1.GitAction
+	(SudoMethod)(0),                     // 2: dotfilesd.v1.SudoMethod
+	(ReloadTarget)(0),                   // 3: dotfilesd.v1.ReloadTarget
+	(*PingRequest)(nil),                 // 4: dotfilesd.v1.PingRequest
+	(*PingResponse)(nil),                // 5: dotfilesd.v1.PingResponse
+	(*StatusRequest)(nil),               // 6: dotfilesd.v1.StatusRequest
+	(*StatusResponse)(nil),              // 7: dotfilesd.v1.StatusResponse
+	(*ExecRequest)(nil),                 // 8: dotfilesd.v1.ExecRequest
+	(*ExecResponse)(nil),                // 9: dotfilesd.v1.ExecResponse
+	(*ReloadRequest)(nil),               // 10: dotfilesd.v1.ReloadRequest
+	(*ReloadResponse)(nil),              // 11: dotfilesd.v1.ReloadResponse
+	(*GitRequest)(nil),                  // 12: dotfilesd.v1.GitRequest
+	(*GitResponse)(nil),                 // 13: dotfilesd.v1.GitResponse
+	(*SystemInfoRequest)(nil),           // 14: dotfilesd.v1.SystemInfoRequest
+	(*SystemInfoResponse)(nil),          // 15: dotfilesd.v1.SystemInfoResponse
+	(*SudoMethodsRequest)(nil),          // 16: dotfilesd.v1.SudoMethodsRequest
+	(*SudoMethodsResponse)(nil),         // 17: dotfilesd.v1.SudoMethodsResponse
+	(*SudoExecRequest)(nil),             // 18: dotfilesd.v1.SudoExecRequest
+	(*SudoExecResponse)(nil),            // 19: dotfilesd.v1.SudoExecResponse
+	(*AuthChallenge)(nil),               // 20: dotfilesd.v1.AuthChallenge
+	(*SudoResult)(nil),                  // 21: dotfilesd.v1.SudoResult
+	(*ReconfigureRequest)(nil),          // 22: dotfilesd.v1.ReconfigureRequest
+	(*ReconfigureResponse)(nil),         // 23: dotfilesd.v1.ReconfigureResponse
+	(*RestartRequest)(nil),              // 24: dotfilesd.v1.RestartRequest
+	(*RestartResponse)(nil),             // 25: dotfilesd.v1.RestartResponse
+	(*ReloadResponse_ReloadResult)(nil), // 26: dotfilesd.v1.ReloadResponse.ReloadResult
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_service_proto_depIdxs = []int32{
-	22, // 0: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
-	17, // 1: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
-	16, // 2: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
-	0,  // 3: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
-	10, // 4: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
-	12, // 5: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
-	2,  // 6: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
-	8,  // 7: dotfilesd.v1.DotfilesService.Git:input_type -> dotfilesd.v1.GitRequest
-	4,  // 8: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
-	14, // 9: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
-	6,  // 10: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
-	18, // 11: dotfilesd.v1.ConfigService.Reconfigure:input_type -> dotfilesd.v1.ReconfigureRequest
-	20, // 12: dotfilesd.v1.ConfigService.Restart:input_type -> dotfilesd.v1.RestartRequest
-	1,  // 13: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
-	11, // 14: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
-	13, // 15: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
-	3,  // 16: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
-	9,  // 17: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
-	5,  // 18: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
-	15, // 19: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
-	7,  // 20: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
-	19, // 21: dotfilesd.v1.ConfigService.Reconfigure:output_type -> dotfilesd.v1.ReconfigureResponse
-	21, // 22: dotfilesd.v1.ConfigService.Restart:output_type -> dotfilesd.v1.RestartResponse
-	13, // [13:23] is the sub-list for method output_type
-	3,  // [3:13] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	3,  // 0: dotfilesd.v1.ReloadRequest.target:type_name -> dotfilesd.v1.ReloadTarget
+	26, // 1: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
+	1,  // 2: dotfilesd.v1.GitRequest.action:type_name -> dotfilesd.v1.GitAction
+	2,  // 3: dotfilesd.v1.SudoExecRequest.preferred_method:type_name -> dotfilesd.v1.SudoMethod
+	21, // 4: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
+	20, // 5: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
+	0,  // 6: dotfilesd.v1.ReconfigureRequest.log_level:type_name -> dotfilesd.v1.LogLevel
+	4,  // 7: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
+	14, // 8: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
+	16, // 9: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
+	6,  // 10: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
+	12, // 11: dotfilesd.v1.DotfilesService.Git:input_type -> dotfilesd.v1.GitRequest
+	8,  // 12: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
+	18, // 13: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
+	10, // 14: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
+	22, // 15: dotfilesd.v1.ConfigService.Reconfigure:input_type -> dotfilesd.v1.ReconfigureRequest
+	24, // 16: dotfilesd.v1.ConfigService.Restart:input_type -> dotfilesd.v1.RestartRequest
+	5,  // 17: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
+	15, // 18: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	17, // 19: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	7,  // 20: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
+	13, // 21: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
+	9,  // 22: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
+	19, // 23: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
+	11, // 24: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
+	23, // 25: dotfilesd.v1.ConfigService.Reconfigure:output_type -> dotfilesd.v1.ReconfigureResponse
+	25, // 26: dotfilesd.v1.ConfigService.Restart:output_type -> dotfilesd.v1.RestartResponse
+	17, // [17:27] is the sub-list for method output_type
+	7,  // [7:17] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_service_proto_init() }
@@ -1501,13 +1763,14 @@ func file_proto_dotfilesd_v1_dotfilesdv1_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_service_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      4,
 			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   4,
 		},
 		GoTypes:           file_proto_dotfilesd_v1_dotfilesdv1_service_proto_goTypes,
 		DependencyIndexes: file_proto_dotfilesd_v1_dotfilesdv1_service_proto_depIdxs,
+		EnumInfos:         file_proto_dotfilesd_v1_dotfilesdv1_service_proto_enumTypes,
 		MessageInfos:      file_proto_dotfilesd_v1_dotfilesdv1_service_proto_msgTypes,
 	}.Build()
 	File_proto_dotfilesd_v1_dotfilesdv1_service_proto = out.File

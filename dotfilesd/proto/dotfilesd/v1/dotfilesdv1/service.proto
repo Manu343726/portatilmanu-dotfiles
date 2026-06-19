@@ -33,6 +33,44 @@ service ConfigService {
   rpc Restart(RestartRequest) returns (RestartResponse);
 }
 
+// --- Enums ------------------------------------------------------------------
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_TRACE = 1;
+  LOG_LEVEL_DEBUG = 2;
+  LOG_LEVEL_INFO = 3;
+  LOG_LEVEL_WARN = 4;
+  LOG_LEVEL_ERROR = 5;
+}
+
+enum GitAction {
+  GIT_ACTION_UNSPECIFIED = 0;
+  GIT_ACTION_STATUS = 1;
+  GIT_ACTION_DIFF = 2;
+  GIT_ACTION_ADD = 3;
+  GIT_ACTION_COMMIT = 4;
+  GIT_ACTION_PUSH = 5;
+  GIT_ACTION_LOG = 6;
+}
+
+enum SudoMethod {
+  SUDO_METHOD_UNSPECIFIED = 0;
+  SUDO_METHOD_TERMINAL = 1;
+  SUDO_METHOD_GRAPHICAL = 2;
+  SUDO_METHOD_NOPASS = 3;
+}
+
+enum ReloadTarget {
+  RELOAD_TARGET_UNSPECIFIED = 0;
+  RELOAD_TARGET_TMUX = 1;
+  RELOAD_TARGET_I3 = 2;
+  RELOAD_TARGET_KITTY = 3;
+  RELOAD_TARGET_ALL = 4;
+}
+
+// --- Messages ---------------------------------------------------------------
+
 message PingRequest {}
 message PingResponse {
   string version = 1;
@@ -63,7 +101,7 @@ message ExecResponse {
 }
 
 message ReloadRequest {
-  string target = 1; // "tmux", "i3", "kitty", "all"
+  ReloadTarget target = 1;
 }
 
 message ReloadResponse {
@@ -76,9 +114,9 @@ message ReloadResponse {
 }
 
 message GitRequest {
-  string action = 1;  // "status", "diff", "add", "commit", "push", "log"
-  string message = 2; // commit message (required for "commit")
-  string paths = 3;   // space-separated (default: all tracked)
+  GitAction action = 1;
+  string message = 2;
+  string paths = 3;
 }
 
 message GitResponse {
@@ -112,8 +150,8 @@ message SudoMethodsResponse {
 
 message SudoExecRequest {
   string command = 1;
-  string password = 2;          // empty on first call, filled on retry
-  string preferred_method = 3;  // "terminal", "graphical", "nopass"
+  string password = 2;
+  SudoMethod preferred_method = 3;
 }
 
 message SudoExecResponse {
@@ -135,10 +173,10 @@ message SudoResult {
   bool auth_cancelled = 4;
 }
 
-// --- Reconfigure / Restart ---------------------------------------------------
+// --- Reconfigure / Restart -------------------------------------------------
 
 message ReconfigureRequest {
-  string log_level = 1; // "trace", "debug", "info", "warn", "error"
+  LogLevel log_level = 1;
 }
 
 message ReconfigureResponse {

@@ -134,26 +134,26 @@ func (s *dotfilesServer) Git(ctx context.Context, req *connect.Request[dotfilesd
 
 	var args []string
 	switch action {
-	case "status":
+	case dotfilesdv1.GitAction_GIT_ACTION_STATUS:
 		args = []string{"-C", home, "status"}
-	case "diff":
+	case dotfilesdv1.GitAction_GIT_ACTION_DIFF:
 		args = []string{"-C", home, "diff"}
-	case "add":
+	case dotfilesdv1.GitAction_GIT_ACTION_ADD:
 		if req.Msg.Paths != "" {
 			args = append([]string{"-C", home, "add"}, strings.Fields(req.Msg.Paths)...)
 		} else {
 			args = []string{"-C", home, "add", "-A"}
 		}
-	case "commit":
+	case dotfilesdv1.GitAction_GIT_ACTION_COMMIT:
 		if req.Msg.Message == "" {
 			resp := connect.NewResponse(&dotfilesdv1.GitResponse{ExitCode: 1, Stderr: "commit message required"})
 			slog.Log(ctx, levelTrace, "Dotfiles.Git done", "response", resp.Msg)
 			return resp, nil
 		}
 		args = []string{"-C", home, "commit", "-m", req.Msg.Message}
-	case "push":
+	case dotfilesdv1.GitAction_GIT_ACTION_PUSH:
 		args = []string{"-C", home, "push"}
-	case "log":
+	case dotfilesdv1.GitAction_GIT_ACTION_LOG:
 		args = []string{"-C", home, "log", "--oneline", "-10"}
 	default:
 		resp := connect.NewResponse(&dotfilesdv1.GitResponse{
@@ -247,7 +247,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	}
 
 	switch method {
-	case "nopass":
+	case dotfilesdv1.SudoMethod_SUDO_METHOD_NOPASS:
 		if !hasSudo() {
 			slog.Warn("SudoExec: sudo not available for nopass method")
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
@@ -264,7 +264,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", code)
 		return resp, nil
 
-	case "graphical":
+	case dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL:
 		if !hasPkexec() {
 			slog.Warn("SudoExec: pkexec not available for graphical method")
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
@@ -331,18 +331,18 @@ func (s *configServer) Reload(ctx context.Context, req *connect.Request[dotfiles
 	}
 
 	switch target {
-	case "tmux":
+	case dotfilesdv1.ReloadTarget_RELOAD_TARGET_TMUX:
 		do("tmux", "tmux", "source-file", os.Getenv("HOME")+"/.tmux.conf")
-	case "i3":
+	case dotfilesdv1.ReloadTarget_RELOAD_TARGET_I3:
 		do("i3", "i3-msg", "reload")
-	case "kitty":
+	case dotfilesdv1.ReloadTarget_RELOAD_TARGET_KITTY:
 		do("kitty", "kitty", "@", "load-config")
-	case "all":
+	case dotfilesdv1.ReloadTarget_RELOAD_TARGET_ALL:
 		do("tmux", "tmux", "source-file", os.Getenv("HOME")+"/.tmux.conf")
 		do("i3", "i3-msg", "reload")
 		do("kitty", "kitty", "@", "load-config")
 	default:
-		results = append(results, result{target: target, success: false, message: fmt.Sprintf("unknown target: %s", target)})
+		results = append(results, result{target: target.String(), success: false, message: fmt.Sprintf("unknown target: %s", target)})
 	}
 
 	resp := &dotfilesdv1.ReloadResponse{}
@@ -362,9 +362,9 @@ func (s *configServer) Reconfigure(ctx context.Context, req *connect.Request[dot
 	r := req.Msg
 	slog.Log(ctx, levelTrace, "Config.Reconfigure", "log_level", r.LogLevel)
 
-	newLevel, ok := parseLogLevel(r.LogLevel)
-	if !ok {
-		msg := fmt.Sprintf("invalid log level: %q (valid: trace, debug, info, warn, error)", r.LogLevel)
+	newLevel := logLevelToSlog(r.LogLevel)
+	if r.LogLevel == dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED {
+		msg := fmt.Sprintf("invalid log level (valid: trace, debug, info, warn, error)")
 		slog.Warn("Reconfigure: invalid log level", "log_level", r.LogLevel)
 		return connect.NewResponse(&dotfilesdv1.ReconfigureResponse{
 			Success: false,

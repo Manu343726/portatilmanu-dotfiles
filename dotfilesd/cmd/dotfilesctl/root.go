@@ -149,6 +149,43 @@ func checkBuildHash(noVerify bool, name string) {
 	}
 }
 
+// --- Enum parsing helpers ---------------------------------------------------
+
+func parseLogLevel(s string) dotfilesdv1.LogLevel {
+	key := "LOG_LEVEL_" + strings.ToUpper(s)
+	if v, ok := dotfilesdv1.LogLevel_value[key]; ok {
+		return dotfilesdv1.LogLevel(v)
+	}
+	if strings.ToLower(s) == "warn" {
+		return dotfilesdv1.LogLevel_LOG_LEVEL_WARN
+	}
+	return dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED
+}
+
+func parseGitAction(s string) dotfilesdv1.GitAction {
+	key := "GIT_ACTION_" + strings.ToUpper(s)
+	if v, ok := dotfilesdv1.GitAction_value[key]; ok {
+		return dotfilesdv1.GitAction(v)
+	}
+	return dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED
+}
+
+func parseReloadTarget(s string) dotfilesdv1.ReloadTarget {
+	key := "RELOAD_TARGET_" + strings.ToUpper(s)
+	if v, ok := dotfilesdv1.ReloadTarget_value[key]; ok {
+		return dotfilesdv1.ReloadTarget(v)
+	}
+	return dotfilesdv1.ReloadTarget_RELOAD_TARGET_UNSPECIFIED
+}
+
+func parseSudoMethod(s string) dotfilesdv1.SudoMethod {
+	key := "SUDO_METHOD_" + strings.ToUpper(s)
+	if v, ok := dotfilesdv1.SudoMethod_value[key]; ok {
+		return dotfilesdv1.SudoMethod(v)
+	}
+	return dotfilesdv1.SudoMethod_SUDO_METHOD_UNSPECIFIED
+}
+
 // --- system subcommand group ------------------------------------------------
 
 func newSystemCmd() *cobra.Command {
@@ -254,7 +291,10 @@ func newGitCmd() *cobra.Command {
 		Short: "git operations (status|diff|add|commit|push|log)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			action := args[0]
+			action := parseGitAction(args[0])
+			if action == dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED {
+				return fmt.Errorf("unknown git action: %s (valid: status, diff, add, commit, push, log)", args[0])
+			}
 			message, _ := cmd.Flags().GetString("message")
 			paths, _ := cmd.Flags().GetString("paths")
 
@@ -313,7 +353,6 @@ func newExecCmd() *cobra.Command {
 				return nil
 			}
 
-			// Sudo exec via bidirectional streaming.
 			return sudoExec(context.Background(), command)
 		},
 	}
@@ -323,9 +362,9 @@ func newExecCmd() *cobra.Command {
 }
 
 func sudoExec(ctx context.Context, command string) error {
-	method := "terminal"
+	method := dotfilesdv1.SudoMethod_SUDO_METHOD_TERMINAL
 	if _, err := os.Stat("/dev/tty"); os.IsNotExist(err) {
-		method = "graphical"
+		method = dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL
 	}
 
 	// First call — no password, see what daemon says.
@@ -383,7 +422,7 @@ func sudoExec(ctx context.Context, command string) error {
 
 		// Retry with password.
 		resp, err = execClient.SudoExec(ctx, connect.NewRequest(&dotfilesdv1.SudoExecRequest{
-			Command: command, Password: password, PreferredMethod: "terminal",
+			Command: command, Password: password, PreferredMethod: dotfilesdv1.SudoMethod_SUDO_METHOD_TERMINAL,
 		}))
 		if err != nil {
 			return fmt.Errorf("sudo exec with password: %w", err)
@@ -427,9 +466,12 @@ func newConfigCmd() *cobra.Command {
 		Short: "reload configs (tmux, i3, kitty, all)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target := "all"
+			target := dotfilesdv1.ReloadTarget_RELOAD_TARGET_ALL
 			if len(args) > 0 {
-				target = args[0]
+				target = parseReloadTarget(args[0])
+				if target == dotfilesdv1.ReloadTarget_RELOAD_TARGET_UNSPECIFIED {
+					return fmt.Errorf("unknown target: %s (valid: tmux, i3, kitty, all)", args[0])
+				}
 			}
 			resp, err := cfgClient.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target}))
 			if err != nil {
@@ -450,9 +492,13 @@ func newConfigCmd() *cobra.Command {
 		Short: "change daemon runtime configuration",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logLevel, _ := cmd.Flags().GetString("log-level")
-			if logLevel == "" {
+			levelStr, _ := cmd.Flags().GetString("log-level")
+			if levelStr == "" {
 				return fmt.Errorf("--log-level is required (trace, debug, info, warn, error)")
+			}
+			logLevel := parseLogLevel(levelStr)
+			if logLevel == dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED {
+				return fmt.Errorf("invalid log level: %s (valid: trace, debug, info, warn, error)", levelStr)
 			}
 			resp, err := cfgClient.Reconfigure(context.Background(), connect.NewRequest(&dotfilesdv1.ReconfigureRequest{
 				LogLevel: logLevel,

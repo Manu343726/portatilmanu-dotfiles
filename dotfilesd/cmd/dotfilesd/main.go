@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -144,20 +145,34 @@ func firstNonZeroInt(vals ...int) int {
 	return 0
 }
 
-func parseLogLevel(level string) (slog.Level, bool) {
-	switch strings.ToLower(level) {
-	case "trace":
-		return levelTrace, true
-	case "debug":
-		return slog.LevelDebug, true
-	case "info":
-		return slog.LevelInfo, true
-	case "warn", "warning":
-		return slog.LevelWarn, true
-	case "error":
-		return slog.LevelError, true
+func parseLogLevel(s string) (dotfilesdv1.LogLevel, slog.Level, bool) {
+	key := "LOG_LEVEL_" + strings.ToUpper(s)
+	v, ok := dotfilesdv1.LogLevel_value[key]
+	if !ok {
+		// Accept "warn" as alias for "warning"
+		if strings.ToLower(s) == "warn" {
+			return dotfilesdv1.LogLevel_LOG_LEVEL_WARN, slog.LevelWarn, true
+		}
+		return dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED, slog.LevelInfo, false
+	}
+	enum := dotfilesdv1.LogLevel(v)
+	return enum, logLevelToSlog(enum), true
+}
+
+func logLevelToSlog(l dotfilesdv1.LogLevel) slog.Level {
+	switch l {
+	case dotfilesdv1.LogLevel_LOG_LEVEL_TRACE:
+		return levelTrace
+	case dotfilesdv1.LogLevel_LOG_LEVEL_DEBUG:
+		return slog.LevelDebug
+	case dotfilesdv1.LogLevel_LOG_LEVEL_INFO:
+		return slog.LevelInfo
+	case dotfilesdv1.LogLevel_LOG_LEVEL_WARN:
+		return slog.LevelWarn
+	case dotfilesdv1.LogLevel_LOG_LEVEL_ERROR:
+		return slog.LevelError
 	default:
-		return slog.LevelInfo, false
+		return slog.LevelInfo
 	}
 }
 
@@ -172,7 +187,7 @@ func setupLogging(logDir, level string, maxMB, backups, age int) {
 		Compress:   true,
 	}
 
-	lvl, ok := parseLogLevel(level)
+	_, lvl, ok := parseLogLevel(level)
 	if !ok {
 		lvl = slog.LevelInfo
 	}
