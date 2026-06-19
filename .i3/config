@@ -287,6 +287,7 @@ exec_always --no-startup-id setxkbmap -layout us,es -option grp:alt_shift_toggle
 exec_always --no-startup-id sbxkb
 exec --no-startup-id start_conky_maia
 # exec --no-startup-id start_conky_green
+exec --no-startup-id sh -c 'sleep 2; ext=$(xrandr | awk "/ connected / && !/^eDP/ {print \$1}" | head -1); [ -n "$ext" ] && xrandr --output "$ext" --auto --primary --output eDP --off'
 exec --no-startup-id rog-control-center
 exec --no-startup-id xautolock -time 10 -locker blurlock
 exec_always --no-startup-id ff-theme-util
