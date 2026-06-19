@@ -152,7 +152,7 @@ func setupLogging(logDir, level string, maxMB, backups, age int) {
 	}
 
 	multi := io.MultiWriter(os.Stdout, fileWriter)
-	handler := slog.NewJSONHandler(multi, &slog.HandlerOptions{
+	handler := slog.NewTextHandler(multi, &slog.HandlerOptions{
 		Level: slogLevel,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.LevelKey {
