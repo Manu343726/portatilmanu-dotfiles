@@ -12,6 +12,17 @@
 
 typeset -a items actions
 
+# ---- System configuration tools ----
+# Convenience section for frequently-used settings programs so they're always
+# at the top of the menu, regardless of alphabetical order.
+items+=("⚙ ROG Control Center");       actions+=("cfg:rog-control-center")
+items+=("⚙ Audio (Pavucontrol)");      actions+=("cfg:org.pulseaudio.pavucontrol")
+items+=("⚙ Displays (ARandR)");        actions+=("cfg:arandr")
+items+=("⚙ Package Manager (Pamac)");  actions+=("cfg:org.manjaro.pamac.manager.desktop")
+
+# Separator line — if the user clicks it by accident, just re-open the menu.
+items+=("──────────────────────"); actions+=("sep")
+
 # ---- Desktop apps ----
 # Scan both system and user .desktop files.
 # Uses the filename stem for gtk-launch, displays the app's Name=.
@@ -24,6 +35,10 @@ for dir in /usr/share/applications ~/.local/share/applications; do
     [[ "$no_display" == "true" ]] && continue
     [[ -z "$name" ]] && continue
     desktop=$(basename "$f")
+    # Skip tools already listed in the config section to avoid duplicates
+    case "$desktop" in
+      rog-control-center*|*pavucontrol*|arandr*|org.manjaro.pamac.manager*) continue ;;
+    esac
     items+=("$name")
     actions+=("app:$desktop")
   done
@@ -61,8 +76,15 @@ case "$selected_action" in
     desktop="${selected_action#app:}"
     gtk-launch "$desktop"
     ;;
+  cfg:*)
+    desktop="${selected_action#cfg:}"
+    gtk-launch "$desktop"
+    ;;
   url:*)
     url="${selected_action#url:}"
     google-chrome-stable "$url"
+    ;;
+  sep)
+    exec "$0"
     ;;
 esac
