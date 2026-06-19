@@ -419,7 +419,9 @@ bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel "xclip -in -selection cl
 # mouse drag in copy mode → primary selection (middle-click)
 bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe "xclip -in -selection primary"
 
-# paste from system clipboard: prefix + Ctrl+P
+# paste from system clipboard
+bind -n MouseDown2Pane run "xclip -o -selection primary | tmux load-buffer - && tmux paste-buffer"
+bind -n Insert run "xclip -o -selection primary | tmux load-buffer - && tmux paste-buffer"
 bind C-p run "xclip -o -selection clipboard | tmux load-buffer - && tmux paste-buffer"
 
 # move status line to top
