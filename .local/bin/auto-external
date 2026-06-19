@@ -1,0 +1,52 @@
+#!/usr/bin/env zsh
+#
+# auto-external
+# ------------
+# Automatically switches to the external monitor as the primary display
+# at boot if an external monitor is connected.
+#
+# This is intended to be called from i3 config via:
+#   exec --no-startup-id auto-external
+#
+# Why this exists:
+#   On a laptop (ASUS ROG Flow X13), when docked, we want to use the
+#   external monitor as the sole display — the laptop lid stays closed.
+#   xrandr detects "connected" even for powered-off monitors on DP, so
+#   this only triggers when an external output is actually present.
+#
+# Assumptions:
+#   - The internal display is always named "eDP" (common on Intel/AMD laptops)
+#   - External displays show up as something other than "eDP" (e.g. "DisplayPort-1")
+#   - We use xrandr (X11), not Wayland
+
+# Give the display driver time to finish detecting connected monitors.
+# Without this sleep, xrandr may report "disconnected" for a monitor that
+# is physically plugged in but not yet enumerated by the kernel/DRM.
+sleep 2
+
+# Find the first external display by listing all connected outputs
+# and excluding the internal laptop panel.
+#
+# awk breakdown:
+#   / connected /    — match lines that say " connected " (active outputs)
+#   !/^eDP/          — exclude the internal display (starts with "eDP")
+#   {print $1}       — print the output name (first field, e.g. "DisplayPort-1")
+#
+# head -1 takes only the first match in case multiple externals are connected.
+ext=$(xrandr | awk '/ connected / && !/^eDP/ {print $1}' | head -1)
+
+# If no external display is found, do nothing and exit silently.
+# This is the common case when the laptop is undocked.
+if [[ -z "$ext" ]]; then
+  exit 0
+fi
+
+# Switch to external-only layout:
+#   --output "$ext"  --auto   — enable the external at its preferred resolution
+#   --primary                 — set it as the primary output (i3 bar, etc.)
+#   --output eDP     --off    — disable the internal laptop panel
+xrandr --output "$ext" --auto --primary --output eDP --off
+
+# Send a desktop notification so the user knows what happened.
+# The notification appears briefly in the corner and can be clicked away.
+notify-send "Screen Layout" "Auto-switched to external only: $ext"
