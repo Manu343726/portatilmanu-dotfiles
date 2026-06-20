@@ -64,6 +64,10 @@ PERF BAT ██████░░ 85%  CPU ██████░░ 45%  TEMP �
 
 The temperature bar adapts its range by tracking min/max values in `~/.cache/tmux-cpu-temp-state`, updated on every read.
 
+### kmscon note
+
+When using tmux inside kmscon (the KMS virtual console), the `TERM` variable is set to `kmscon` by default which can cause rendering issues. The `~/.zshrc` overrides this to `xterm-256color` when running under kmscon.
+
 ## Copy mode
 
 | Key | Action |

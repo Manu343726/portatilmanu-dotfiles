@@ -24,6 +24,7 @@ i3-msg reload
 | palette   | — | `.docs/index.md` |
 | dotfilesd | `~/dotfilesd/` | `dotfilesd/README.md` + `dotfilesd/docs/` |
 | **ASUS ROG** | `~/.local/bin/asus-profile` | Profile switcher via `asusctl` |
+| kmscon      | `/etc/kmscon/kmscon.conf` | KMS console with Monokai palette |
 
 ### ASUS ROG Flow X13 extras
 
