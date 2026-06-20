@@ -79,8 +79,9 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 
 	if mcpBridge != nil {
 		raw, err := mcpBridge.SendRequest("feedback/input_request", map[string]any{
-			"prompt":  req.Msg.Prompt,
-			"default": req.Msg.Default,
+			"prompt":    req.Msg.Prompt,
+			"default":   req.Msg.Default,
+			"sensitive": req.Msg.Sensitive,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP input request: %w", err))
@@ -113,6 +114,12 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 type confirmHandler struct {
 	dotfilesdv1connect.UnimplementedConfirmServiceHandler
 	handler func(context.Context, *dotfilesdv1.ConfirmRequest) (bool, error)
+}
+
+func zeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
 }
 
 func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error) {

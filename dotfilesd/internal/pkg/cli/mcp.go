@@ -337,52 +337,22 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		}
 		json.Unmarshal(args, &p)
 
-		if p.Sudo != "true" {
-			req := connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command})
-			addSessionHeader(req, args)
-			resp, err := clients.Exec.Exec(context.Background(), req)
-			if err != nil {
-				return mcpErr(id, -32603, err.Error())
-			}
-			text := resp.Msg.Stdout
-			if resp.Msg.Stderr != "" {
-				text += "\nstderr:\n" + resp.Msg.Stderr
-			}
-			return mcpResp(id, map[string]any{
-				"content": []map[string]any{{"type": "text", "text": text}},
-				"isError": resp.Msg.ExitCode != 0,
-			})
-		}
-
-		req := connect.NewRequest(&dotfilesdv1.SudoExecRequest{
-			Command: p.Command, PreferredMethod: dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL,
+		req := connect.NewRequest(&dotfilesdv1.ExecRequest{
+			Command: p.Command,
+			Sudo:    p.Sudo == "true",
 		})
 		addSessionHeader(req, args)
-		resp, err := clients.Exec.SudoExec(context.Background(), req)
+		resp, err := clients.Exec.Exec(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
-		result := resp.Msg.GetResult()
-		if result == nil {
-			challenge := resp.Msg.GetAuthChallenge()
-			if challenge != nil {
-				return mcpErr(id, -32000, "auth required: cannot prompt in MCP context, use terminal")
-			}
-			return mcpErr(id, -32603, "unexpected response from daemon")
-		}
-		if result.AuthCancelled {
-			return mcpResp(id, map[string]any{
-				"content": []map[string]any{{"type": "text", "text": result.Stderr}},
-				"isError": true,
-			})
-		}
-		text := result.Stdout
-		if result.Stderr != "" {
-			text += "\nstderr:\n" + result.Stderr
+		text := resp.Msg.Stdout
+		if resp.Msg.Stderr != "" {
+			text += "\nstderr:\n" + resp.Msg.Stderr
 		}
 		return mcpResp(id, map[string]any{
 			"content": []map[string]any{{"type": "text", "text": text}},
-			"isError": result.ExitCode != 0,
+			"isError": resp.Msg.ExitCode != 0,
 		})
 
 	case "config_reload":

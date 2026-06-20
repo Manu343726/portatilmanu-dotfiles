@@ -167,7 +167,13 @@ func (s *Session) SetCallbackURL(url string) {
 	s.callbackURL = url
 }
 
-func (s *Session) RequestInput(ctx context.Context, prompt, defaultValue string) (string, error) {
+func (s *Session) HasCallbackURL() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.callbackURL != ""
+}
+
+func (s *Session) RequestInput(ctx context.Context, prompt, defaultValue string, sensitive bool) (string, error) {
 	s.mu.RLock()
 	url := s.callbackURL
 	s.mu.RUnlock()
@@ -177,8 +183,9 @@ func (s *Session) RequestInput(ctx context.Context, prompt, defaultValue string)
 
 	client := dotfilesdv1connect.NewInputServiceClient(http.DefaultClient, url)
 	req := connect.NewRequest(&dotfilesdv1.InputRequest{
-		Prompt:  prompt,
-		Default: defaultValue,
+		Prompt:    prompt,
+		Default:   defaultValue,
+		Sensitive: sensitive,
 	})
 	req.Header().Set("Session-Id", s.id)
 

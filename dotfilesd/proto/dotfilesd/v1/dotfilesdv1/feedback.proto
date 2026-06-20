@@ -22,6 +22,8 @@ message InputRequest {
   string prompt = 1;
   // Optional default value if the user just presses enter.
   string default = 2;
+  // If true, the value is sensitive (e.g. password) and should not be echoed.
+  bool sensitive = 3;
 }
 
 message InputResponse {

@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+	"golang.org/x/term"
 )
 
 type Clients struct {
@@ -58,6 +59,34 @@ func (c *Clients) Connect(ctx context.Context) error {
 			prompt = fmt.Sprintf("%s [%s]", prompt, req.Default)
 		}
 		fmt.Fprint(os.Stderr, prompt, " ")
+
+		if req.Sensitive {
+			fd := int(os.Stdin.Fd())
+			if term.IsTerminal(fd) {
+				raw, err := term.ReadPassword(fd)
+				fmt.Fprintln(os.Stderr)
+				if err != nil {
+					return "", err
+				}
+				val := string(raw)
+				zeroBytes(raw)
+				if val == "" {
+					return req.Default, nil
+				}
+				return val, nil
+			}
+			// Not a terminal — fall back to plain line read.
+			line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+			if err != nil {
+				return "", err
+			}
+			line = strings.TrimRight(line, "\n\r")
+			if line == "" {
+				return req.Default, nil
+			}
+			return line, nil
+		}
+
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
 			return "", err

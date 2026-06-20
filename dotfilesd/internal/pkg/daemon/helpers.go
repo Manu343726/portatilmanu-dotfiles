@@ -48,3 +48,10 @@ func runCmdFull(name string, args ...string) (string, string, int) {
 func fmtSscanf(str string, v any) (int, error) {
 	return fmt.Sscanf(str, "%d", v)
 }
+
+// zeroBytes overwrites the backing array of b with zeroes.
+func zeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}

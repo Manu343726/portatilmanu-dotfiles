@@ -27,7 +27,9 @@ type InputRequest struct {
 	// Human-readable prompt describing what input is needed.
 	Prompt string `protobuf:"bytes,1,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// Optional default value if the user just presses enter.
-	Default       string `protobuf:"bytes,2,opt,name=default,proto3" json:"default,omitempty"`
+	Default string `protobuf:"bytes,2,opt,name=default,proto3" json:"default,omitempty"`
+	// If true, the value is sensitive (e.g. password) and should not be echoed.
+	Sensitive     bool `protobuf:"varint,3,opt,name=sensitive,proto3" json:"sensitive,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,6 +83,13 @@ func (x *InputRequest) GetDefault() string {
 		return x.Default
 	}
 	return ""
+}
+
+func (x *InputRequest) GetSensitive() bool {
+	if x != nil {
+		return x.Sensitive
+	}
+	return false
 }
 
 type InputResponse struct {
@@ -255,12 +264,13 @@ var File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto protoreflect.FileDescript
 
 const file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDesc = "" +
 	"\n" +
-	"-proto/dotfilesd/v1/dotfilesdv1/feedback.proto\x12\fdotfilesd.v1\"_\n" +
+	"-proto/dotfilesd/v1/dotfilesdv1/feedback.proto\x12\fdotfilesd.v1\"}\n" +
 	"\fInputRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\x12\x18\n" +
-	"\adefault\x18\x02 \x01(\tR\adefault\"D\n" +
+	"\adefault\x18\x02 \x01(\tR\adefault\x12\x1c\n" +
+	"\tsensitive\x18\x03 \x01(\bR\tsensitive\"D\n" +
 	"\rInputResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12\x14\n" +

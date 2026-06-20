@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -21,8 +22,15 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 
 	session := s.sessions.Resolve(GetSessionID(req))
 
-	if req.Msg.Sudo || session.id == "" {
-		return s.ExecRaw(ctx, req.Msg.Command, req.Msg.Sudo)
+	if req.Msg.Sudo {
+		if session.HasCallbackURL() {
+			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
+		}
+		return s.ExecRaw(ctx, req.Msg.Command, true)
+	}
+
+	if session.id == "" {
+		return s.ExecRaw(ctx, req.Msg.Command, false)
 	}
 
 	shell, err := session.ensureShell()
@@ -47,6 +55,57 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	})
 
 	slog.Log(ctx, levelTrace, "Exec done", "command", req.Msg.Command, "exit_code", exitCode)
+	return resp, nil
+}
+
+func (s *execServer) execSudoWithPassword(ctx context.Context, command string, session *Session) (*connect.Response[dotfilesdv1.ExecResponse], error) {
+	slog.Log(ctx, levelTrace, "Exec sudo requesting password")
+
+	user := os.Getenv("USER")
+	if user == "" {
+		user = "unknown"
+	}
+	prompt := fmt.Sprintf("[sudo] password for %s: ", user)
+
+	password, err := session.RequestInput(ctx, prompt, "", true)
+	if err != nil {
+		slog.Warn("Exec sudo password request failed", "error", err)
+		return connect.NewResponse(&dotfilesdv1.ExecResponse{
+			ExitCode: -1,
+			Stderr:   fmt.Sprintf("password prompt failed: %v", err),
+		}), nil
+	}
+
+	// Copy password to byte slice we can zero after use.
+	pwd := []byte(password + "\n")
+	defer zeroBytes(pwd)
+
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("sudo", "-S", "sh", "-c", command)
+	cmd.Stdin = bytes.NewReader(pwd)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+
+	if exitCode != 0 {
+		slog.Warn("Exec sudo command failed", "command", command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
+	}
+
+	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
+		ExitCode: int32(exitCode),
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+	})
+
+	slog.Log(ctx, levelTrace, "Exec sudo done", "command", command, "exit_code", exitCode)
 	return resp, nil
 }
 
