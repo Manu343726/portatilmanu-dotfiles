@@ -267,7 +267,7 @@ tmux_conf_theme_right_separator_sub='\uE0B3'
 #     - #{username_ssh}
 tmux_conf_theme_status_left=" ❐ #S | ↑#{?uptime_y, #{uptime_y}y,}#{?uptime_d, #{uptime_d}d,}#{?uptime_h, #{uptime_h}h,}#{?uptime_m, #{uptime_m}m,} "
 #tmux_conf_theme_status_left=" ❐ #S | ↑#{?uptime_y, #{uptime_y}y,}#{?uptime_d, #{uptime_d}d,}#{?uptime_h, #{uptime_h}h,}#{?uptime_m, #{uptime_m}m,} | #{pretty_pane_current_path} "
-tmux_conf_theme_status_right=" #{prefix}#{mouse}#{pairing}#{synchronized} #{asus_profile} BAT #{?battery_status,#{battery_status},}#{?battery_bar, #{battery_bar},}#{?battery_percentage, #{battery_percentage},}#[default] #{cpu_info}#[default] #{ram_info}#[default] , %R , %d %b | #{layout_info} | #{username}#{root} | #{hostname} "
+tmux_conf_theme_status_right=" #{prefix}#{mouse}#{pairing}#{synchronized} #{asus_profile} BAT #{?battery_status,#{battery_status},}#{?battery_bar, #{battery_bar},}#{?battery_percentage, #{battery_percentage},}#[default] #{cpu_info}#[default] #{cpu_temp}#[default] #{ram_info}#[default] , %R , %d %b | #{layout_info} | #{username}#{root} | #{hostname} "
 
 # status left style
 tmux_conf_theme_status_left_fg="$tmux_conf_theme_colour_6,$tmux_conf_theme_colour_7,$tmux_conf_theme_colour_8"
@@ -503,7 +503,7 @@ tmux_conf_uninstall_plugins_on_reload=true
 # 
 # # usage: #{cpu_info}
 # cpu_info() {
-#   local prev_idle prev_total curr_idle curr_total di dt pct i temp tc
+#   local prev_idle prev_total curr_idle curr_total di dt pct i
 #   local f='◼' e='◻' n=10 c
 #   prev_idle=$(awk '/^cpu /{print $5}' /proc/stat)
 #   prev_total=$(awk '/^cpu /{for(i=2;i<=NF;i++) s+=$i; print s}' /proc/stat)
@@ -512,19 +512,12 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   curr_total=$(awk '/^cpu /{for(i=2;i<=NF;i++) s+=$i; print s}' /proc/stat)
 #   di=$((curr_idle - prev_idle)); dt=$((curr_total - prev_total))
 #   pct=$((100 - 100 * di / dt))
-#   temp=$(cat /sys/class/hwmon/hwmon5/temp1_input 2>/dev/null)
-#   temp=$((temp / 1000))
 #   if   [ "$pct" -lt 25 ]; then c='#[fg=#A6E22E]'
 #   elif [ "$pct" -lt 50 ]; then c='#[fg=#E6DB74]'
 #   elif [ "$pct" -lt 75 ]; then c='#[fg=#E8871A]'
 #   else                         c='#[fg=#E82572]'
 #   fi
-#   if   [ "$temp" -lt 50 ]; then tc='#[fg=#A6E22E]'
-#   elif [ "$temp" -lt 70 ]; then tc='#[fg=#E6DB74]'
-#   elif [ "$temp" -lt 85 ]; then tc='#[fg=#E8871A]'
-#   else                          tc='#[fg=#E82572]'
-#   fi
-#   printf 'CPU %s%d%% %s%d°C ' "$c" "$pct" "$tc" "$temp"
+#   printf 'CPU %s%d%% ' "$c" "$pct"
 #   for ((i=0; i<n; i++)); do (( i * 100 < pct * n )) && printf "$f" || printf "$e"; done
 #   printf '#[default]'
 #   sleep 5
@@ -541,6 +534,45 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   fi
 #   printf 'RAM %s%d%% ' "$c" "$pct"
 #   for ((i=0; i<n; i++)); do (( i * 100 < pct * n )) && printf "$f" || printf "$e"; done
+#   printf '#[default]'
+#   sleep 5
+# }
+#
+# # usage: #{cpu_temp}
+# cpu_temp() {
+#   local temp min max pct i n=10 f='◼' e='◻'
+#   local state_file="$HOME/.cache/tmux-cpu-temp-state"
+#   temp=$(cat /sys/class/hwmon/hwmon5/temp1_input 2>/dev/null)
+#   temp=$((temp / 1000))
+#   if [ -f "$state_file" ]; then
+#     . "$state_file"
+#   else
+#     min=$temp; max=$temp
+#   fi
+#   [ "$temp" -lt "$min" ] && min=$temp
+#   [ "$temp" -gt "$max" ] && max=$temp
+#   cat > "$state_file" <<-EOF
+# min=$min
+# max=$max
+# EOF
+#   if [ "$max" -le "$min" ]; then
+#     pct=50
+#   else
+#     pct=$(( (temp - min) * 100 / (max - min) ))
+#   fi
+#   printf 'TEMP %3d°C ' "$temp"
+#   for ((i=0; i<n; i++)); do
+#     if (( i * 100 < pct * n )); then
+#       if   [ "$i" -lt 3 ]; then printf '#[fg=#A6E22E]'
+#       elif [ "$i" -lt 5 ]; then printf '#[fg=#E6DB74]'
+#       elif [ "$i" -lt 7 ]; then printf '#[fg=#E8871A]'
+#       else                     printf '#[fg=#E82572]'
+#       fi
+#       printf '%s' "$f"
+#     else
+#       printf '%s' "$e"
+#     fi
+#   done
 #   printf '#[default]'
 #   sleep 5
 # }
