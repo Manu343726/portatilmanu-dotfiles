@@ -507,7 +507,7 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   local f='◼' e='◻' n=10 c
 #   prev_idle=$(awk '/^cpu /{print $5}' /proc/stat)
 #   prev_total=$(awk '/^cpu /{for(i=2;i<=NF;i++) s+=$i; print s}' /proc/stat)
-#   sleep 0.15
+#   sleep 1
 #   curr_idle=$(awk '/^cpu /{print $5}' /proc/stat)
 #   curr_total=$(awk '/^cpu /{for(i=2;i<=NF;i++) s+=$i; print s}' /proc/stat)
 #   di=$((curr_idle - prev_idle)); dt=$((curr_total - prev_total))
