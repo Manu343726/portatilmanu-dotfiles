@@ -578,7 +578,7 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   $HOME/.local/bin/xkb_group
 # }
 # 
-# # usage: #{battery_info}
+# usage: #{battery_info}
 # battery_info() {
 #   local b="/sys/class/power_supply/BAT0"
 #   local s c ef en p m i bar f='◼' e='◻' lc ts h
@@ -608,7 +608,7 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   case "$s" in
 #     "Charging")
 #       if [ "$c" -ge 100 ] 2>/dev/null; then
-#         printf '#[fg=#A6E22E]PLUGGED#[default]'
+#         printf '#[fg=#A6E22E]PLUGGED#[default] %s %d%%' "$bar" "$c"
 #       elif [ "$p" -gt 0 ] 2>/dev/null; then
 #         m=$(( (ef - en) * 60 / p ))
 #         if [ "$m" -le 0 ]; then ts='<1m'
@@ -631,7 +631,7 @@ tmux_conf_uninstall_plugins_on_reload=true
 #         printf '#[fg=%s]BAT#[default] %s %d%%' "$lc" "$bar" "$c"
 #       fi ;;
 #     "Full")
-#       printf '#[fg=#A6E22E]PLUGGED#[default]' ;;
+#       printf '#[fg=#A6E22E]PLUGGED#[default] %s %d%%' "$bar" "$c" ;;
 #     *)
 #       printf '%d%%' "$c" ;;
 #   esac
