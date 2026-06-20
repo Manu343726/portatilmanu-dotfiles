@@ -11,10 +11,13 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
-type dotfilesServer struct{}
+type dotfilesServer struct {
+	sessions *SessionStore
+}
 
 func (s *dotfilesServer) Status(ctx context.Context, req *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error) {
 	slog.Log(ctx, levelTrace, "Dotfiles.Status", "request", req.Msg)
+	s.sessions.Resolve(GetSessionID(req))
 
 	home := os.Getenv("HOME")
 	hostname, _ := os.Hostname()
@@ -42,6 +45,7 @@ func (s *dotfilesServer) Status(ctx context.Context, req *connect.Request[dotfil
 
 func (s *dotfilesServer) Git(ctx context.Context, req *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error) {
 	slog.Log(ctx, levelTrace, "Dotfiles.Git", "action", req.Msg.Action, "paths", req.Msg.Paths)
+	s.sessions.Resolve(GetSessionID(req))
 
 	home := os.Getenv("HOME")
 	action := req.Msg.Action

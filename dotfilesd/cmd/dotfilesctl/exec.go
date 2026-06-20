@@ -17,9 +17,9 @@ func newExecCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			command := strings.Join(args, " ")
 			if !sudo {
-				return cli.RunExec(clients, command)
+				return cli.RunExec(clients, sessionID, command)
 			}
-			return cli.RunSudoExec(clients, command)
+			return cli.RunSudoExec(clients, sessionID, command)
 		},
 	}
 

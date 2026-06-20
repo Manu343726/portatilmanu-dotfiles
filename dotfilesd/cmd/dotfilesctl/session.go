@@ -6,36 +6,36 @@ import (
 	"dotfilesd/internal/pkg/cli"
 )
 
-func newSystemCmd() *cobra.Command {
+func newSessionCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "system",
-		Short: "daemon health and system information",
+		Use:   "session",
+		Short: "session management",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "ping",
-		Short: "check daemon is running",
+		Use:   "create",
+		Short: "create a new session",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunPing(clients, sessionID)
+			return cli.RunCreateSession(clients)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use:   "info",
-		Short: "detailed system information",
-		Args:  cobra.NoArgs,
+		Use:   "finalize <session-id>",
+		Short: "finalize an active session",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunInfo(clients, sessionID)
+			return cli.RunFinalizeSession(clients, args[0])
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use:   "sudo",
-		Short: "show available sudo methods",
+		Use:   "list",
+		Short: "list active sessions",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunSudoMethods(clients, sessionID)
+			return cli.RunListSessions(clients)
 		},
 	})
 	return cmd

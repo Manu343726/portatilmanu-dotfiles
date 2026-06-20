@@ -9,7 +9,7 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
-func RunReload(clients *Clients, targetStr string) error {
+func RunReload(clients *Clients, sessionID, targetStr string) error {
 	target := dotfilesdv1.ReloadTarget_RELOAD_TARGET_ALL
 	if targetStr != "" {
 		target = ParseReloadTarget(targetStr)
@@ -17,7 +17,11 @@ func RunReload(clients *Clients, targetStr string) error {
 			return fmt.Errorf("unknown target: %s (valid: tmux, i3, kitty, all)", targetStr)
 		}
 	}
-	resp, err := clients.Cfg.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target}))
+	req := connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Cfg.Reload(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("reload failed: %w", err)
 	}
@@ -31,7 +35,7 @@ func RunReload(clients *Clients, targetStr string) error {
 	return nil
 }
 
-func RunReconfigure(clients *Clients, levelStr string) error {
+func RunReconfigure(clients *Clients, sessionID, levelStr string) error {
 	if levelStr == "" {
 		return fmt.Errorf("--log-level is required (trace, debug, info, warn, error)")
 	}
@@ -39,9 +43,13 @@ func RunReconfigure(clients *Clients, levelStr string) error {
 	if logLevel == dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED {
 		return fmt.Errorf("invalid log level: %s (valid: trace, debug, info, warn, error)", levelStr)
 	}
-	resp, err := clients.Cfg.Reconfigure(context.Background(), connect.NewRequest(&dotfilesdv1.ReconfigureRequest{
+	req := connect.NewRequest(&dotfilesdv1.ReconfigureRequest{
 		LogLevel: logLevel,
-	}))
+	})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Cfg.Reconfigure(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("reconfigure failed: %w", err)
 	}
@@ -52,8 +60,12 @@ func RunReconfigure(clients *Clients, levelStr string) error {
 	return nil
 }
 
-func RunRestart(clients *Clients) error {
-	resp, err := clients.Cfg.Restart(context.Background(), connect.NewRequest(&dotfilesdv1.RestartRequest{}))
+func RunRestart(clients *Clients, sessionID string) error {
+	req := connect.NewRequest(&dotfilesdv1.RestartRequest{})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Cfg.Restart(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("restart failed: %w", err)
 	}

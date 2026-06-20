@@ -12,10 +12,13 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
-type execServer struct{}
+type execServer struct {
+	sessions *SessionStore
+}
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	slog.Log(ctx, levelTrace, "Exec", "command", req.Msg.Command, "sudo", req.Msg.Sudo)
+	s.sessions.Resolve(GetSessionID(req))
 	return s.ExecRaw(ctx, req.Msg.Command, req.Msg.Sudo)
 }
 
@@ -44,6 +47,7 @@ func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*c
 
 func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
 	r := req.Msg
+	s.sessions.Resolve(GetSessionID(req))
 	password := r.Password
 	method := r.PreferredMethod
 

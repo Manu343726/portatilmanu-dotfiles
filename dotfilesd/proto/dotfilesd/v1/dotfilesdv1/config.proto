@@ -29,6 +29,7 @@ enum ReloadTarget {
 }
 
 message ReloadRequest {
+  string session_id = 100;
   ReloadTarget target = 1;
 }
 
@@ -42,6 +43,7 @@ message ReloadResponse {
 }
 
 message ReconfigureRequest {
+  string session_id = 100;
   LogLevel log_level = 1;
 }
 
@@ -50,7 +52,9 @@ message ReconfigureResponse {
   string message = 2;
 }
 
-message RestartRequest {}
+message RestartRequest {
+  string session_id = 100;
+}
 
 message RestartResponse {
   string message = 1;

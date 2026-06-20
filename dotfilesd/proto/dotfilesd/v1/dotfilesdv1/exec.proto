@@ -21,6 +21,7 @@ enum SudoMethod {
 }
 
 message ExecRequest {
+  string session_id = 100;
   string command = 1;
   bool sudo = 2;
 }
@@ -34,6 +35,7 @@ message ExecResponse {
 // --- SudoExec protocol (challenge-response over unary RPC) -----------------
 
 message SudoExecRequest {
+  string session_id = 100;
   string command = 1;
   string password = 2;
   SudoMethod preferred_method = 3;

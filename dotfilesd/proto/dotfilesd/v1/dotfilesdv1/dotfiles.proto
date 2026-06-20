@@ -20,7 +20,9 @@ enum GitAction {
   GIT_ACTION_LOG = 6;
 }
 
-message StatusRequest {}
+message StatusRequest {
+  string session_id = 100;
+}
 message StatusResponse {
   bool git_clean = 1;
   string git_branch = 2;
@@ -32,6 +34,7 @@ message StatusResponse {
 }
 
 message GitRequest {
+  string session_id = 100;
   GitAction action = 1;
   string message = 2;
   string paths = 3;

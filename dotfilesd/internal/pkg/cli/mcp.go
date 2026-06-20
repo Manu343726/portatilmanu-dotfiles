@@ -56,58 +56,72 @@ var mcpTools = []toolDef{
 	{
 		Name:        "system_ping",
 		Description: "Check daemon health",
-		InputSchema: toolSchema{Type: "object"},
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}},
 	},
 	{
 		Name:        "system_info",
 		Description: "Detailed system information",
-		InputSchema: toolSchema{Type: "object"},
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}},
 	},
 	{
 		Name:        "system_sudo",
 		Description: "Show available sudo methods",
-		InputSchema: toolSchema{Type: "object"},
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}},
 	},
 	{
 		Name:        "dotfiles_status",
 		Description: "Show dotfiles repo status",
-		InputSchema: toolSchema{Type: "object"},
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}},
 	},
 	{
 		Name:        "dotfiles_git",
 		Description: "Git operations on the dotfiles repo",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"action":  {Type: "string", Enum: []string{"status", "diff", "add", "commit", "push", "log"}},
-			"message": {Type: "string"},
-			"paths":   {Type: "string"},
+			"action":     {Type: "string", Enum: []string{"status", "diff", "add", "commit", "push", "log"}},
+			"message":    {Type: "string"},
+			"paths":      {Type: "string"},
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"action"}},
 	},
 	{
 		Name:        "exec_run",
 		Description: "Execute a shell command",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"command": {Type: "string"},
-			"sudo":    {Type: "string", Enum: []string{"true", "false"}},
+			"command":    {Type: "string"},
+			"sudo":       {Type: "string", Enum: []string{"true", "false"}},
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"command"}},
 	},
 	{
 		Name:        "config_reload",
 		Description: "Reload dotfiles configs (tmux, i3, kitty)",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"target": {Type: "string", Enum: []string{"tmux", "i3", "kitty", "all"}},
+			"target":     {Type: "string", Enum: []string{"tmux", "i3", "kitty", "all"}},
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}},
 	},
 	{
 		Name:        "config_reconfigure",
 		Description: "Change daemon runtime configuration (e.g. log level)",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"log_level": {Type: "string", Description: "new log level", Enum: []string{"trace", "debug", "info", "warn", "error"}},
+			"log_level":  {Type: "string", Description: "new log level", Enum: []string{"trace", "debug", "info", "warn", "error"}},
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"log_level"}},
 	},
 	{
 		Name:        "config_restart",
 		Description: "Gracefully restart the dotfilesd daemon",
-		InputSchema: toolSchema{Type: "object"},
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}},
 	},
 }
 
@@ -207,10 +221,22 @@ func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 	}
 }
 
+func addSessionHeader[T any](req *connect.Request[T], args json.RawMessage) {
+	var p struct{ SessionID string `json:"session_id"` }
+	if err := json.Unmarshal(args, &p); err != nil {
+		return
+	}
+	if p.SessionID != "" {
+		req.Header().Set("Session-Id", p.SessionID)
+	}
+}
+
 func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMessage) *mcpResponse {
 	switch name {
 	case "system_ping":
-		resp, err := clients.Sys.Ping(context.Background(), connect.NewRequest(&dotfilesdv1.PingRequest{}))
+		req := connect.NewRequest(&dotfilesdv1.PingRequest{})
+		addSessionHeader(req, args)
+		resp, err := clients.Sys.Ping(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -219,7 +245,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		return mcpToolResult(id, text)
 
 	case "system_info":
-		resp, err := clients.Sys.SystemInfo(context.Background(), connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
+		req := connect.NewRequest(&dotfilesdv1.SystemInfoRequest{})
+		addSessionHeader(req, args)
+		resp, err := clients.Sys.SystemInfo(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -232,7 +260,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		return mcpToolResult(id, text)
 
 	case "system_sudo":
-		resp, err := clients.Sys.SudoMethods(context.Background(), connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{}))
+		req := connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{})
+		addSessionHeader(req, args)
+		resp, err := clients.Sys.SudoMethods(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -242,7 +272,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		return mcpToolResult(id, text)
 
 	case "dotfiles_status":
-		resp, err := clients.Dot.Status(context.Background(), connect.NewRequest(&dotfilesdv1.StatusRequest{}))
+		req := connect.NewRequest(&dotfilesdv1.StatusRequest{})
+		addSessionHeader(req, args)
+		resp, err := clients.Dot.Status(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -262,7 +294,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		if action == dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED {
 			return mcpErr(id, -32602, fmt.Sprintf("unknown action: %s", p.Action))
 		}
-		resp, err := clients.Dot.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{Action: action, Message: p.Message, Paths: p.Paths}))
+		req := connect.NewRequest(&dotfilesdv1.GitRequest{Action: action, Message: p.Message, Paths: p.Paths})
+		addSessionHeader(req, args)
+		resp, err := clients.Dot.Git(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -282,7 +316,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		json.Unmarshal(args, &p)
 
 		if p.Sudo != "true" {
-			resp, err := clients.Exec.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command}))
+			req := connect.NewRequest(&dotfilesdv1.ExecRequest{Command: p.Command})
+			addSessionHeader(req, args)
+			resp, err := clients.Exec.Exec(context.Background(), req)
 			if err != nil {
 				return mcpErr(id, -32603, err.Error())
 			}
@@ -296,9 +332,11 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			})
 		}
 
-		resp, err := clients.Exec.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
+		req := connect.NewRequest(&dotfilesdv1.SudoExecRequest{
 			Command: p.Command, PreferredMethod: dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL,
-		}))
+		})
+		addSessionHeader(req, args)
+		resp, err := clients.Exec.SudoExec(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -335,7 +373,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 				return mcpErr(id, -32602, fmt.Sprintf("unknown target: %s", p.Target))
 			}
 		}
-		resp, err := clients.Cfg.Reload(context.Background(), connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target}))
+		req := connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target})
+		addSessionHeader(req, args)
+		resp, err := clients.Cfg.Reload(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -359,7 +399,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		if logLevel == dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED {
 			return mcpErr(id, -32602, fmt.Sprintf("invalid log level: %s", p.LogLevel))
 		}
-		resp, err := clients.Cfg.Reconfigure(context.Background(), connect.NewRequest(&dotfilesdv1.ReconfigureRequest{LogLevel: logLevel}))
+		req := connect.NewRequest(&dotfilesdv1.ReconfigureRequest{LogLevel: logLevel})
+		addSessionHeader(req, args)
+		resp, err := clients.Cfg.Reconfigure(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
@@ -372,7 +414,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		return mcpToolResult(id, resp.Msg.Message)
 
 	case "config_restart":
-		resp, err := clients.Cfg.Restart(context.Background(), connect.NewRequest(&dotfilesdv1.RestartRequest{}))
+		req := connect.NewRequest(&dotfilesdv1.RestartRequest{})
+		addSessionHeader(req, args)
+		resp, err := clients.Cfg.Restart(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}

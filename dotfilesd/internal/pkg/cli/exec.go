@@ -13,10 +13,14 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
-func RunExec(clients *Clients, command string) error {
-	resp, err := clients.Exec.Exec(context.Background(), connect.NewRequest(&dotfilesdv1.ExecRequest{
+func RunExec(clients *Clients, sessionID, command string) error {
+	req := connect.NewRequest(&dotfilesdv1.ExecRequest{
 		Command: command,
-	}))
+	})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Exec.Exec(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("exec failed: %w", err)
 	}
@@ -32,15 +36,19 @@ func RunExec(clients *Clients, command string) error {
 	return nil
 }
 
-func RunSudoExec(clients *Clients, command string) error {
+func RunSudoExec(clients *Clients, sessionID, command string) error {
 	method := dotfilesdv1.SudoMethod_SUDO_METHOD_TERMINAL
 	if _, err := os.Stat("/dev/tty"); os.IsNotExist(err) {
 		method = dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL
 	}
 
-	resp, err := clients.Exec.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
+	req := connect.NewRequest(&dotfilesdv1.SudoExecRequest{
 		Command: command, PreferredMethod: method,
-	}))
+	})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Exec.SudoExec(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("sudo exec: %w", err)
 	}
@@ -90,9 +98,13 @@ func RunSudoExec(clients *Clients, command string) error {
 			password = strings.TrimRight(password, "\n\r")
 		}
 
-		resp, err = clients.Exec.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
+		req := connect.NewRequest(&dotfilesdv1.SudoExecRequest{
 			Command: command, Password: password, PreferredMethod: dotfilesdv1.SudoMethod_SUDO_METHOD_TERMINAL,
-		}))
+		})
+		if sessionID != "" {
+			req.Header().Set("Session-Id", sessionID)
+		}
+		resp, err = clients.Exec.SudoExec(context.Background(), req)
 		if err != nil {
 			return fmt.Errorf("sudo exec with password: %w", err)
 		}

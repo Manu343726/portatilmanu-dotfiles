@@ -23,6 +23,7 @@ const (
 
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -55,6 +56,13 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *PingRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 type PingResponse struct {
@@ -119,6 +127,7 @@ func (x *PingResponse) GetUptimeSecs() int64 {
 
 type SystemInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -151,6 +160,13 @@ func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SystemInfoRequest.ProtoReflect.Descriptor instead.
 func (*SystemInfoRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SystemInfoRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 type SystemInfoResponse struct {
@@ -271,6 +287,7 @@ func (x *SystemInfoResponse) GetI3Version() string {
 
 type SudoMethodsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -303,6 +320,13 @@ func (x *SudoMethodsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SudoMethodsRequest.ProtoReflect.Descriptor instead.
 func (*SudoMethodsRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SudoMethodsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 type SudoMethodsResponse struct {
@@ -369,14 +393,18 @@ var File_proto_dotfilesd_v1_dotfilesdv1_system_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\"\r\n" +
-	"\vPingRequest\"[\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\",\n" +
+	"\vPingRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\"[\n" +
 	"\fPingResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x10\n" +
 	"\x03pid\x18\x02 \x01(\x03R\x03pid\x12\x1f\n" +
 	"\vuptime_secs\x18\x03 \x01(\x03R\n" +
-	"uptimeSecs\"\x13\n" +
-	"\x11SystemInfoRequest\"\xc3\x02\n" +
+	"uptimeSecs\"2\n" +
+	"\x11SystemInfoRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\"\xc3\x02\n" +
 	"\x12SystemInfoResponse\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x16\n" +
 	"\x06kernel\x18\x02 \x01(\tR\x06kernel\x12\x14\n" +
@@ -389,8 +417,10 @@ const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\rkitty_version\x18\t \x01(\tR\fkittyVersion\x12\x1d\n" +
 	"\n" +
 	"i3_version\x18\n" +
-	" \x01(\tR\ti3Version\"\x14\n" +
-	"\x12SudoMethodsRequest\"\x8e\x01\n" +
+	" \x01(\tR\ti3Version\"3\n" +
+	"\x12SudoMethodsRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\"\x8e\x01\n" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +

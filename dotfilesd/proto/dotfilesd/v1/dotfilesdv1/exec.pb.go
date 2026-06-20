@@ -75,6 +75,7 @@ func (SudoMethod) EnumDescriptor() ([]byte, []int) {
 
 type ExecRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Command       string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
 	Sudo          bool                   `protobuf:"varint,2,opt,name=sudo,proto3" json:"sudo,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -109,6 +110,13 @@ func (x *ExecRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ExecRequest.ProtoReflect.Descriptor instead.
 func (*ExecRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ExecRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *ExecRequest) GetCommand() string {
@@ -187,6 +195,7 @@ func (x *ExecResponse) GetStderr() string {
 
 type SudoExecRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
+	SessionId       string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Command         string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
 	Password        string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
 	PreferredMethod SudoMethod             `protobuf:"varint,3,opt,name=preferred_method,json=preferredMethod,proto3,enum=dotfilesd.v1.SudoMethod" json:"preferred_method,omitempty"`
@@ -222,6 +231,13 @@ func (x *SudoExecRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SudoExecRequest.ProtoReflect.Descriptor instead.
 func (*SudoExecRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SudoExecRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *SudoExecRequest) GetCommand() string {
@@ -451,15 +467,19 @@ var File_proto_dotfilesd_v1_dotfilesdv1_exec_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc = "" +
 	"\n" +
-	")proto/dotfilesd/v1/dotfilesdv1/exec.proto\x12\fdotfilesd.v1\";\n" +
-	"\vExecRequest\x12\x18\n" +
+	")proto/dotfilesd/v1/dotfilesdv1/exec.proto\x12\fdotfilesd.v1\"Z\n" +
+	"\vExecRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
 	"\x04sudo\x18\x02 \x01(\bR\x04sudo\"[\n" +
 	"\fExecResponse\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"\x8c\x01\n" +
-	"\x0fSudoExecRequest\x12\x18\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"\xab\x01\n" +
+	"\x0fSudoExecRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12C\n" +
 	"\x10preferred_method\x18\x03 \x01(\x0e2\x18.dotfilesd.v1.SudoMethodR\x0fpreferredMethod\"\x97\x01\n" +

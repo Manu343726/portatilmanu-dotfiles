@@ -9,8 +9,12 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
-func RunPing(clients *Clients) error {
-	resp, err := clients.Sys.Ping(context.Background(), connect.NewRequest(&dotfilesdv1.PingRequest{}))
+func RunPing(clients *Clients, sessionID string) error {
+	req := connect.NewRequest(&dotfilesdv1.PingRequest{})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Sys.Ping(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("ping failed: %w", err)
 	}
@@ -19,8 +23,12 @@ func RunPing(clients *Clients) error {
 	return nil
 }
 
-func RunInfo(clients *Clients) error {
-	resp, err := clients.Sys.SystemInfo(context.Background(), connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
+func RunInfo(clients *Clients, sessionID string) error {
+	req := connect.NewRequest(&dotfilesdv1.SystemInfoRequest{})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Sys.SystemInfo(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("info failed: %w", err)
 	}
@@ -37,8 +45,12 @@ func RunInfo(clients *Clients) error {
 	return nil
 }
 
-func RunSudoMethods(clients *Clients) error {
-	resp, err := clients.Sys.SudoMethods(context.Background(), connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{}))
+func RunSudoMethods(clients *Clients, sessionID string) error {
+	req := connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Sys.SudoMethods(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("sudo methods failed: %w", err)
 	}

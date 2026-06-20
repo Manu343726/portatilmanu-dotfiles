@@ -114,6 +114,28 @@ The MCP stdio server (launched via `dotfilesctl mcp`) exposes these tools:
 | `config_reconfigure` | ConfigService | Change daemon runtime config |
 | `config_restart` | ConfigService | Gracefully restart the daemon |
 
+## Sessions
+
+Sessions allow clients to group related requests that share state. Each session
+has an ID, request counter, last-active timestamp, and a key-value data map.
+
+- **Explicit sessions** are created via `CreateSession` and finalized via
+  `FinalizeSession`. The client passes the session ID as a `Session-Id` HTTP
+  header on subsequent requests.
+- **Ephemeral sessions** are created automatically by the daemon when a request
+  arrives without a `Session-Id` header. They exist for the duration of that
+  single request and are not stored in the session registry.
+- If a request references a finalized or unknown session, the daemon falls back
+  to an ephemeral session for that request.
+
+```bash
+dotfilesctl session create                    # returns a session ID
+dotfilesctl --session <id> system ping        # use session in a request
+dotfilesctl --session <id> exec 'ls -la'      # same session, shared state
+dotfilesctl session finalize <id>             # mark session complete
+dotfilesctl session list                      # show active sessions
+```
+
 ## Data flow
 
 ```
@@ -131,7 +153,9 @@ opencode ──stdio──▶  dotfilesctl mcp  ──Connect RPC──▶  dotf
 ├── internal/
 │   └── pkg/
 │       ├── daemon/          # Connect RPC server implementations
+│       │   └── session.go   # Session store + session service server
 │       ├── cli/             # CLI action logic + MCP server
+│       │   └── session.go   # CLI session actions (create, finalize, list)
 │       └── shared/          # Shared utilities
 ├── docs/                    # Documentation
 ├── proto/                   # Protobuf definitions + generated code

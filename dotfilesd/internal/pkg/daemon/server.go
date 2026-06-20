@@ -23,21 +23,26 @@ type Config struct {
 }
 
 type Daemon struct {
-	config Config
-	server *http.Server
+	config   Config
+	server   *http.Server
+	sessions *SessionStore
 }
 
 func New(cfg Config) *Daemon {
-	return &Daemon{config: cfg}
+	return &Daemon{
+		config:   cfg,
+		sessions: NewSessionStore(),
+	}
 }
 
 func (d *Daemon) Start() error {
 	setupLogging(d.config.LogDir, d.config.LogLevel, d.config.LogMaxMB, d.config.LogBackup, d.config.LogAge)
 
-	sysSvc := &systemServer{startedAt: time.Now()}
-	dotSvc := &dotfilesServer{}
-	execSvc := &execServer{}
-	cfgSvc := &configServer{}
+	sysSvc := &systemServer{startedAt: time.Now(), sessions: d.sessions}
+	dotSvc := &dotfilesServer{sessions: d.sessions}
+	execSvc := &execServer{sessions: d.sessions}
+	cfgSvc := &configServer{sessions: d.sessions}
+	sessionSvc := newSessionServer(d.sessions)
 
 	mux := http.NewServeMux()
 	{
@@ -54,6 +59,10 @@ func (d *Daemon) Start() error {
 	}
 	{
 		p, h := dotfilesdv1connect.NewConfigServiceHandler(cfgSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewSessionServiceHandler(sessionSvc)
 		mux.Handle(p, h)
 	}
 

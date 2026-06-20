@@ -19,7 +19,7 @@ func newDotfilesCmd() *cobra.Command {
 		Short: "show dotfiles repo status",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunStatus(clients)
+			return cli.RunStatus(clients, sessionID)
 		},
 	})
 	cmd.AddCommand(newGitCmd())
@@ -34,7 +34,7 @@ func newGitCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			message, _ := cmd.Flags().GetString("message")
 			paths, _ := cmd.Flags().GetString("paths")
-			return cli.RunGit(clients, args[0], message, paths)
+			return cli.RunGit(clients, sessionID, args[0], message, paths)
 		},
 	}
 	cmd.Flags().StringP("message", "m", "", "commit message")

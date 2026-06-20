@@ -136,6 +136,7 @@ func (ReloadTarget) EnumDescriptor() ([]byte, []int) {
 
 type ReloadRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Target        ReloadTarget           `protobuf:"varint,1,opt,name=target,proto3,enum=dotfilesd.v1.ReloadTarget" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -169,6 +170,13 @@ func (x *ReloadRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ReloadRequest.ProtoReflect.Descriptor instead.
 func (*ReloadRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ReloadRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *ReloadRequest) GetTarget() ReloadTarget {
@@ -224,6 +232,7 @@ func (x *ReloadResponse) GetResults() []*ReloadResponse_ReloadResult {
 
 type ReconfigureRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	LogLevel      LogLevel               `protobuf:"varint,1,opt,name=log_level,json=logLevel,proto3,enum=dotfilesd.v1.LogLevel" json:"log_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -257,6 +266,13 @@ func (x *ReconfigureRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ReconfigureRequest.ProtoReflect.Descriptor instead.
 func (*ReconfigureRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ReconfigureRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *ReconfigureRequest) GetLogLevel() LogLevel {
@@ -320,6 +336,7 @@ func (x *ReconfigureResponse) GetMessage() string {
 
 type RestartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -352,6 +369,13 @@ func (x *RestartRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RestartRequest.ProtoReflect.Descriptor instead.
 func (*RestartRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RestartRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 type RestartResponse struct {
@@ -462,21 +486,27 @@ var File_proto_dotfilesd_v1_dotfilesdv1_config_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/config.proto\x12\fdotfilesd.v1\"C\n" +
-	"\rReloadRequest\x122\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/config.proto\x12\fdotfilesd.v1\"b\n" +
+	"\rReloadRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x122\n" +
 	"\x06target\x18\x01 \x01(\x0e2\x1a.dotfilesd.v1.ReloadTargetR\x06target\"\xb1\x01\n" +
 	"\x0eReloadResponse\x12C\n" +
 	"\aresults\x18\x01 \x03(\v2).dotfilesd.v1.ReloadResponse.ReloadResultR\aresults\x1aZ\n" +
 	"\fReloadResult\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"I\n" +
-	"\x12ReconfigureRequest\x123\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"h\n" +
+	"\x12ReconfigureRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x123\n" +
 	"\tlog_level\x18\x01 \x01(\x0e2\x16.dotfilesd.v1.LogLevelR\blogLevel\"I\n" +
 	"\x13ReconfigureResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x10\n" +
-	"\x0eRestartRequest\"+\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"/\n" +
+	"\x0eRestartRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\"+\n" +
 	"\x0fRestartResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage*\x8c\x01\n" +
 	"\bLogLevel\x12\x19\n" +

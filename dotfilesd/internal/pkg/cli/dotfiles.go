@@ -9,8 +9,12 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
-func RunStatus(clients *Clients) error {
-	resp, err := clients.Dot.Status(context.Background(), connect.NewRequest(&dotfilesdv1.StatusRequest{}))
+func RunStatus(clients *Clients, sessionID string) error {
+	req := connect.NewRequest(&dotfilesdv1.StatusRequest{})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Dot.Status(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("status failed: %w", err)
 	}
@@ -26,15 +30,19 @@ func RunStatus(clients *Clients) error {
 	return nil
 }
 
-func RunGit(clients *Clients, actionStr, message, paths string) error {
+func RunGit(clients *Clients, sessionID, actionStr, message, paths string) error {
 	action := ParseGitAction(actionStr)
 	if action == dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED {
 		return fmt.Errorf("unknown git action: %s (valid: status, diff, add, commit, push, log)", actionStr)
 	}
 
-	resp, err := clients.Dot.Git(context.Background(), connect.NewRequest(&dotfilesdv1.GitRequest{
+	req := connect.NewRequest(&dotfilesdv1.GitRequest{
 		Action: action, Message: message, Paths: paths,
-	}))
+	})
+	if sessionID != "" {
+		req.Header().Set("Session-Id", sessionID)
+	}
+	resp, err := clients.Dot.Git(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("git failed: %w", err)
 	}

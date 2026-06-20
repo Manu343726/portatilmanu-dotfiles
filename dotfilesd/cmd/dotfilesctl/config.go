@@ -22,7 +22,7 @@ func newConfigCmd() *cobra.Command {
 			if len(args) > 0 {
 				targetStr = args[0]
 			}
-			return cli.RunReload(clients, targetStr)
+			return cli.RunReload(clients, sessionID, targetStr)
 		},
 	})
 	var reconfigureCmd = &cobra.Command{
@@ -31,7 +31,7 @@ func newConfigCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			levelStr, _ := cmd.Flags().GetString("log-level")
-			return cli.RunReconfigure(clients, levelStr)
+			return cli.RunReconfigure(clients, sessionID, levelStr)
 		},
 	}
 	reconfigureCmd.Flags().String("log-level", "", "new log level (trace, debug, info, warn, error)")
@@ -42,7 +42,7 @@ func newConfigCmd() *cobra.Command {
 		Short: "gracefully restart the daemon",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunRestart(clients)
+			return cli.RunRestart(clients, sessionID)
 		},
 	})
 	return cmd

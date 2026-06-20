@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	verbose  bool
-	noVerify bool
-	port     string
-	clients  *cli.Clients
+	verbose   bool
+	noVerify  bool
+	port      string
+	sessionID string
+	clients   *cli.Clients
 )
 
 func newRootCmd() *cobra.Command {
@@ -63,12 +64,14 @@ func newRootCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose logging to stderr")
 	cmd.PersistentFlags().BoolVar(&noVerify, "no-verify", false, "skip source version check")
 	cmd.PersistentFlags().StringVarP(&port, "port", "p", "", "daemon port (default DOTFILESD_PORT env or 9105)")
+	cmd.PersistentFlags().StringVar(&sessionID, "session", "", "session ID for grouping requests")
 
 	cmd.AddCommand(newSystemCmd())
 	cmd.AddCommand(newDotfilesCmd())
 	cmd.AddCommand(newExecCmd())
 	cmd.AddCommand(newConfigCmd())
 	cmd.AddCommand(newMCPCmd())
+	cmd.AddCommand(newSessionCmd())
 
 	return cmd
 }

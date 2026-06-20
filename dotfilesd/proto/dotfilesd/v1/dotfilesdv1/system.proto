@@ -11,14 +11,18 @@ service SystemService {
   rpc SudoMethods(SudoMethodsRequest) returns (SudoMethodsResponse);
 }
 
-message PingRequest {}
+message PingRequest {
+  string session_id = 100;
+}
 message PingResponse {
   string version = 1;
   int64 pid = 2;
   int64 uptime_secs = 3;
 }
 
-message SystemInfoRequest {}
+message SystemInfoRequest {
+  string session_id = 100;
+}
 message SystemInfoResponse {
   string os = 1;
   string kernel = 2;
@@ -32,7 +36,9 @@ message SystemInfoResponse {
   string i3_version = 10;
 }
 
-message SudoMethodsRequest {}
+message SudoMethodsRequest {
+  string session_id = 100;
+}
 message SudoMethodsResponse {
   repeated string available_methods = 1;
   string current_method = 2;

@@ -15,10 +15,12 @@ import (
 type systemServer struct {
 	mu        sync.Mutex
 	startedAt time.Time
+	sessions  *SessionStore
 }
 
 func (s *systemServer) Ping(ctx context.Context, req *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
 	slog.Log(ctx, levelTrace, "Ping", "request", req.Msg)
+	s.sessions.Resolve(GetSessionID(req))
 
 	resp := connect.NewResponse(&dotfilesdv1.PingResponse{
 		Version:    "0.1.0",
@@ -32,6 +34,7 @@ func (s *systemServer) Ping(ctx context.Context, req *connect.Request[dotfilesdv
 
 func (s *systemServer) SystemInfo(ctx context.Context, req *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
 	slog.Log(ctx, levelTrace, "SystemInfo", "request", req.Msg)
+	s.sessions.Resolve(GetSessionID(req))
 
 	kernel, _ := runCmd("uname", "-r")
 	shell := os.Getenv("SHELL")
@@ -72,6 +75,7 @@ func (s *systemServer) SystemInfo(ctx context.Context, req *connect.Request[dotf
 
 func (s *systemServer) SudoMethods(ctx context.Context, req *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
 	slog.Log(ctx, levelTrace, "SudoMethods", "request", req.Msg)
+	s.sessions.Resolve(GetSessionID(req))
 
 	var available []string
 	for _, name := range []string{"pkexec", "sudo"} {

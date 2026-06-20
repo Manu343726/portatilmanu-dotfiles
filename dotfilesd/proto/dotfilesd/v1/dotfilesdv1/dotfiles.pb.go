@@ -84,6 +84,7 @@ func (GitAction) EnumDescriptor() ([]byte, []int) {
 
 type StatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -116,6 +117,13 @@ func (x *StatusRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
 func (*StatusRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *StatusRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 type StatusResponse struct {
@@ -212,6 +220,7 @@ func (x *StatusResponse) GetHostname() string {
 
 type GitRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Action        GitAction              `protobuf:"varint,1,opt,name=action,proto3,enum=dotfilesd.v1.GitAction" json:"action,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	Paths         string                 `protobuf:"bytes,3,opt,name=paths,proto3" json:"paths,omitempty"`
@@ -247,6 +256,13 @@ func (x *GitRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GitRequest.ProtoReflect.Descriptor instead.
 func (*GitRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GitRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 func (x *GitRequest) GetAction() GitAction {
@@ -334,8 +350,10 @@ var File_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto protoreflect.FileDescript
 
 const file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDesc = "" +
 	"\n" +
-	"-proto/dotfilesd/v1/dotfilesdv1/dotfiles.proto\x12\fdotfilesd.v1\"\x0f\n" +
-	"\rStatusRequest\"\xdd\x01\n" +
+	"-proto/dotfilesd/v1/dotfilesdv1/dotfiles.proto\x12\fdotfilesd.v1\".\n" +
+	"\rStatusRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\"\xdd\x01\n" +
 	"\x0eStatusResponse\x12\x1b\n" +
 	"\tgit_clean\x18\x01 \x01(\bR\bgitClean\x12\x1d\n" +
 	"\n" +
@@ -346,9 +364,11 @@ const file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDesc = "" +
 	"\vlast_commit\x18\x05 \x01(\tR\n" +
 	"lastCommit\x12\x16\n" +
 	"\x06uptime\x18\x06 \x01(\tR\x06uptime\x12\x1a\n" +
-	"\bhostname\x18\a \x01(\tR\bhostname\"m\n" +
+	"\bhostname\x18\a \x01(\tR\bhostname\"\x8c\x01\n" +
 	"\n" +
-	"GitRequest\x12/\n" +
+	"GitRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x12/\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x17.dotfilesd.v1.GitActionR\x06action\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
 	"\x05paths\x18\x03 \x01(\tR\x05paths\"Z\n" +
