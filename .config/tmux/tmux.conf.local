@@ -267,7 +267,7 @@ tmux_conf_theme_right_separator_sub='\uE0B3'
 #     - #{username_ssh}
 tmux_conf_theme_status_left=" ❐ #S | ↑#{?uptime_y, #{uptime_y}y,}#{?uptime_d, #{uptime_d}d,}#{?uptime_h, #{uptime_h}h,}#{?uptime_m, #{uptime_m}m,} "
 #tmux_conf_theme_status_left=" ❐ #S | ↑#{?uptime_y, #{uptime_y}y,}#{?uptime_d, #{uptime_d}d,}#{?uptime_h, #{uptime_h}h,}#{?uptime_m, #{uptime_m}m,} | #{pretty_pane_current_path} "
-tmux_conf_theme_status_right=" #{prefix}#{mouse}#{pairing}#{synchronized} #{asus_profile} BAT #{battery_info}#[default] #{cpu_info}#[default] #{cpu_temp}#[default] #{ram_info}#[default] , %R , %d %b | #{layout_info} | #{username}#{root} | #{hostname} "
+tmux_conf_theme_status_right=" #{prefix}#{mouse}#{pairing}#{synchronized} #{asus_profile} #{battery_info}#[default] #{cpu_info}#[default] #{cpu_temp}#[default] #{ram_info}#[default] , %R , %d %b | #{layout_info} | #{username}#{root} | #{hostname} "
 
 # status left style
 tmux_conf_theme_status_left_fg="$tmux_conf_theme_colour_6,$tmux_conf_theme_colour_7,$tmux_conf_theme_colour_8"
@@ -585,31 +585,35 @@ tmux_conf_uninstall_plugins_on_reload=true
 # # usage: #{battery_info}
 # battery_info() {
 #   local b="/sys/class/power_supply/BAT0"
-#   local s c ef en p m
+#   local s c ef en p m bar f='◼' e='◻'
 #   s=$(cat "$b/status" 2>/dev/null)     || s="Unknown"
 #   c=$(cat "$b/capacity" 2>/dev/null)   || c=0
 #   ef=$(cat "$b/energy_full" 2>/dev/null) || ef=0
 #   en=$(cat "$b/energy_now" 2>/dev/null)  || en=0
 #   p=$(cat "$b/power_now" 2>/dev/null)    || p=0
+#   [ "$c" -gt 100 ] 2>/dev/null && c=100
+#   for ((i=0; i<10; i++)); do
+#     (( i * 100 < c * 10 )) && bar="$bar$f" || bar="$bar$e"
+#   done
 #   case "$s" in
 #     "Charging")
 #       if [ "$c" -ge 100 ] 2>/dev/null; then
-#         printf 'Full'
+#         printf '#[fg=#A6E22E]PLUGGED#[default]'
 #       elif [ "$p" -gt 0 ] 2>/dev/null; then
 #         m=$(( (ef - en) * 60 / p ))
-#         printf '↑ %d%% %d:%02d' "$c" "$((m / 60))" "$((m % 60))"
+#         printf '#[fg=#E8871A]CHARGING#[default] %s %d%% ETA %d:%02d' "$bar" "$c" "$((m / 60))" "$((m % 60))"
 #       else
-#         printf '↑ %d%%' "$c"
+#         printf '#[fg=#E8871A]CHARGING#[default] %s %d%%' "$bar" "$c"
 #       fi ;;
 #     "Discharging")
 #       if [ "$p" -gt 0 ] 2>/dev/null; then
 #         m=$(( en * 60 / p ))
-#         printf '↓ %d%% %d:%02d' "$c" "$((m / 60))" "$((m % 60))"
+#         printf '#[fg=#E82572]BAT#[default] %s %d%% LEFT %d:%02d' "$bar" "$c" "$((m / 60))" "$((m % 60))"
 #       else
-#         printf '↓ %d%%' "$c"
+#         printf '#[fg=#E82572]BAT#[default] %s %d%%' "$bar" "$c"
 #       fi ;;
 #     "Full")
-#       printf 'Full' ;;
+#       printf '#[fg=#A6E22E]PLUGGED#[default]' ;;
 #     *)
 #       printf '%d%%' "$c" ;;
 #   esac
