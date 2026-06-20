@@ -36,24 +36,6 @@ func RunExec(clients *Clients, sessionID, command string) error {
 	return nil
 }
 
-func RunSubmitFeedback(clients *Clients, sessionID, feedbackID, data string) (string, error) {
-	req := connect.NewRequest(&dotfilesdv1.SubmitFeedbackRequest{
-		FeedbackId: feedbackID,
-		Data:       data,
-	})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
-	resp, err := clients.Exec.SubmitFeedback(context.Background(), req)
-	if err != nil {
-		return "", fmt.Errorf("submit feedback: %w", err)
-	}
-	if resp.Msg.FeedbackRequired != nil {
-		return "", fmt.Errorf("feedback required: %s", resp.Msg.FeedbackRequired.Prompt)
-	}
-	return resp.Msg.Stdout, nil
-}
-
 func RunSudoExec(clients *Clients, sessionID, command string) error {
 	method := dotfilesdv1.SudoMethod_SUDO_METHOD_TERMINAL
 	if _, err := os.Stat("/dev/tty"); os.IsNotExist(err) {

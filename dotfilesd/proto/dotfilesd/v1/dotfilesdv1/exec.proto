@@ -6,15 +6,11 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 // ExecService - command execution.
 service ExecService {
-  // Simple unary exec (no sudo). May return feedback_required instead of
-  // a final result; the caller should then invoke SubmitFeedback to continue.
+  // Simple unary exec (no sudo).
   rpc Exec(ExecRequest) returns (ExecResponse);
   // Challenge-response sudo. The first call omits password; if the daemon
   // needs auth it returns AuthChallenge. The client retries with the password.
   rpc SudoExec(SudoExecRequest) returns (SudoExecResponse);
-  // SubmitFeedback sends the user's response to a pending feedback request
-  // and continues execution. Returns a final result or another feedback request.
-  rpc SubmitFeedback(SubmitFeedbackRequest) returns (SubmitFeedbackResponse);
 }
 
 enum SudoMethod {
@@ -34,41 +30,6 @@ message ExecResponse {
   int32 exit_code = 1;
   string stdout = 2;
   string stderr = 3;
-  // If set, the daemon needs user input before it can produce a final result.
-  // The caller should show the prompt to the user and call SubmitFeedback
-  // with the matching feedback_id.
-  FeedbackRequired feedback_required = 4;
-}
-
-// FeedbackRequired describes what the daemon needs from the user to continue.
-message FeedbackRequired {
-  // Unique identifier for this feedback request. Echo it back in
-  // SubmitFeedbackRequest so the daemon can correlate.
-  string feedback_id = 1;
-  // The category of feedback: "input" for arbitrary text, "confirm" for yes/no.
-  string type = 2;
-  // Human-readable prompt for the user.
-  string prompt = 3;
-  // Machine-readable context that may help the client decide how to respond.
-  map<string, string> context = 4;
-}
-
-message SubmitFeedbackRequest {
-  string session_id = 100;
-  // The feedback_id from the FeedbackRequired that prompted this response.
-  string feedback_id = 1;
-  // For type "input": the text the user entered.
-  // For type "confirm": "true" or "false".
-  string data = 2;
-}
-
-message SubmitFeedbackResponse {
-  int32 exit_code = 1;
-  string stdout = 2;
-  string stderr = 3;
-  // If the daemon needs more feedback after processing this response,
-  // this field is set again.
-  FeedbackRequired feedback_required = 4;
 }
 
 // --- SudoExec protocol (challenge-response over unary RPC) -----------------

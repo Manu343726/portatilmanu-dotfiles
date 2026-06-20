@@ -73,37 +73,6 @@ func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*c
 	return resp, nil
 }
 
-func (s *execServer) SubmitFeedback(ctx context.Context, req *connect.Request[dotfilesdv1.SubmitFeedbackRequest]) (*connect.Response[dotfilesdv1.SubmitFeedbackResponse], error) {
-	slog.Log(ctx, levelTrace, "SubmitFeedback", "feedback_id", req.Msg.FeedbackId)
-
-	session := s.sessions.Resolve(GetSessionID(req))
-	if session.id == "" {
-		return connect.NewResponse(&dotfilesdv1.SubmitFeedbackResponse{
-			ExitCode: -1,
-			Stderr:   "feedback requires a persistent session",
-		}), nil
-	}
-
-	data, ok := session.ResolveFeedback(req.Msg.FeedbackId)
-	if !ok {
-		slog.Warn("feedback not found", "feedback_id", req.Msg.FeedbackId)
-		return connect.NewResponse(&dotfilesdv1.SubmitFeedbackResponse{
-			ExitCode: -1,
-			Stderr:   fmt.Sprintf("feedback %s not found or already resolved", req.Msg.FeedbackId),
-		}), nil
-	}
-
-	slog.Debug("feedback resolved", "feedback_id", req.Msg.FeedbackId, "data", truncate(data, 100))
-
-	resp := connect.NewResponse(&dotfilesdv1.SubmitFeedbackResponse{
-		ExitCode: 0,
-		Stdout:   data,
-	})
-
-	slog.Log(ctx, levelTrace, "SubmitFeedback done", "feedback_id", req.Msg.FeedbackId)
-	return resp, nil
-}
-
 func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
 	r := req.Msg
 	s.sessions.Resolve(GetSessionID(req))

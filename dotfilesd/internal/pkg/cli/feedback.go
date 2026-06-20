@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -75,6 +76,28 @@ type inputHandler struct {
 
 func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[dotfilesdv1.InputRequest]) (*connect.Response[dotfilesdv1.InputResponse], error) {
 	slog.Debug("input requested", "prompt", req.Msg.Prompt, "default", req.Msg.Default)
+
+	if mcpBridge != nil {
+		raw, err := mcpBridge.SendRequest("feedback/input_request", map[string]any{
+			"prompt":  req.Msg.Prompt,
+			"default": req.Msg.Default,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP input request: %w", err))
+		}
+		var rpcResp struct {
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(raw, &rpcResp); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
+		}
+		var pbResp dotfilesdv1.InputResponse
+		if err := json.Unmarshal(rpcResp.Result, &pbResp); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse InputResponse: %w", err))
+		}
+		return connect.NewResponse(&pbResp), nil
+	}
+
 	if h.handler == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("input handler not set"))
 	}
@@ -94,6 +117,28 @@ type confirmHandler struct {
 
 func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error) {
 	slog.Debug("confirm requested", "message", req.Msg.Message, "default", req.Msg.DefaultConfirm)
+
+	if mcpBridge != nil {
+		raw, err := mcpBridge.SendRequest("feedback/confirm", map[string]any{
+			"message":         req.Msg.Message,
+			"default_confirm": req.Msg.DefaultConfirm,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP confirm request: %w", err))
+		}
+		var rpcResp struct {
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(raw, &rpcResp); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
+		}
+		var pbResp dotfilesdv1.ConfirmResponse
+		if err := json.Unmarshal(rpcResp.Result, &pbResp); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse ConfirmResponse: %w", err))
+		}
+		return connect.NewResponse(&pbResp), nil
+	}
+
 	if h.handler == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("confirm handler not set"))
 	}

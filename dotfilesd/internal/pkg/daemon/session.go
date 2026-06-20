@@ -88,35 +88,25 @@ func (sh *shellSession) Close() error {
 	return nil
 }
 
-type pendingFeedback struct {
-	typ    string
-	prompt string
-	ctx    map[string]string
-	respCh chan string
-}
-
 type Session struct {
-	id               string
-	createdAt        time.Time
-	lastActive       time.Time
-	requestCount     int
-	finalized        bool
-	data             map[string]string
-	shell            *shellSession
-	callbackURL      string
-	pendingFeedbacks map[string]*pendingFeedback
-	pfMu             sync.Mutex
-	mu               sync.RWMutex
+	id            string
+	createdAt     time.Time
+	lastActive    time.Time
+	requestCount  int
+	finalized     bool
+	data          map[string]string
+	shell         *shellSession
+	callbackURL   string
+	mu            sync.RWMutex
 }
 
 func newSession(id string) *Session {
 	now := time.Now()
 	return &Session{
-		id:               id,
-		createdAt:        now,
-		lastActive:       now,
-		data:             make(map[string]string),
-		pendingFeedbacks: make(map[string]*pendingFeedback),
+		id:         id,
+		createdAt:  now,
+		lastActive: now,
+		data:       make(map[string]string),
 	}
 }
 
@@ -197,49 +187,6 @@ func (s *Session) RequestInput(ctx context.Context, prompt, defaultValue string)
 		return "", fmt.Errorf("request input: %w", err)
 	}
 	return resp.Msg.Value, nil
-}
-
-func (s *Session) RegisterFeedback(id, typ, prompt string, ctx map[string]string) chan string {
-	s.pfMu.Lock()
-	defer s.pfMu.Unlock()
-	ch := make(chan string, 1)
-	s.pendingFeedbacks[id] = &pendingFeedback{
-		typ:    typ,
-		prompt: prompt,
-		ctx:    ctx,
-		respCh: ch,
-	}
-	return ch
-}
-
-func (s *Session) ResolveFeedback(id string) (string, bool) {
-	s.pfMu.Lock()
-	defer s.pfMu.Unlock()
-	pf, ok := s.pendingFeedbacks[id]
-	if !ok {
-		return "", false
-	}
-	delete(s.pendingFeedbacks, id)
-	select {
-	case data := <-pf.respCh:
-		return data, true
-	default:
-		return "", false
-	}
-}
-
-func (s *Session) WaitForFeedback(id string) (string, error) {
-	s.pfMu.Lock()
-	pf, ok := s.pendingFeedbacks[id]
-	s.pfMu.Unlock()
-	if !ok {
-		return "", fmt.Errorf("feedback %s not found", id)
-	}
-	data, ok := <-pf.respCh
-	if !ok {
-		return "", fmt.Errorf("feedback %s channel closed", id)
-	}
-	return data, nil
 }
 
 func (s *Session) RequestConfirm(ctx context.Context, message string, defaultConfirm bool) (bool, error) {

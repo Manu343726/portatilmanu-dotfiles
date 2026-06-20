@@ -37,22 +37,15 @@ const (
 	ExecServiceExecProcedure = "/dotfilesd.v1.ExecService/Exec"
 	// ExecServiceSudoExecProcedure is the fully-qualified name of the ExecService's SudoExec RPC.
 	ExecServiceSudoExecProcedure = "/dotfilesd.v1.ExecService/SudoExec"
-	// ExecServiceSubmitFeedbackProcedure is the fully-qualified name of the ExecService's
-	// SubmitFeedback RPC.
-	ExecServiceSubmitFeedbackProcedure = "/dotfilesd.v1.ExecService/SubmitFeedback"
 )
 
 // ExecServiceClient is a client for the dotfilesd.v1.ExecService service.
 type ExecServiceClient interface {
-	// Simple unary exec (no sudo). May return feedback_required instead of
-	// a final result; the caller should then invoke SubmitFeedback to continue.
+	// Simple unary exec (no sudo).
 	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
 	// Challenge-response sudo. The first call omits password; if the daemon
 	// needs auth it returns AuthChallenge. The client retries with the password.
 	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
-	// SubmitFeedback sends the user's response to a pending feedback request
-	// and continues execution. Returns a final result or another feedback request.
-	SubmitFeedback(context.Context, *connect.Request[dotfilesdv1.SubmitFeedbackRequest]) (*connect.Response[dotfilesdv1.SubmitFeedbackResponse], error)
 }
 
 // NewExecServiceClient constructs a client for the dotfilesd.v1.ExecService service. By default, it
@@ -78,20 +71,13 @@ func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(execServiceMethods.ByName("SudoExec")),
 			connect.WithClientOptions(opts...),
 		),
-		submitFeedback: connect.NewClient[dotfilesdv1.SubmitFeedbackRequest, dotfilesdv1.SubmitFeedbackResponse](
-			httpClient,
-			baseURL+ExecServiceSubmitFeedbackProcedure,
-			connect.WithSchema(execServiceMethods.ByName("SubmitFeedback")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // execServiceClient implements ExecServiceClient.
 type execServiceClient struct {
-	exec           *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
-	sudoExec       *connect.Client[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse]
-	submitFeedback *connect.Client[dotfilesdv1.SubmitFeedbackRequest, dotfilesdv1.SubmitFeedbackResponse]
+	exec     *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
+	sudoExec *connect.Client[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse]
 }
 
 // Exec calls dotfilesd.v1.ExecService.Exec.
@@ -104,22 +90,13 @@ func (c *execServiceClient) SudoExec(ctx context.Context, req *connect.Request[d
 	return c.sudoExec.CallUnary(ctx, req)
 }
 
-// SubmitFeedback calls dotfilesd.v1.ExecService.SubmitFeedback.
-func (c *execServiceClient) SubmitFeedback(ctx context.Context, req *connect.Request[dotfilesdv1.SubmitFeedbackRequest]) (*connect.Response[dotfilesdv1.SubmitFeedbackResponse], error) {
-	return c.submitFeedback.CallUnary(ctx, req)
-}
-
 // ExecServiceHandler is an implementation of the dotfilesd.v1.ExecService service.
 type ExecServiceHandler interface {
-	// Simple unary exec (no sudo). May return feedback_required instead of
-	// a final result; the caller should then invoke SubmitFeedback to continue.
+	// Simple unary exec (no sudo).
 	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
 	// Challenge-response sudo. The first call omits password; if the daemon
 	// needs auth it returns AuthChallenge. The client retries with the password.
 	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
-	// SubmitFeedback sends the user's response to a pending feedback request
-	// and continues execution. Returns a final result or another feedback request.
-	SubmitFeedback(context.Context, *connect.Request[dotfilesdv1.SubmitFeedbackRequest]) (*connect.Response[dotfilesdv1.SubmitFeedbackResponse], error)
 }
 
 // NewExecServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -141,20 +118,12 @@ func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(execServiceMethods.ByName("SudoExec")),
 		connect.WithHandlerOptions(opts...),
 	)
-	execServiceSubmitFeedbackHandler := connect.NewUnaryHandler(
-		ExecServiceSubmitFeedbackProcedure,
-		svc.SubmitFeedback,
-		connect.WithSchema(execServiceMethods.ByName("SubmitFeedback")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/dotfilesd.v1.ExecService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExecServiceExecProcedure:
 			execServiceExecHandler.ServeHTTP(w, r)
 		case ExecServiceSudoExecProcedure:
 			execServiceSudoExecHandler.ServeHTTP(w, r)
-		case ExecServiceSubmitFeedbackProcedure:
-			execServiceSubmitFeedbackHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -170,8 +139,4 @@ func (UnimplementedExecServiceHandler) Exec(context.Context, *connect.Request[do
 
 func (UnimplementedExecServiceHandler) SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.SudoExec is not implemented"))
-}
-
-func (UnimplementedExecServiceHandler) SubmitFeedback(context.Context, *connect.Request[dotfilesdv1.SubmitFeedbackRequest]) (*connect.Response[dotfilesdv1.SubmitFeedbackResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.SubmitFeedback is not implemented"))
 }
