@@ -267,7 +267,7 @@ tmux_conf_theme_right_separator_sub='\uE0B3'
 #     - #{username_ssh}
 tmux_conf_theme_status_left=" ❐ #S | ↑#{?uptime_y, #{uptime_y}y,}#{?uptime_d, #{uptime_d}d,}#{?uptime_h, #{uptime_h}h,}#{?uptime_m, #{uptime_m}m,} "
 #tmux_conf_theme_status_left=" ❐ #S | ↑#{?uptime_y, #{uptime_y}y,}#{?uptime_d, #{uptime_d}d,}#{?uptime_h, #{uptime_h}h,}#{?uptime_m, #{uptime_m}m,} | #{pretty_pane_current_path} "
-tmux_conf_theme_status_right=" #{prefix}#{mouse}#{pairing}#{synchronized} #{asus_profile} BAT #{?battery_status,#{battery_status},}#{?battery_bar, #{battery_bar},}#{?battery_percentage, #{battery_percentage},}#[default] #{cpu_info}#[default] #{cpu_temp}#[default] #{ram_info}#[default] , %R , %d %b | #{layout_info} | #{username}#{root} | #{hostname} "
+tmux_conf_theme_status_right=" #{prefix}#{mouse}#{pairing}#{synchronized} #{asus_profile} BAT #{battery_info}#[default] #{cpu_info}#[default] #{cpu_temp}#[default] #{ram_info}#[default] , %R , %d %b | #{layout_info} | #{username}#{root} | #{hostname} "
 
 # status left style
 tmux_conf_theme_status_left_fg="$tmux_conf_theme_colour_6,$tmux_conf_theme_colour_7,$tmux_conf_theme_colour_8"
@@ -580,6 +580,40 @@ tmux_conf_uninstall_plugins_on_reload=true
 # # usage: #{layout_info}
 # layout_info() {
 #   $HOME/.local/bin/xkb_group
+# }
+# 
+# # usage: #{battery_info}
+# battery_info() {
+#   local b="/sys/class/power_supply/BAT0"
+#   local s c ef en p m
+#   s=$(cat "$b/status" 2>/dev/null)     || s="Unknown"
+#   c=$(cat "$b/capacity" 2>/dev/null)   || c=0
+#   ef=$(cat "$b/energy_full" 2>/dev/null) || ef=0
+#   en=$(cat "$b/energy_now" 2>/dev/null)  || en=0
+#   p=$(cat "$b/power_now" 2>/dev/null)    || p=0
+#   case "$s" in
+#     "Charging")
+#       if [ "$c" -ge 100 ] 2>/dev/null; then
+#         printf 'Full'
+#       elif [ "$p" -gt 0 ] 2>/dev/null; then
+#         m=$(( (ef - en) * 60 / p ))
+#         printf '↑ %d%% %d:%02d' "$c" "$((m / 60))" "$((m % 60))"
+#       else
+#         printf '↑ %d%%' "$c"
+#       fi ;;
+#     "Discharging")
+#       if [ "$p" -gt 0 ] 2>/dev/null; then
+#         m=$(( en * 60 / p ))
+#         printf '↓ %d%% %d:%02d' "$c" "$((m / 60))" "$((m % 60))"
+#       else
+#         printf '↓ %d%%' "$c"
+#       fi ;;
+#     "Full")
+#       printf 'Full' ;;
+#     *)
+#       printf '%d%%' "$c" ;;
+#   esac
+#   sleep 30
 # }
 #
 # "$@"
