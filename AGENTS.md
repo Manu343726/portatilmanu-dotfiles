@@ -10,17 +10,19 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
 
 2. **Read docs first.** Before doing any work, read `~/dotfilesd/README.md` and `~/dotfilesd/docs/` for context. Follow the development guide in `docs/development.md`.
 
-3. **Check `.agents/skills/`** for project-specific skills before working. Load any relevant skill with the skills tool.
+3. **NEVER run shell commands with `sudo`.** The agent runs in a non-interactive shell; `sudo` triggers a password prompt that the agent cannot answer, and failed attempts will lock the sudo session. Use the `exec_run` MCP tool with `sudo: true` instead — it asks the user for the password through a secure feedback channel, then passes it to `sudo -S` without exposing it to the agent.
 
-4. Keep changes idempotent — reloading configs should work cleanly.
+4. **Check `.agents/skills/`** for project-specific skills before working. Load any relevant skill with the skills tool.
 
-5. Follow the Monokai palette (`#272822` bg, `#A6E22E` accent, etc.) when adding visual configs.
+5. Keep changes idempotent — reloading configs should work cleanly.
 
-6. **Use the Makefile for building and installing the daemon/CLI.** Run `make build` to compile, then `make install` to deploy binaries. After modifying daemon or client code, always run `make install` and restart the daemon if needed.
+6. Follow the Monokai palette (`#272822` bg, `#A6E22E` accent, etc.) when adding visual configs.
 
-7. **Use the dotfilesd daemon for dotfiles operations.** The daemon runs as a systemd user service and exposes:
+7. **Use the Makefile for building and installing the daemon/CLI.** Run `make build` to compile, then `make install` to deploy binaries. After modifying daemon or client code, always run `make install` and restart the daemon if needed.
+
+8. **Use the dotfilesd daemon for dotfiles operations.** The daemon runs as a systemd user service and exposes:
    - **MCP** via `dotfilesctl mcp` stdio — for AI agents (tools: `system_ping`, `system_info`, `system_sudo`, `dotfiles_status`, `dotfiles_git`, `exec_run`, `config_reload`).
    - **Connect RPC** at `http://127.0.0.1:9105` — accessible via the `dotfilesctl` CLI client (`~/dotfilesd/cmd/dotfilesctl/main.go`).
-   - Prefer `dotfilesctl exec --sudo` for privileged commands instead of raw `pkexec`.
+   - Use `exec_run` with `sudo: true` for privileged commands — the daemon asks the user for the password securely via the feedback system.
    - After modifying daemon/client code, run `make install` and restart the daemon if needed.
    - See `~/dotfilesd/docs/` for full daemon documentation.
