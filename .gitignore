@@ -8,6 +8,7 @@
 !/.docs/
 /.docs/*
 !/.docs/*.md
+
 !/.agents/
 /.nvm/
 !/.zshrc
