@@ -19,7 +19,7 @@ type Info struct {
 func Get(repoDir string) Info {
 	info := Info{}
 
-	if out, err := exec.Command("git", "-C", repoDir, "rev-parse", "--short", "HEAD").Output(); err == nil {
+	if out, err := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD").Output(); err == nil {
 		info.Hash = strings.TrimSpace(string(out))
 	}
 	if out, err := exec.Command("git", "-C", repoDir, "log", "-1", "--format=%s").Output(); err == nil {

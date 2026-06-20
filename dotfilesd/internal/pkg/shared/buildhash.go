@@ -12,7 +12,7 @@ func CheckBuildHash(buildHash string, noVerify bool, name string) {
 		return
 	}
 	srcDir := os.Getenv("HOME") + "/dotfilesd"
-	out, err := exec.Command("git", "-C", srcDir, "rev-parse", "--short", "HEAD").Output()
+	out, err := exec.Command("git", "-C", srcDir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return
 	}

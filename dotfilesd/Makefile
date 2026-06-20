@@ -22,7 +22,7 @@ CMD_DIR     := ./cmd
 GO          := go
 HASH_FILE   := $(BINARY_DIR)/.dotfilesd.hash
 
-BUILD_HASH  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
+BUILD_HASH  := $(shell git rev-parse HEAD 2>/dev/null || echo "dev")
 GOFLAGS     := -ldflags="-s -w -X main.buildHash=$(BUILD_HASH)"
 
 export PATH := $(HOME)/go/bin:$(PATH)
@@ -54,7 +54,7 @@ build:
 # -- Install (fast: skip if hash unchanged) -----------------------------------
 
 install:
-	@h=$$(git rev-parse --short HEAD 2>/dev/null || echo "dev"); \
+	@h=$$(git rev-parse HEAD 2>/dev/null || echo "dev"); \
 	if [ -f $(HASH_FILE) ] && [ "$$(cat $(HASH_FILE))" = "$$h" ] && [ -x $(DAEMON_BIN) ] && [ -x $(CLI_BIN) ]; then \
 		echo "  binaries up to date (hash: $$h)"; \
 	else \
