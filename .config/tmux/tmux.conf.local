@@ -533,7 +533,7 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   else                         c='#[fg=#E82572]'
 #   fi
 #   printf 'RAM %s%sGiB %d%% ' "$c" "${gb/,/.}" "$pct"
-#   for ((i=0; i<n; i++)); do (( i * 100 < pct * n )) && printf "$f" || printf '#[default]%s' "$e"; done
+#   for ((i=0; i<n; i++)); do (( i * 100 < pct * n )) && printf "$f" || printf "$e"; done
 #   printf '#[default]'
 #   sleep 5
 # }
