@@ -47,3 +47,6 @@ kmscon sets `TERM=kmscon` by default. The `.zshrc` overrides this to
 - Configured on tty2 only — tty1 stays with the DM for safety
 - Falls back to `getty@.service` if kmscon fails to start
 - `Alt+Fn` does not switch VTs inside kmscon; use `Ctrl+Alt+Fn`
+- Multi-monitor: `largest` mode — TTY shows only on the largest connected display
+  (external when docked, laptop when undocked). Disabled outputs in the TTY are
+  automatically re-enabled by the display manager when switching back to X11.
