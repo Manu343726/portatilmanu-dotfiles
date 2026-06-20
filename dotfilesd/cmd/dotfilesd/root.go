@@ -69,6 +69,8 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 	}
 
+	cmd.AddCommand(newVersionCmd())
+
 	cmd.Flags().StringVarP(&rpcPort, "port", "p", "", "RPC port (env DOTFILESD_PORT, config: port)")
 	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "skip source version check")
 	cmd.Flags().StringVar(&logDir, "log-dir", "", "log directory (config: log.dir)")

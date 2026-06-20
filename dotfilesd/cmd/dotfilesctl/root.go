@@ -73,6 +73,7 @@ func newRootCmd() *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&port, "port", "p", "", "daemon port (default DOTFILESD_PORT env or 9105)")
 	cmd.PersistentFlags().StringVar(&sessionID, "session", "", "session ID for grouping requests")
 
+	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newSystemCmd())
 	cmd.AddCommand(newDotfilesCmd())
 	cmd.AddCommand(newExecCmd())
