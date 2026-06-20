@@ -525,14 +525,14 @@ tmux_conf_uninstall_plugins_on_reload=true
 #
 # # usage: #{ram_info}
 # ram_info() {
-#   local pct i f='◼' e='◻' n=10 c
-#   pct=$(free | awk '/^Mem:/ {printf "%.0f", $3/$2 * 100}')
+#   local pct gb i f='◼' e='◻' n=10 c
+#   read pct gb <<< $(free | LANG=C awk '/^Mem:/ {printf "%.0f %.2f", $3/$2 * 100, $3/1024/1024}')
 #   if   [ "$pct" -lt 25 ]; then c='#[fg=#A6E22E]'
 #   elif [ "$pct" -lt 50 ]; then c='#[fg=#E6DB74]'
 #   elif [ "$pct" -lt 75 ]; then c='#[fg=#E8871A]'
 #   else                         c='#[fg=#E82572]'
 #   fi
-#   printf 'RAM %s%d%% ' "$c" "$pct"
+#   printf 'RAM %s%sGB %d%% ' "$c" "${gb/,/.}" "$pct"
 #   for ((i=0; i<n; i++)); do (( i * 100 < pct * n )) && printf "$f" || printf "$e"; done
 #   printf '#[default]'
 #   sleep 5
