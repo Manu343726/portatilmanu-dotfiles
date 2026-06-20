@@ -8,7 +8,7 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
 
 1. **Always commit and push changes.** After modifying any tracked file (dotfiles, daemon source, CLI source, docs, etc.), stage and commit with a descriptive message, then push.
 
-2. **Read docs first.** Before making changes, read `~/dotfilesd/README.md` and `~/dotfilesd/docs/` for context. Follow the development guide in `docs/development.md`.
+2. **Read docs first.** Before doing any work, read `~/dotfilesd/README.md` and `~/dotfilesd/docs/` for context. Follow the development guide in `docs/development.md`.
 
 3. **Check `.agents/skills/`** for project-specific skills before working. Load any relevant skill with the skills tool.
 

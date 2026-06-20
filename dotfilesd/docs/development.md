@@ -34,6 +34,30 @@ Binaries land at `~/.local/bin/dotfilesd` and `~/.local/bin/dotfilesctl`.
 
 `make install` is a fast variant that skips the build if the git hash hasn't changed since the last install. Use it after editing to quickly redeploy.
 
+## Daemon service management
+
+The daemon runs as a systemd user service. All management goes through `make`:
+
+```sh
+make service-install   # install (or update) the systemd unit file
+make service-start     # enable and start the daemon
+make service-stop      # stop and disable the daemon
+make service-restart   # restart the daemon (after code changes)
+make service-logs      # tail daemon logs via journalctl
+```
+
+Or equivalently with `systemctl --user` directly:
+
+```sh
+systemctl --user enable --now  dotfilesd   # enable + start
+systemctl --user disable --now dotfilesd   # stop + disable
+systemctl --user restart dotfilesd         # restart
+systemctl --user status dotfilesd          # check status
+journalctl --user -u dotfilesd -f          # follow logs
+```
+
+After modifying daemon code, always run `make install` then `systemctl --user restart dotfilesd`.
+
 ## Quick test
 
 ```sh
