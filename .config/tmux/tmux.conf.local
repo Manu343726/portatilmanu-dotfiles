@@ -585,7 +585,7 @@ tmux_conf_uninstall_plugins_on_reload=true
 # # usage: #{battery_info}
 # battery_info() {
 #   local b="/sys/class/power_supply/BAT0"
-#   local s c ef en p m bar f='◼' e='◻'
+#   local s c ef en p m i bar f='◼' e='◻' lc ts h
 #   s=$(cat "$b/status" 2>/dev/null)     || s="Unknown"
 #   c=$(cat "$b/capacity" 2>/dev/null)   || c=0
 #   ef=$(cat "$b/energy_full" 2>/dev/null) || ef=0
@@ -593,24 +593,46 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   p=$(cat "$b/power_now" 2>/dev/null)    || p=0
 #   [ "$c" -gt 100 ] 2>/dev/null && c=100
 #   for ((i=0; i<10; i++)); do
-#     (( i * 100 < c * 10 )) && bar="$bar$f" || bar="$bar$e"
+#     if (( i * 100 < c * 10 )); then
+#       if   [ "$i" -lt 2 ]; then bar="$bar#[fg=#E82572]$f"
+#       elif [ "$i" -lt 4 ]; then bar="$bar#[fg=#E8871A]$f"
+#       elif [ "$i" -lt 6 ]; then bar="$bar#[fg=#E6DB74]$f"
+#       else                     bar="$bar#[fg=#A6E22E]$f"
+#       fi
+#     else
+#       bar="$bar#[default]$e"
+#     fi
 #   done
+#   bar="$bar#[default]"
+#   if   [ "$c" -lt 25 ]; then lc='#E82572'
+#   elif [ "$c" -lt 50 ]; then lc='#E8871A'
+#   elif [ "$c" -lt 75 ]; then lc='#E6DB74'
+#   else                       lc='#A6E22E'
+#   fi
 #   case "$s" in
 #     "Charging")
 #       if [ "$c" -ge 100 ] 2>/dev/null; then
 #         printf '#[fg=#A6E22E]PLUGGED#[default]'
 #       elif [ "$p" -gt 0 ] 2>/dev/null; then
 #         m=$(( (ef - en) * 60 / p ))
-#         printf '#[fg=#E8871A]CHARGING#[default] %s %d%% ETA %d:%02d' "$bar" "$c" "$((m / 60))" "$((m % 60))"
+#         if [ "$m" -le 0 ]; then ts='<1m'
+#         elif [ "$m" -lt 60 ]; then ts="${m}m"
+#         else h=$((m / 60)); ts="${h}h$((m % 60))m"
+#         fi
+#         printf '#[fg=%s]CHARGING#[default] %s %d%% %s' "$lc" "$bar" "$c" "$ts"
 #       else
-#         printf '#[fg=#E8871A]CHARGING#[default] %s %d%%' "$bar" "$c"
+#         printf '#[fg=%s]CHARGING#[default] %s %d%%' "$lc" "$bar" "$c"
 #       fi ;;
 #     "Discharging")
 #       if [ "$p" -gt 0 ] 2>/dev/null; then
 #         m=$(( en * 60 / p ))
-#         printf '#[fg=#E82572]BAT#[default] %s %d%% LEFT %d:%02d' "$bar" "$c" "$((m / 60))" "$((m % 60))"
+#         if [ "$m" -le 0 ]; then ts='<1m'
+#         elif [ "$m" -lt 60 ]; then ts="${m}m"
+#         else h=$((m / 60)); ts="${h}h$((m % 60))m"
+#         fi
+#         printf '#[fg=%s]BAT#[default] %s %d%% %s' "$lc" "$bar" "$c" "$ts"
 #       else
-#         printf '#[fg=#E82572]BAT#[default] %s %d%%' "$bar" "$c"
+#         printf '#[fg=%s]BAT#[default] %s %d%%' "$lc" "$bar" "$c"
 #       fi ;;
 #     "Full")
 #       printf '#[fg=#A6E22E]PLUGGED#[default]' ;;
