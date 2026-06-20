@@ -10,6 +10,17 @@ tmux source-file ~/.tmux.conf
 i3-msg reload
 ```
 
+### Post-clone setup
+
+```sh
+# kmscon — symlink config into /etc (needed because kmscon runs as root)
+sudo rm -f /etc/kmscon/kmscon.conf
+sudo ln -s ~/.config/kmscon/kmscon.conf /etc/kmscon/kmscon.conf
+sudo systemctl enable --now kmsconvt@tty2.service
+```
+
+See `.docs/` for per-component setup guides.
+
 ## What's here
 
 | Component | Config | Docs |
@@ -24,7 +35,7 @@ i3-msg reload
 | palette   | — | `.docs/index.md` |
 | dotfilesd | `~/dotfilesd/` | `dotfilesd/README.md` + `dotfilesd/docs/` |
 | **ASUS ROG** | `~/.local/bin/asus-profile` | Profile switcher via `asusctl` |
-| kmscon      | `/etc/kmscon/kmscon.conf` | KMS console with Monokai palette |
+| kmscon      | `~/.config/kmscon/kmscon.conf` → `/etc/kmscon/` | `.docs/kmscon.md` |
 
 ### ASUS ROG Flow X13 extras
 
