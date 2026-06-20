@@ -493,9 +493,9 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   local profile
 #   profile=$(asusctl profile get 2>/dev/null | awk '/Active profile:/ {print $3}')
 #   case "$profile" in
-#     Performance) printf '#[fg=#A6E22E]PERF#[default] ' ;;
-#     Balanced)    printf '#[fg=#E6DB74]BAL#[default] ' ;;
-#     Quiet)       printf '#[fg=#E82572]QUIET#[default] ' ;;
+#     Performance) printf '#[fg=#E8871A]PERF#[default] ' ;;
+#     Balanced)    printf '#[fg=#A6E22E]BAL#[default] ' ;;
+#     Quiet)       printf '#[fg=#66D9EF]QUIET#[default] ' ;;
 #     *)           printf '? ' ;;
 #   esac
 #   sleep 5
