@@ -31,16 +31,38 @@ Based on [Oh My Tmux!](https://github.com/gpakosz/.tmux) with a Monokai override
 The right side shows (left to right):
 
 ```
-BAT ██████░░ 85%  CPU ██████░░ 45%  RAM ████░░░░ 30% , 23:59 , 19 Jun | us | user | hostname
+PERF BAT ██████░░ 85%  CPU ██████░░ 45%  TEMP ██████░░ 76°C  RAM ████░░░░ 30% , 23:59 , 19 Jun | us | user | hostname
 ```
 
-Custom shell functions (`cpu_info`, `ram_info`) use Monokai color-coded bar segments:
-- `< 25%`: green `#A6E22E`
-- `25-50%`: yellow `#E6DB74`
-- `50-75%`: orange `#E8871A`
-- `> 75%`: pink `#E82572`
+### Indicators
 
-Keyboard layout (`layout_info`) calls `~/.local/bin/xkg_group` which runs `xkb-switch`.
+| Variable | What | Example |
+|----------|------|---------|
+| `#{asus_profile}` | ASUS ROG power profile | `PERF` (green), `BAL` (yellow), `QUIET` (red) |
+| `#{cpu_info}` | CPU usage with 10-segment bar | `CPU ██████░░ 45%` |
+| `#{cpu_temp}` | CPU temperature with 10-segment bar + min/max tracking | `TEMP ██░░░░░░ 55°C` |
+| `#{ram_info}` | RAM usage with 10-segment bar | `RAM ████░░░░ 30%` |
+| `#{layout_info}` | Active keyboard layout | calls `xkb_group` |
+
+### Color gradients
+
+**CPU / RAM bars** (% usage):
+| Range | Color |
+|-------|-------|
+| `< 25%` | green `#A6E22E` |
+| `25-50%` | yellow `#E6DB74` |
+| `50-75%` | orange `#E8871A` |
+| `> 75%` | red `#E82572` |
+
+**CPU temperature bar** — inverted battery gradient, each block individually colored:
+| Position | Color |
+|----------|-------|
+| 1–3 (cool) | green `#A6E22E` |
+| 4–5 | yellow `#E6DB74` |
+| 6–7 | orange `#E8871A` |
+| 8–10 (hot) | red `#E82572` |
+
+The temperature bar adapts its range by tracking min/max values in `~/.cache/tmux-cpu-temp-state`, updated on every read.
 
 ## Copy mode
 
@@ -55,6 +77,10 @@ Keyboard layout (`layout_info`) calls `~/.local/bin/xkg_group` which runs `xkb-s
 
 Defined in `~/.config/tmux/tmux.conf.local` between `# EOF` and `# "$@"`:
 
-- `cpu_info` — CPU usage with 10-segment bar
-- `ram_info` — RAM usage with 10-segment bar
-- `layout_info` — Active keyboard layout
+| Function | Displays | Source |
+|----------|----------|--------|
+| `asus_profile` | Power profile (PERF/BAL/QUIET) | `asusctl profile get` |
+| `cpu_info` | CPU usage with 10-segment bar | `/proc/stat` |
+| `cpu_temp` | CPU temp with 10-segment bar, min/max tracking | `/sys/class/hwmon/hwmon5/temp1_input` |
+| `ram_info` | RAM usage with 10-segment bar | `free` |
+| `layout_info` | Active keyboard layout | `xkb_group` script |

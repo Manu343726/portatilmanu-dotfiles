@@ -23,5 +23,13 @@ i3-msg reload
 | clipboard | — | `.docs/clipboard.md` |
 | palette   | — | `.docs/index.md` |
 | dotfilesd | `~/dotfilesd/` | `dotfilesd/README.md` + `dotfilesd/docs/` |
+| **ASUS ROG** | `~/.local/bin/asus-profile` | Profile switcher via `asusctl` |
 
-See `.docs/` for full documentation (also see `dotfilesd/docs/` for daemon docs).
+### ASUS ROG Flow X13 extras
+
+| Feature | Binding / Trigger | Description |
+|---------|-------------------|-------------|
+| Profile switcher | `$mod+Ctrl+p` | rofi menu for Quiet / Balanced / Performance |
+| CPU temperature | tmux status bar | Adaptive bar with min/max tracking via `k10temp` |
+| ASUS profile indicator | tmux status bar | `PERF`/`BAL`/`QUIET` with color |
+
