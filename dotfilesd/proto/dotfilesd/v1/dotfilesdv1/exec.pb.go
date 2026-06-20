@@ -134,12 +134,16 @@ func (x *ExecRequest) GetSudo() bool {
 }
 
 type ExecResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ExitCode      int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	Stdout        string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr        string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Stdout   string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr   string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	// If set, the daemon needs user input before it can produce a final result.
+	// The caller should show the prompt to the user and call SubmitFeedback
+	// with the matching feedback_id.
+	FeedbackRequired *FeedbackRequired `protobuf:"bytes,4,opt,name=feedback_required,json=feedbackRequired,proto3" json:"feedback_required,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ExecResponse) Reset() {
@@ -193,6 +197,220 @@ func (x *ExecResponse) GetStderr() string {
 	return ""
 }
 
+func (x *ExecResponse) GetFeedbackRequired() *FeedbackRequired {
+	if x != nil {
+		return x.FeedbackRequired
+	}
+	return nil
+}
+
+// FeedbackRequired describes what the daemon needs from the user to continue.
+type FeedbackRequired struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unique identifier for this feedback request. Echo it back in
+	// SubmitFeedbackRequest so the daemon can correlate.
+	FeedbackId string `protobuf:"bytes,1,opt,name=feedback_id,json=feedbackId,proto3" json:"feedback_id,omitempty"`
+	// The category of feedback: "input" for arbitrary text, "confirm" for yes/no.
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// Human-readable prompt for the user.
+	Prompt string `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	// Machine-readable context that may help the client decide how to respond.
+	Context       map[string]string `protobuf:"bytes,4,rep,name=context,proto3" json:"context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FeedbackRequired) Reset() {
+	*x = FeedbackRequired{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FeedbackRequired) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FeedbackRequired) ProtoMessage() {}
+
+func (x *FeedbackRequired) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FeedbackRequired.ProtoReflect.Descriptor instead.
+func (*FeedbackRequired) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *FeedbackRequired) GetFeedbackId() string {
+	if x != nil {
+		return x.FeedbackId
+	}
+	return ""
+}
+
+func (x *FeedbackRequired) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *FeedbackRequired) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *FeedbackRequired) GetContext() map[string]string {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type SubmitFeedbackRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// The feedback_id from the FeedbackRequired that prompted this response.
+	FeedbackId string `protobuf:"bytes,1,opt,name=feedback_id,json=feedbackId,proto3" json:"feedback_id,omitempty"`
+	// For type "input": the text the user entered.
+	// For type "confirm": "true" or "false".
+	Data          string `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitFeedbackRequest) Reset() {
+	*x = SubmitFeedbackRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitFeedbackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitFeedbackRequest) ProtoMessage() {}
+
+func (x *SubmitFeedbackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitFeedbackRequest.ProtoReflect.Descriptor instead.
+func (*SubmitFeedbackRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SubmitFeedbackRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SubmitFeedbackRequest) GetFeedbackId() string {
+	if x != nil {
+		return x.FeedbackId
+	}
+	return ""
+}
+
+func (x *SubmitFeedbackRequest) GetData() string {
+	if x != nil {
+		return x.Data
+	}
+	return ""
+}
+
+type SubmitFeedbackResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Stdout   string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr   string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	// If the daemon needs more feedback after processing this response,
+	// this field is set again.
+	FeedbackRequired *FeedbackRequired `protobuf:"bytes,4,opt,name=feedback_required,json=feedbackRequired,proto3" json:"feedback_required,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SubmitFeedbackResponse) Reset() {
+	*x = SubmitFeedbackResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitFeedbackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitFeedbackResponse) ProtoMessage() {}
+
+func (x *SubmitFeedbackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitFeedbackResponse.ProtoReflect.Descriptor instead.
+func (*SubmitFeedbackResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SubmitFeedbackResponse) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *SubmitFeedbackResponse) GetStdout() string {
+	if x != nil {
+		return x.Stdout
+	}
+	return ""
+}
+
+func (x *SubmitFeedbackResponse) GetStderr() string {
+	if x != nil {
+		return x.Stderr
+	}
+	return ""
+}
+
+func (x *SubmitFeedbackResponse) GetFeedbackRequired() *FeedbackRequired {
+	if x != nil {
+		return x.FeedbackRequired
+	}
+	return nil
+}
+
 type SudoExecRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	SessionId       string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -205,7 +423,7 @@ type SudoExecRequest struct {
 
 func (x *SudoExecRequest) Reset() {
 	*x = SudoExecRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -217,7 +435,7 @@ func (x *SudoExecRequest) String() string {
 func (*SudoExecRequest) ProtoMessage() {}
 
 func (x *SudoExecRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -230,7 +448,7 @@ func (x *SudoExecRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SudoExecRequest.ProtoReflect.Descriptor instead.
 func (*SudoExecRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{2}
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SudoExecRequest) GetSessionId() string {
@@ -274,7 +492,7 @@ type SudoExecResponse struct {
 
 func (x *SudoExecResponse) Reset() {
 	*x = SudoExecResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -286,7 +504,7 @@ func (x *SudoExecResponse) String() string {
 func (*SudoExecResponse) ProtoMessage() {}
 
 func (x *SudoExecResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -299,7 +517,7 @@ func (x *SudoExecResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SudoExecResponse.ProtoReflect.Descriptor instead.
 func (*SudoExecResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{3}
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SudoExecResponse) GetOutcome() isSudoExecResponse_Outcome {
@@ -353,7 +571,7 @@ type AuthChallenge struct {
 
 func (x *AuthChallenge) Reset() {
 	*x = AuthChallenge{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -365,7 +583,7 @@ func (x *AuthChallenge) String() string {
 func (*AuthChallenge) ProtoMessage() {}
 
 func (x *AuthChallenge) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -378,7 +596,7 @@ func (x *AuthChallenge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthChallenge.ProtoReflect.Descriptor instead.
 func (*AuthChallenge) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{4}
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AuthChallenge) GetMethods() []string {
@@ -407,7 +625,7 @@ type SudoResult struct {
 
 func (x *SudoResult) Reset() {
 	*x = SudoResult{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -419,7 +637,7 @@ func (x *SudoResult) String() string {
 func (*SudoResult) ProtoMessage() {}
 
 func (x *SudoResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -432,7 +650,7 @@ func (x *SudoResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SudoResult.ProtoReflect.Descriptor instead.
 func (*SudoResult) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{5}
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SudoResult) GetExitCode() int32 {
@@ -472,11 +690,32 @@ const file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
-	"\x04sudo\x18\x02 \x01(\bR\x04sudo\"[\n" +
+	"\x04sudo\x18\x02 \x01(\bR\x04sudo\"\xa8\x01\n" +
 	"\fExecResponse\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"\xab\x01\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12K\n" +
+	"\x11feedback_required\x18\x04 \x01(\v2\x1e.dotfilesd.v1.FeedbackRequiredR\x10feedbackRequired\"\xe2\x01\n" +
+	"\x10FeedbackRequired\x12\x1f\n" +
+	"\vfeedback_id\x18\x01 \x01(\tR\n" +
+	"feedbackId\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
+	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x12E\n" +
+	"\acontext\x18\x04 \x03(\v2+.dotfilesd.v1.FeedbackRequired.ContextEntryR\acontext\x1a:\n" +
+	"\fContextEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"k\n" +
+	"\x15SubmitFeedbackRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x12\x1f\n" +
+	"\vfeedback_id\x18\x01 \x01(\tR\n" +
+	"feedbackId\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\tR\x04data\"\xb2\x01\n" +
+	"\x16SubmitFeedbackResponse\x12\x1b\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
+	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12K\n" +
+	"\x11feedback_required\x18\x04 \x01(\v2\x1e.dotfilesd.v1.FeedbackRequiredR\x10feedbackRequired\"\xab\x01\n" +
 	"\x0fSudoExecRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
@@ -501,10 +740,11 @@ const file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc = "" +
 	"\x17SUDO_METHOD_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SUDO_METHOD_TERMINAL\x10\x01\x12\x19\n" +
 	"\x15SUDO_METHOD_GRAPHICAL\x10\x02\x12\x16\n" +
-	"\x12SUDO_METHOD_NOPASS\x10\x032\x97\x01\n" +
+	"\x12SUDO_METHOD_NOPASS\x10\x032\xf4\x01\n" +
 	"\vExecService\x12=\n" +
 	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse\x12I\n" +
-	"\bSudoExec\x12\x1d.dotfilesd.v1.SudoExecRequest\x1a\x1e.dotfilesd.v1.SudoExecResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\bSudoExec\x12\x1d.dotfilesd.v1.SudoExecRequest\x1a\x1e.dotfilesd.v1.SudoExecResponse\x12[\n" +
+	"\x0eSubmitFeedback\x12#.dotfilesd.v1.SubmitFeedbackRequest\x1a$.dotfilesd.v1.SubmitFeedbackResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescOnce sync.Once
@@ -519,29 +759,38 @@ func file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_goTypes = []any{
-	(SudoMethod)(0),          // 0: dotfilesd.v1.SudoMethod
-	(*ExecRequest)(nil),      // 1: dotfilesd.v1.ExecRequest
-	(*ExecResponse)(nil),     // 2: dotfilesd.v1.ExecResponse
-	(*SudoExecRequest)(nil),  // 3: dotfilesd.v1.SudoExecRequest
-	(*SudoExecResponse)(nil), // 4: dotfilesd.v1.SudoExecResponse
-	(*AuthChallenge)(nil),    // 5: dotfilesd.v1.AuthChallenge
-	(*SudoResult)(nil),       // 6: dotfilesd.v1.SudoResult
+	(SudoMethod)(0),                // 0: dotfilesd.v1.SudoMethod
+	(*ExecRequest)(nil),            // 1: dotfilesd.v1.ExecRequest
+	(*ExecResponse)(nil),           // 2: dotfilesd.v1.ExecResponse
+	(*FeedbackRequired)(nil),       // 3: dotfilesd.v1.FeedbackRequired
+	(*SubmitFeedbackRequest)(nil),  // 4: dotfilesd.v1.SubmitFeedbackRequest
+	(*SubmitFeedbackResponse)(nil), // 5: dotfilesd.v1.SubmitFeedbackResponse
+	(*SudoExecRequest)(nil),        // 6: dotfilesd.v1.SudoExecRequest
+	(*SudoExecResponse)(nil),       // 7: dotfilesd.v1.SudoExecResponse
+	(*AuthChallenge)(nil),          // 8: dotfilesd.v1.AuthChallenge
+	(*SudoResult)(nil),             // 9: dotfilesd.v1.SudoResult
+	nil,                            // 10: dotfilesd.v1.FeedbackRequired.ContextEntry
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_depIdxs = []int32{
-	0, // 0: dotfilesd.v1.SudoExecRequest.preferred_method:type_name -> dotfilesd.v1.SudoMethod
-	6, // 1: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
-	5, // 2: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
-	1, // 3: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
-	3, // 4: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
-	2, // 5: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
-	4, // 6: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3,  // 0: dotfilesd.v1.ExecResponse.feedback_required:type_name -> dotfilesd.v1.FeedbackRequired
+	10, // 1: dotfilesd.v1.FeedbackRequired.context:type_name -> dotfilesd.v1.FeedbackRequired.ContextEntry
+	3,  // 2: dotfilesd.v1.SubmitFeedbackResponse.feedback_required:type_name -> dotfilesd.v1.FeedbackRequired
+	0,  // 3: dotfilesd.v1.SudoExecRequest.preferred_method:type_name -> dotfilesd.v1.SudoMethod
+	9,  // 4: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
+	8,  // 5: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
+	1,  // 6: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
+	6,  // 7: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
+	4,  // 8: dotfilesd.v1.ExecService.SubmitFeedback:input_type -> dotfilesd.v1.SubmitFeedbackRequest
+	2,  // 9: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
+	7,  // 10: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
+	5,  // 11: dotfilesd.v1.ExecService.SubmitFeedback:output_type -> dotfilesd.v1.SubmitFeedbackResponse
+	9,  // [9:12] is the sub-list for method output_type
+	6,  // [6:9] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_init() }
@@ -549,7 +798,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_exec_proto != nil {
 		return
 	}
-	file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[3].OneofWrappers = []any{
+	file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[6].OneofWrappers = []any{
 		(*SudoExecResponse_Result)(nil),
 		(*SudoExecResponse_AuthChallenge)(nil),
 	}
@@ -559,7 +808,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

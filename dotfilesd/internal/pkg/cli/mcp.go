@@ -101,6 +101,15 @@ var mcpTools = []toolDef{
 		}, Required: []string{"command"}},
 	},
 	{
+		Name:        "submit_feedback",
+		Description: "Submit a response to a pending feedback request from exec_run",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"feedback_id": {Type: "string", Description: "the feedback_id from the feedback_required response"},
+			"data":        {Type: "string", Description: "the user's response (text for input, 'true'/'false' for confirm)"},
+			"session_id":  {Type: "string", Description: "optional session ID for grouping"},
+		}, Required: []string{"feedback_id", "data"}},
+	},
+	{
 		Name:        "config_reload",
 		Description: "Reload dotfiles configs (tmux, i3, kitty)",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
@@ -322,6 +331,23 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			if err != nil {
 				return mcpErr(id, -32603, err.Error())
 			}
+
+			if fr := resp.Msg.FeedbackRequired; fr != nil {
+				return mcpResp(id, map[string]any{
+					"content": []map[string]any{{
+						"type": "text",
+						"text": fmt.Sprintf("FEEDBACK REQUIRED (type: %s)\n%s\nUse the submit_feedback tool with feedback_id '%s' to respond.",
+							fr.Type, fr.Prompt, fr.FeedbackId),
+					}},
+					"feedback_required": map[string]any{
+						"feedback_id": fr.FeedbackId,
+						"type":        fr.Type,
+						"prompt":      fr.Prompt,
+						"context":     fr.Context,
+					},
+				})
+			}
+
 			text := resp.Msg.Stdout
 			if resp.Msg.Stderr != "" {
 				text += "\nstderr:\n" + resp.Msg.Stderr
@@ -362,6 +388,18 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			"content": []map[string]any{{"type": "text", "text": text}},
 			"isError": result.ExitCode != 0,
 		})
+
+	case "submit_feedback":
+		var p struct {
+			FeedbackID string `json:"feedback_id"`
+			Data       string `json:"data"`
+		}
+		json.Unmarshal(args, &p)
+		result, err := RunSubmitFeedback(clients, clients.SessionID, p.FeedbackID, p.Data)
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		return mcpToolResult(id, result)
 
 	case "config_reload":
 		var p struct{ Target string `json:"target"` }
