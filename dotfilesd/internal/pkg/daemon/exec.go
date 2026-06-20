@@ -18,8 +18,36 @@ type execServer struct {
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	slog.Log(ctx, levelTrace, "Exec", "command", req.Msg.Command, "sudo", req.Msg.Sudo)
-	s.sessions.Resolve(GetSessionID(req))
-	return s.ExecRaw(ctx, req.Msg.Command, req.Msg.Sudo)
+
+	session := s.sessions.Resolve(GetSessionID(req))
+
+	if req.Msg.Sudo || session.id == "" {
+		return s.ExecRaw(ctx, req.Msg.Command, req.Msg.Sudo)
+	}
+
+	shell, err := session.ensureShell()
+	if err != nil {
+		slog.Error("failed to ensure session shell", "error", err)
+		return connect.NewResponse(&dotfilesdv1.ExecResponse{
+			ExitCode: -1,
+			Stderr:   fmt.Sprintf("session shell error: %v", err),
+		}), nil
+	}
+
+	stdout, stderr, exitCode := shell.Exec(req.Msg.Command)
+
+	if exitCode != 0 {
+		slog.Warn("Exec command failed", "command", req.Msg.Command, "exit_code", exitCode, "stderr", truncate(stderr, 200))
+	}
+
+	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
+		ExitCode: int32(exitCode),
+		Stdout:   stdout,
+		Stderr:   stderr,
+	})
+
+	slog.Log(ctx, levelTrace, "Exec done", "command", req.Msg.Command, "exit_code", exitCode)
+	return resp, nil
 }
 
 func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*connect.Response[dotfilesdv1.ExecResponse], error) {

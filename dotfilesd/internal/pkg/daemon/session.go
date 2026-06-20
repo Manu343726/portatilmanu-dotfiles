@@ -1,16 +1,90 @@
 package daemon
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
+	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
+
+type shellSession struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	reader *bufio.Reader
+	mu     sync.Mutex
+}
+
+func newShellSession() (*shellSession, error) {
+	cmd := exec.Command("bash", "--norc", "--noprofile")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("stdin pipe: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+	cmd.Stderr = cmd.Stdout
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start shell: %w", err)
+	}
+	return &shellSession{
+		cmd:    cmd,
+		stdin:  stdin,
+		reader: bufio.NewReader(stdout),
+	}, nil
+}
+
+func (sh *shellSession) Exec(command string) (string, string, int) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+
+	delim := fmt.Sprintf("__GS_%x__", rand.Int63())
+	cmdLine := fmt.Sprintf("%s 2>&1\necho \"%s=$?\"\n", command, delim)
+	if _, err := io.WriteString(sh.stdin, cmdLine); err != nil {
+		slog.Warn("shell write failed", "error", err)
+		return "", "", -1
+	}
+
+	var output strings.Builder
+	for {
+		line, err := sh.reader.ReadString('\n')
+		if err != nil {
+			slog.Warn("shell read failed", "error", err)
+			return output.String(), "", -1
+		}
+		line = strings.TrimSuffix(line, "\n")
+		if strings.HasPrefix(line, delim+"=") {
+			codeStr := strings.TrimPrefix(line, delim+"=")
+			code, err := strconv.Atoi(strings.TrimSpace(codeStr))
+			if err != nil {
+				return output.String(), "", -1
+			}
+			return output.String(), "", code
+		}
+		output.WriteString(line)
+		output.WriteByte('\n')
+	}
+}
+
+func (sh *shellSession) Close() error {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	if sh.cmd != nil && sh.cmd.Process != nil {
+		return sh.cmd.Process.Kill()
+	}
+	return nil
+}
 
 type Session struct {
 	id           string
@@ -19,6 +93,7 @@ type Session struct {
 	requestCount int
 	finalized    bool
 	data         map[string]string
+	shell        *shellSession
 	mu           sync.RWMutex
 }
 
@@ -53,6 +128,33 @@ func (s *Session) toProto() *dotfilesdv1.Session {
 		RequestCount: int32(s.requestCount),
 		Finalized:    s.finalized,
 		Data:         data,
+	}
+}
+
+func (s *Session) ensureShell() (*shellSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.finalized {
+		return nil, fmt.Errorf("session is finalized")
+	}
+	if s.shell == nil {
+		sh, err := newShellSession()
+		if err != nil {
+			return nil, err
+		}
+		s.shell = sh
+		slog.Debug("session shell created", "session_id", s.id)
+	}
+	return s.shell, nil
+}
+
+func (s *Session) closeShell() {
+	if s.shell != nil {
+		if err := s.shell.Close(); err != nil {
+			slog.Warn("error closing session shell", "session_id", s.id, "error", err)
+		}
+		s.shell = nil
+		slog.Debug("session shell closed", "session_id", s.id)
 	}
 }
 
@@ -101,6 +203,7 @@ func (ss *SessionStore) Finalize(id string) bool {
 	}
 	s.mu.Lock()
 	s.finalized = true
+	s.closeShell()
 	s.mu.Unlock()
 	ss.mu.Unlock()
 	slog.Debug("session finalized", "session_id", id)
