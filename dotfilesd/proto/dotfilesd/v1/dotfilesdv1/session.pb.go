@@ -377,6 +377,106 @@ func (x *GetSessionResponse) GetSession() *Session {
 	return nil
 }
 
+type ConnectRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Callback URL where the client's ClientCallback server is listening
+	// (e.g. "http://127.0.0.1:43291").
+	CallbackUrl string `protobuf:"bytes,1,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
+	// Session to register the callback with. If empty the daemon creates a
+	// new session.
+	SessionId     string `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectRequest) Reset() {
+	*x = ConnectRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectRequest) ProtoMessage() {}
+
+func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectRequest.ProtoReflect.Descriptor instead.
+func (*ConnectRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ConnectRequest) GetCallbackUrl() string {
+	if x != nil {
+		return x.CallbackUrl
+	}
+	return ""
+}
+
+func (x *ConnectRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type ConnectResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectResponse) Reset() {
+	*x = ConnectResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectResponse) ProtoMessage() {}
+
+func (x *ConnectResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectResponse.ProtoReflect.Descriptor instead.
+func (*ConnectResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ConnectResponse) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
 type ListSessionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -386,7 +486,7 @@ type ListSessionsRequest struct {
 
 func (x *ListSessionsRequest) Reset() {
 	*x = ListSessionsRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -398,7 +498,7 @@ func (x *ListSessionsRequest) String() string {
 func (*ListSessionsRequest) ProtoMessage() {}
 
 func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -411,7 +511,7 @@ func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{7}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListSessionsRequest) GetSessionId() string {
@@ -430,7 +530,7 @@ type ListSessionsResponse struct {
 
 func (x *ListSessionsResponse) Reset() {
 	*x = ListSessionsResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -442,7 +542,7 @@ func (x *ListSessionsResponse) String() string {
 func (*ListSessionsResponse) ProtoMessage() {}
 
 func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +555,7 @@ func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{8}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListSessionsResponse) GetSessions() []*Session {
@@ -497,14 +597,21 @@ const file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\"E\n" +
 	"\x12GetSessionResponse\x12/\n" +
+	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"R\n" +
+	"\x0eConnectRequest\x12!\n" +
+	"\fcallback_url\x18\x01 \x01(\tR\vcallbackUrl\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\"B\n" +
+	"\x0fConnectResponse\x12/\n" +
 	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"4\n" +
 	"\x13ListSessionsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\"I\n" +
 	"\x14ListSessionsResponse\x121\n" +
-	"\bsessions\x18\x01 \x03(\v2\x15.dotfilesd.v1.SessionR\bsessions2\xf2\x02\n" +
+	"\bsessions\x18\x01 \x03(\v2\x15.dotfilesd.v1.SessionR\bsessions2\xba\x03\n" +
 	"\x0eSessionService\x12X\n" +
-	"\rCreateSession\x12\".dotfilesd.v1.CreateSessionRequest\x1a#.dotfilesd.v1.CreateSessionResponse\x12^\n" +
+	"\rCreateSession\x12\".dotfilesd.v1.CreateSessionRequest\x1a#.dotfilesd.v1.CreateSessionResponse\x12F\n" +
+	"\aConnect\x12\x1c.dotfilesd.v1.ConnectRequest\x1a\x1d.dotfilesd.v1.ConnectResponse\x12^\n" +
 	"\x0fFinalizeSession\x12$.dotfilesd.v1.FinalizeSessionRequest\x1a%.dotfilesd.v1.FinalizeSessionResponse\x12O\n" +
 	"\n" +
 	"GetSession\x12\x1f.dotfilesd.v1.GetSessionRequest\x1a .dotfilesd.v1.GetSessionResponse\x12U\n" +
@@ -522,7 +629,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_goTypes = []any{
 	(*Session)(nil),                 // 0: dotfilesd.v1.Session
 	(*CreateSessionRequest)(nil),    // 1: dotfilesd.v1.CreateSessionRequest
@@ -531,28 +638,33 @@ var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_goTypes = []any{
 	(*FinalizeSessionResponse)(nil), // 4: dotfilesd.v1.FinalizeSessionResponse
 	(*GetSessionRequest)(nil),       // 5: dotfilesd.v1.GetSessionRequest
 	(*GetSessionResponse)(nil),      // 6: dotfilesd.v1.GetSessionResponse
-	(*ListSessionsRequest)(nil),     // 7: dotfilesd.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),    // 8: dotfilesd.v1.ListSessionsResponse
-	nil,                             // 9: dotfilesd.v1.Session.DataEntry
+	(*ConnectRequest)(nil),          // 7: dotfilesd.v1.ConnectRequest
+	(*ConnectResponse)(nil),         // 8: dotfilesd.v1.ConnectResponse
+	(*ListSessionsRequest)(nil),     // 9: dotfilesd.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),    // 10: dotfilesd.v1.ListSessionsResponse
+	nil,                             // 11: dotfilesd.v1.Session.DataEntry
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_depIdxs = []int32{
-	9, // 0: dotfilesd.v1.Session.data:type_name -> dotfilesd.v1.Session.DataEntry
-	0, // 1: dotfilesd.v1.CreateSessionResponse.session:type_name -> dotfilesd.v1.Session
-	0, // 2: dotfilesd.v1.GetSessionResponse.session:type_name -> dotfilesd.v1.Session
-	0, // 3: dotfilesd.v1.ListSessionsResponse.sessions:type_name -> dotfilesd.v1.Session
-	1, // 4: dotfilesd.v1.SessionService.CreateSession:input_type -> dotfilesd.v1.CreateSessionRequest
-	3, // 5: dotfilesd.v1.SessionService.FinalizeSession:input_type -> dotfilesd.v1.FinalizeSessionRequest
-	5, // 6: dotfilesd.v1.SessionService.GetSession:input_type -> dotfilesd.v1.GetSessionRequest
-	7, // 7: dotfilesd.v1.SessionService.ListSessions:input_type -> dotfilesd.v1.ListSessionsRequest
-	2, // 8: dotfilesd.v1.SessionService.CreateSession:output_type -> dotfilesd.v1.CreateSessionResponse
-	4, // 9: dotfilesd.v1.SessionService.FinalizeSession:output_type -> dotfilesd.v1.FinalizeSessionResponse
-	6, // 10: dotfilesd.v1.SessionService.GetSession:output_type -> dotfilesd.v1.GetSessionResponse
-	8, // 11: dotfilesd.v1.SessionService.ListSessions:output_type -> dotfilesd.v1.ListSessionsResponse
-	8, // [8:12] is the sub-list for method output_type
-	4, // [4:8] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	11, // 0: dotfilesd.v1.Session.data:type_name -> dotfilesd.v1.Session.DataEntry
+	0,  // 1: dotfilesd.v1.CreateSessionResponse.session:type_name -> dotfilesd.v1.Session
+	0,  // 2: dotfilesd.v1.GetSessionResponse.session:type_name -> dotfilesd.v1.Session
+	0,  // 3: dotfilesd.v1.ConnectResponse.session:type_name -> dotfilesd.v1.Session
+	0,  // 4: dotfilesd.v1.ListSessionsResponse.sessions:type_name -> dotfilesd.v1.Session
+	1,  // 5: dotfilesd.v1.SessionService.CreateSession:input_type -> dotfilesd.v1.CreateSessionRequest
+	7,  // 6: dotfilesd.v1.SessionService.Connect:input_type -> dotfilesd.v1.ConnectRequest
+	3,  // 7: dotfilesd.v1.SessionService.FinalizeSession:input_type -> dotfilesd.v1.FinalizeSessionRequest
+	5,  // 8: dotfilesd.v1.SessionService.GetSession:input_type -> dotfilesd.v1.GetSessionRequest
+	9,  // 9: dotfilesd.v1.SessionService.ListSessions:input_type -> dotfilesd.v1.ListSessionsRequest
+	2,  // 10: dotfilesd.v1.SessionService.CreateSession:output_type -> dotfilesd.v1.CreateSessionResponse
+	8,  // 11: dotfilesd.v1.SessionService.Connect:output_type -> dotfilesd.v1.ConnectResponse
+	4,  // 12: dotfilesd.v1.SessionService.FinalizeSession:output_type -> dotfilesd.v1.FinalizeSessionResponse
+	6,  // 13: dotfilesd.v1.SessionService.GetSession:output_type -> dotfilesd.v1.GetSessionResponse
+	10, // 14: dotfilesd.v1.SessionService.ListSessions:output_type -> dotfilesd.v1.ListSessionsResponse
+	10, // [10:15] is the sub-list for method output_type
+	5,  // [5:10] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init() }
@@ -566,7 +678,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

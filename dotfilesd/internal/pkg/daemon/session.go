@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
+	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 )
 
 type shellSession struct {
@@ -87,14 +89,16 @@ func (sh *shellSession) Close() error {
 }
 
 type Session struct {
-	id           string
-	createdAt    time.Time
-	lastActive   time.Time
-	requestCount int
-	finalized    bool
-	data         map[string]string
-	shell        *shellSession
-	mu           sync.RWMutex
+	id             string
+	createdAt      time.Time
+	lastActive     time.Time
+	requestCount   int
+	finalized      bool
+	data           map[string]string
+	shell          *shellSession
+	callbackURL    string
+	callbackClient dotfilesdv1connect.ClientCallbackClient
+	mu             sync.RWMutex
 }
 
 func newSession(id string) *Session {
@@ -156,6 +160,45 @@ func (s *Session) closeShell() {
 		s.shell = nil
 		slog.Debug("session shell closed", "session_id", s.id)
 	}
+}
+
+func (s *Session) SetCallbackURL(url string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.callbackURL = url
+	s.callbackClient = nil
+}
+
+func (s *Session) CallFeedback(ctx context.Context, feedbackID, prompt string, contextKV map[string]string) (string, error) {
+	s.mu.RLock()
+	url := s.callbackURL
+	client := s.callbackClient
+	s.mu.RUnlock()
+
+	if url == "" {
+		return "", fmt.Errorf("no callback URL registered for session %s", s.id)
+	}
+
+	if client == nil {
+		client = dotfilesdv1connect.NewClientCallbackClient(http.DefaultClient, url)
+		s.mu.Lock()
+		s.callbackClient = client
+		s.mu.Unlock()
+	}
+
+	req := connect.NewRequest(&dotfilesdv1.FeedbackRequest{
+		FeedbackId: feedbackID,
+		Prompt:     prompt,
+		Context:    contextKV,
+	})
+	req.Header().Set("Session-Id", s.id)
+
+	resp, err := client.Feedback(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("feedback call failed: %w", err)
+	}
+
+	return resp.Msg.Data, nil
 }
 
 type SessionStore struct {
@@ -265,6 +308,29 @@ func (s *sessionServer) CreateSession(ctx context.Context, req *connect.Request[
 	})
 
 	slog.Log(ctx, levelTrace, "Session.CreateSession done", "session_id", session.id)
+	return resp, nil
+}
+
+func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error) {
+	slog.Log(ctx, levelTrace, "Session.Connect", "session_id", req.Msg.SessionId, "callback_url", req.Msg.CallbackUrl)
+
+	var session *Session
+	if req.Msg.SessionId == "" {
+		session = s.store.Create()
+	} else {
+		session = s.store.Get(req.Msg.SessionId)
+		if session == nil {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session %s not found", req.Msg.SessionId))
+		}
+	}
+
+	session.SetCallbackURL(req.Msg.CallbackUrl)
+
+	resp := connect.NewResponse(&dotfilesdv1.ConnectResponse{
+		Session: session.toProto(),
+	})
+
+	slog.Log(ctx, levelTrace, "Session.Connect done", "session_id", session.id)
 	return resp, nil
 }
 

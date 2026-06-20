@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// ClientCallbackService is served by the client and called by the daemon
+// when it needs additional context or feedback during session processing.
+service ClientCallback {
+  // Feedback is called by the daemon when it needs input from the client
+  // (e.g. clarification, confirmation, or additional data).
+  rpc Feedback(FeedbackRequest) returns (FeedbackResponse);
+}
+
+message FeedbackRequest {
+  // Session this feedback belongs to.
+  string session_id = 100;
+  // Unique identifier for this feedback request, echoed in the response
+  // so the daemon can correlate.
+  string feedback_id = 1;
+  // Human-readable prompt describing what the daemon needs.
+  string prompt = 2;
+  // Machine-readable context that may help the client decide how to respond
+  // (e.g. current working directory, environment variables, etc.).
+  map<string, string> context = 3;
+}
+
+message FeedbackResponse {
+  // Echo of the session_id from the request.
+  string session_id = 100;
+  // Echo of the feedback_id from the request.
+  string feedback_id = 1;
+  // The feedback data provided by the client (e.g. user input, agent choice).
+  string data = 2;
+}

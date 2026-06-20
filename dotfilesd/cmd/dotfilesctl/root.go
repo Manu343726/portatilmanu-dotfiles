@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -52,6 +53,12 @@ func newRootCmd() *cobra.Command {
 				}
 			}
 			clients = cli.NewClients(port)
+			clients.SessionID = sessionID
+
+			if err := clients.Connect(context.Background()); err != nil {
+				return err
+			}
+			sessionID = clients.SessionID
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

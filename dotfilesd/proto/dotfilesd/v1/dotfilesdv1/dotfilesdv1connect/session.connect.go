@@ -36,6 +36,8 @@ const (
 	// SessionServiceCreateSessionProcedure is the fully-qualified name of the SessionService's
 	// CreateSession RPC.
 	SessionServiceCreateSessionProcedure = "/dotfilesd.v1.SessionService/CreateSession"
+	// SessionServiceConnectProcedure is the fully-qualified name of the SessionService's Connect RPC.
+	SessionServiceConnectProcedure = "/dotfilesd.v1.SessionService/Connect"
 	// SessionServiceFinalizeSessionProcedure is the fully-qualified name of the SessionService's
 	// FinalizeSession RPC.
 	SessionServiceFinalizeSessionProcedure = "/dotfilesd.v1.SessionService/FinalizeSession"
@@ -51,6 +53,10 @@ const (
 type SessionServiceClient interface {
 	// CreateSession creates a new session and returns its ID.
 	CreateSession(context.Context, *connect.Request[dotfilesdv1.CreateSessionRequest]) (*connect.Response[dotfilesdv1.CreateSessionResponse], error)
+	// Connect registers the client's callback URL with a session and starts
+	// the client↔daemon feedback channel. If session_id is empty a new
+	// session is created automatically.
+	Connect(context.Context, *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error)
 	// FinalizeSession marks a session as complete. No further requests
 	// may use this session after finalization.
 	FinalizeSession(context.Context, *connect.Request[dotfilesdv1.FinalizeSessionRequest]) (*connect.Response[dotfilesdv1.FinalizeSessionResponse], error)
@@ -77,6 +83,12 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("CreateSession")),
 			connect.WithClientOptions(opts...),
 		),
+		connect: connect.NewClient[dotfilesdv1.ConnectRequest, dotfilesdv1.ConnectResponse](
+			httpClient,
+			baseURL+SessionServiceConnectProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("Connect")),
+			connect.WithClientOptions(opts...),
+		),
 		finalizeSession: connect.NewClient[dotfilesdv1.FinalizeSessionRequest, dotfilesdv1.FinalizeSessionResponse](
 			httpClient,
 			baseURL+SessionServiceFinalizeSessionProcedure,
@@ -101,6 +113,7 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 // sessionServiceClient implements SessionServiceClient.
 type sessionServiceClient struct {
 	createSession   *connect.Client[dotfilesdv1.CreateSessionRequest, dotfilesdv1.CreateSessionResponse]
+	connect         *connect.Client[dotfilesdv1.ConnectRequest, dotfilesdv1.ConnectResponse]
 	finalizeSession *connect.Client[dotfilesdv1.FinalizeSessionRequest, dotfilesdv1.FinalizeSessionResponse]
 	getSession      *connect.Client[dotfilesdv1.GetSessionRequest, dotfilesdv1.GetSessionResponse]
 	listSessions    *connect.Client[dotfilesdv1.ListSessionsRequest, dotfilesdv1.ListSessionsResponse]
@@ -109,6 +122,11 @@ type sessionServiceClient struct {
 // CreateSession calls dotfilesd.v1.SessionService.CreateSession.
 func (c *sessionServiceClient) CreateSession(ctx context.Context, req *connect.Request[dotfilesdv1.CreateSessionRequest]) (*connect.Response[dotfilesdv1.CreateSessionResponse], error) {
 	return c.createSession.CallUnary(ctx, req)
+}
+
+// Connect calls dotfilesd.v1.SessionService.Connect.
+func (c *sessionServiceClient) Connect(ctx context.Context, req *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error) {
+	return c.connect.CallUnary(ctx, req)
 }
 
 // FinalizeSession calls dotfilesd.v1.SessionService.FinalizeSession.
@@ -130,6 +148,10 @@ func (c *sessionServiceClient) ListSessions(ctx context.Context, req *connect.Re
 type SessionServiceHandler interface {
 	// CreateSession creates a new session and returns its ID.
 	CreateSession(context.Context, *connect.Request[dotfilesdv1.CreateSessionRequest]) (*connect.Response[dotfilesdv1.CreateSessionResponse], error)
+	// Connect registers the client's callback URL with a session and starts
+	// the client↔daemon feedback channel. If session_id is empty a new
+	// session is created automatically.
+	Connect(context.Context, *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error)
 	// FinalizeSession marks a session as complete. No further requests
 	// may use this session after finalization.
 	FinalizeSession(context.Context, *connect.Request[dotfilesdv1.FinalizeSessionRequest]) (*connect.Response[dotfilesdv1.FinalizeSessionResponse], error)
@@ -150,6 +172,12 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		SessionServiceCreateSessionProcedure,
 		svc.CreateSession,
 		connect.WithSchema(sessionServiceMethods.ByName("CreateSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sessionServiceConnectHandler := connect.NewUnaryHandler(
+		SessionServiceConnectProcedure,
+		svc.Connect,
+		connect.WithSchema(sessionServiceMethods.ByName("Connect")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sessionServiceFinalizeSessionHandler := connect.NewUnaryHandler(
@@ -174,6 +202,8 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		switch r.URL.Path {
 		case SessionServiceCreateSessionProcedure:
 			sessionServiceCreateSessionHandler.ServeHTTP(w, r)
+		case SessionServiceConnectProcedure:
+			sessionServiceConnectHandler.ServeHTTP(w, r)
 		case SessionServiceFinalizeSessionProcedure:
 			sessionServiceFinalizeSessionHandler.ServeHTTP(w, r)
 		case SessionServiceGetSessionProcedure:
@@ -191,6 +221,10 @@ type UnimplementedSessionServiceHandler struct{}
 
 func (UnimplementedSessionServiceHandler) CreateSession(context.Context, *connect.Request[dotfilesdv1.CreateSessionRequest]) (*connect.Response[dotfilesdv1.CreateSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SessionService.CreateSession is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) Connect(context.Context, *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SessionService.Connect is not implemented"))
 }
 
 func (UnimplementedSessionServiceHandler) FinalizeSession(context.Context, *connect.Request[dotfilesdv1.FinalizeSessionRequest]) (*connect.Response[dotfilesdv1.FinalizeSessionResponse], error) {
