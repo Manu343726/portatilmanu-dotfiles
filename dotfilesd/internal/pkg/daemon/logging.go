@@ -1,51 +1,50 @@
-package main
+package daemon
 
 import (
-	"fmt"
+	"io"
 	"log/slog"
-	"os/exec"
+	"os"
 	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-func hasSudo() bool {
-	_, err := exec.LookPath("sudo")
-	return err == nil
-}
+const levelTrace = slog.Level(-8)
 
-func hasPkexec() bool {
-	_, err := exec.LookPath("pkexec")
-	return err == nil
-}
+var logLevelVar slog.LevelVar
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
+func setupLogging(logDir, level string, maxMB, backups, age int) {
+	os.MkdirAll(logDir, 0755)
+
+	fileWriter := &lumberjack.Logger{
+		Filename:   logDir + "/dotfilesd.log",
+		MaxSize:    maxMB,
+		MaxBackups: backups,
+		MaxAge:     age,
+		Compress:   true,
 	}
-	return s[:n] + "..."
-}
 
-func runCmd(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
-	return strings.TrimSpace(string(out)), err
-}
-
-func runCmdFull(name string, args ...string) (string, string, int) {
-	var stdout, stderr strings.Builder
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
-		}
+	_, lvl, ok := parseLogLevel(level)
+	if !ok {
+		lvl = slog.LevelInfo
 	}
-	return stdout.String(), stderr.String(), exitCode
+	logLevelVar.Set(lvl)
+
+	multi := io.MultiWriter(os.Stdout, fileWriter)
+	handler := slog.NewTextHandler(multi, &slog.HandlerOptions{
+		Level: &logLevelVar,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.LevelKey {
+				level := a.Value.Any().(slog.Level)
+				if level == levelTrace {
+					a.Value = slog.StringValue("TRACE")
+				}
+			}
+			return a
+		},
+	})
+	slog.SetDefault(slog.New(handler))
 }
 
 func parseLogLevel(s string) (dotfilesdv1.LogLevel, slog.Level, bool) {
@@ -76,8 +75,4 @@ func logLevelToSlog(l dotfilesdv1.LogLevel) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
-}
-
-func fmtSscanf(str string, v any) (int, error) {
-	return fmt.Sscanf(str, "%d", v)
 }

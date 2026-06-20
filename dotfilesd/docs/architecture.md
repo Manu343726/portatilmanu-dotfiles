@@ -13,7 +13,7 @@ dotfilesd has two components: a daemon and a CLI client that also serves as the 
 │ opencode    │                                   │  (shell, git,     │
 │ (AI agent)  │                                   │   i3, tmux,       │
 └─────────────┘                                   │   pkexec)         │
-                                                   └───────────────────┘
+                                                    └───────────────────┘
 ```
 
 ## Port
@@ -26,31 +26,75 @@ dotfilesd has two components: a daemon and a CLI client that also serves as the 
 
 ### Daemon (`cmd/dotfilesd/`)
 
-- **`main.go`** — Entry point. Starts the Connect RPC HTTP server. Sets up slog logging (JSON to stdout + rotated file).
-- **`server.go`** — Connect RPC handler implementations (`dotfilesServer` struct). Implements the `DotfilesService` protobuf interface.
+Thin CLI setup: Cobra command definition + flag/config wiring. Delegates to `internal/pkg/daemon/`.
+
+- **`main.go`** — Entry point. Calls `newRootCmd().Execute()`.
+- **`root.go`** — Cobra root command. Flag definitions, viper config loading, calls `daemon.New(cfg).Start()`.
 
 ### CLI (`cmd/dotfilesctl/`)
 
-- **`main.go`** — Command-line client that makes Connect RPC calls to the daemon. Outputs to stdout only (no log noise). Supports `--verbose` for debugging.
-- **`mcp.go`** — MCP stdio server. Runs in-process when invoked as `dotfilesctl mcp`. Reads JSON-RPC 2.0 messages from stdin (Content-Length framing), dispatches to tool handlers that call the daemon via Connect RPC, and writes responses to stdout.
+Thin CLI setup: Cobra command tree. Each `RunE` delegates to `internal/pkg/cli/`.
+
+- **`main.go`** — Entry point. Calls `newRootCmd().Execute()`.
+- **`root.go`** — Cobra root command. Persistent flags, client creation, subcommand registration.
+- **`system.go`** — `system` subcommand tree (ping/info/sudo).
+- **`dotfiles.go`** — `dotfiles` subcommand tree (status/git).
+- **`exec.go`** — `exec` subcommand.
+- **`config.go`** — `config` subcommand tree (reload/reconfigure/restart).
+- **`mcp.go`** — `mcp` subcommand, starts MCP stdio server.
+
+### Library (`internal/pkg/`)
+
+Shared/internal packages containing all business logic.
+
+- **`internal/pkg/daemon/`** — Connect RPC server implementations:
+  - `server.go` — Daemon struct, HTTP server setup, graceful restart, signal handling.
+  - `system.go` — System service (Ping, SystemInfo, SudoMethods).
+  - `dotfiles.go` — Dotfiles service (Status, Git).
+  - `exec.go` — Exec service (Exec, SudoExec).
+  - `config.go` — Config service (Reload, Reconfigure, Restart).
+  - `helpers.go` — Command execution helpers (runCmd, runCmdFull).
+  - `logging.go` — Logging setup, level parsing.
+
+- **`internal/pkg/cli/`** — CLI action logic:
+  - `client.go` — Client creation (ConnectClients struct).
+  - `system.go` — RunPing, RunInfo, RunSudoMethods.
+  - `dotfiles.go` — RunStatus, RunGit.
+  - `exec.go` — RunExec, RunSudoExec.
+  - `config.go` — RunReload, RunReconfigure, RunRestart.
+  - `mcp.go` — MCP stdio server (JSON-RPC framing, tool dispatch).
+  - `enums.go` — Protobuf enum string parsing.
+  - `helpers.go` — Logging setup, Fatalf.
+
+- **`internal/pkg/shared/`** — Shared utilities:
+  - `buildhash.go` — CheckBuildHash (binary version vs source staleness).
 
 ### Proto (`proto/dotfilesd/v1/dotfilesdv1/`)
 
-- **`service.proto`** — Protobuf service definition.
-- **`service.pb.go`** — Generated Go types (protoc-gen-go).
-- **`dotfilesdv1connect/service.connect.go`** — Generated Connect RPC client/server stubs (protoc-gen-connect-go).
+- **`*.proto`** — Protobuf service definitions.
+- **`*.pb.go`** — Generated Go types (protoc-gen-go).
+- **`dotfilesdv1connect/*.connect.go`** — Generated Connect RPC client/server stubs.
 
-## RPC service
+## RPC services
 
 ```protobuf
-service DotfilesService {
+service SystemService {
   rpc Ping(PingRequest) returns (PingResponse);
-  rpc Status(StatusRequest) returns (StatusResponse);
-  rpc Exec(ExecRequest) returns (ExecResponse);
-  rpc Reload(ReloadRequest) returns (ReloadResponse);
-  rpc Git(GitRequest) returns (GitResponse);
   rpc SystemInfo(SystemInfoRequest) returns (SystemInfoResponse);
   rpc SudoMethods(SudoMethodsRequest) returns (SudoMethodsResponse);
+}
+service DotfilesService {
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc Git(GitRequest) returns (GitResponse);
+}
+service ExecService {
+  rpc Exec(ExecRequest) returns (ExecResponse);
+  rpc SudoExec(SudoExecRequest) returns (SudoExecResponse);
+}
+service ConfigService {
+  rpc Reload(ReloadRequest) returns (ReloadResponse);
+  rpc Reconfigure(ReconfigureRequest) returns (ReconfigureResponse);
+  rpc Restart(RestartRequest) returns (RestartResponse);
 }
 ```
 
@@ -67,6 +111,8 @@ The MCP stdio server (launched via `dotfilesctl mcp`) exposes these tools:
 | `dotfiles_git` | DotfilesService | Git operations on the dotfiles repo |
 | `exec_run` | ExecService | Execute shell commands |
 | `config_reload` | ConfigService | Reload dotfiles configs |
+| `config_reconfigure` | ConfigService | Change daemon runtime config |
+| `config_restart` | ConfigService | Gracefully restart the daemon |
 
 ## Data flow
 
@@ -80,8 +126,13 @@ opencode ──stdio──▶  dotfilesctl mcp  ──Connect RPC──▶  dotf
 ```
 ~/dotfilesd/
 ├── cmd/
-│   ├── dotfilesd/           # Daemon (Connect RPC server only)
-│   └── dotfilesctl/         # CLI client + MCP stdio server
+│   ├── dotfilesd/           # Daemon CLI setup (Cobra + config)
+│   └── dotfilesctl/         # CLI client CLI setup (Cobra)
+├── internal/
+│   └── pkg/
+│       ├── daemon/          # Connect RPC server implementations
+│       ├── cli/             # CLI action logic + MCP server
+│       └── shared/          # Shared utilities
 ├── docs/                    # Documentation
 ├── proto/                   # Protobuf definitions + generated code
 │   └── dotfilesd/v1/dotfilesdv1/

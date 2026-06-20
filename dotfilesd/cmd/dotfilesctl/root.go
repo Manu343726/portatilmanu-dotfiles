@@ -2,28 +2,19 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"log/slog"
-	"net/http"
 	"os"
-	"os/exec"
-	"strings"
 
-	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+	"dotfilesd/internal/pkg/cli"
+	"dotfilesd/internal/pkg/shared"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
-	buildHash  string
-	verbose    bool
-	noVerify   bool
-	port       string
-	sysClient  dotfilesdv1connect.SystemServiceClient
-	dotClient  dotfilesdv1connect.DotfilesServiceClient
-	execClient dotfilesdv1connect.ExecServiceClient
-	cfgClient  dotfilesdv1connect.ConfigServiceClient
+	verbose  bool
+	noVerify bool
+	port     string
+	clients  *cli.Clients
 )
 
 func newRootCmd() *cobra.Command {
@@ -31,7 +22,7 @@ func newRootCmd() *cobra.Command {
 		Use:   "dotfilesctl",
 		Short: "dotfiles runtime CLI",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			checkBuildHash(noVerify, "dotfilesctl")
+			shared.CheckBuildHash(buildHash, noVerify, "dotfilesctl")
 
 			viper.SetConfigName("config")
 			viper.SetConfigType("yaml")
@@ -52,18 +43,14 @@ func newRootCmd() *cobra.Command {
 				verbose = viper.GetBool("verbose")
 			}
 
-			setupLogging(verbose)
+			cli.SetupLogging(verbose)
 			if port == "" {
 				port = os.Getenv("DOTFILESD_PORT")
 				if port == "" {
 					port = "9105"
 				}
 			}
-			baseURL := fmt.Sprintf("http://127.0.0.1:%s", port)
-			sysClient = dotfilesdv1connect.NewSystemServiceClient(http.DefaultClient, baseURL)
-			dotClient = dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, baseURL)
-			execClient = dotfilesdv1connect.NewExecServiceClient(http.DefaultClient, baseURL)
-			cfgClient = dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL)
+			clients = cli.NewClients(port)
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -84,61 +71,4 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newMCPCmd())
 
 	return cmd
-}
-
-func setupLogging(v bool) {
-	logDir := os.Getenv("DOTFILESD_LOG_DIR")
-	if logDir == "" {
-		logDir = os.Getenv("HOME") + "/dotfilesd/logs"
-	}
-	os.MkdirAll(logDir, 0755)
-
-	fileWriter := &lumberjack.Logger{
-		Filename:   logDir + "/dotfilesctl.log",
-		MaxSize:    10,
-		MaxBackups: 5,
-		MaxAge:     30,
-		Compress:   true,
-	}
-
-	var writers []io.Writer
-	writers = append(writers, fileWriter)
-	if v {
-		writers = append(writers, os.Stderr)
-	}
-
-	var multi io.Writer
-	if len(writers) == 1 {
-		multi = writers[0]
-	} else {
-		multi = io.MultiWriter(writers...)
-	}
-
-	level := slog.LevelInfo
-	if v {
-		level = slog.LevelDebug
-	}
-	handler := slog.NewTextHandler(multi, &slog.HandlerOptions{Level: level})
-	slog.SetDefault(slog.New(handler))
-}
-
-func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
-	os.Exit(1)
-}
-
-func checkBuildHash(noVerify bool, name string) {
-	if buildHash == "" || buildHash == "dev" {
-		return
-	}
-	srcDir := os.Getenv("HOME") + "/dotfilesd"
-	out, err := exec.Command("git", "-C", srcDir, "rev-parse", "--short", "HEAD").Output()
-	if err != nil {
-		return
-	}
-	current := strings.TrimSpace(string(out))
-	if current != buildHash && !noVerify {
-		fmt.Fprintf(os.Stderr, "WARNING: %s source changed since build (built: %s, current: %s)\n", name, buildHash, current)
-		fmt.Fprintf(os.Stderr, "  run 'make install' to rebuild, or use --no-verify to silence\n")
-	}
 }
