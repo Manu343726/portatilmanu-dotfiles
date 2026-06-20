@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -49,6 +52,44 @@ func (c *Clients) Connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("start feedback server: %w", err)
 	}
+	fb.SetInputHandler(func(ctx context.Context, req *dotfilesdv1.InputRequest) (string, error) {
+		prompt := req.Prompt
+		if req.Default != "" {
+			prompt = fmt.Sprintf("%s [%s]", prompt, req.Default)
+		}
+		fmt.Fprint(os.Stderr, prompt, " ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		line = strings.TrimRight(line, "\n\r")
+		if line == "" {
+			return req.Default, nil
+		}
+		return line, nil
+	})
+	fb.SetConfirmHandler(func(ctx context.Context, req *dotfilesdv1.ConfirmRequest) (bool, error) {
+		suffix := "[y/N]"
+		defaultVal := false
+		if req.DefaultConfirm {
+			suffix = "[Y/n]"
+			defaultVal = true
+		}
+		fmt.Fprint(os.Stderr, req.Message, " ", suffix, " ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			return false, err
+		}
+		line = strings.TrimRight(line, "\n\r")
+		switch strings.ToLower(line) {
+		case "y", "yes":
+			return true, nil
+		case "n", "no":
+			return false, nil
+		default:
+			return defaultVal, nil
+		}
+	})
 	c.Feedback = fb
 
 	req := connect.NewRequest(&dotfilesdv1.ConnectRequest{

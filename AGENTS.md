@@ -6,17 +6,21 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
 
 ## Rules
 
-1. **Always commit changes to dotfiles.** After modifying any tracked dotfile (`.zshrc`, `.i3/config`, `.config/tmux/`, `.config/kitty/`, etc.), stage and commit with a descriptive message, then push.
+1. **Always commit and push changes.** After modifying any tracked file (dotfiles, daemon source, CLI source, docs, etc.), stage and commit with a descriptive message, then push.
 
-2. **Check `.agents/skills/`** for project-specific skills before working. Load any relevant skill with the skills tool.
+2. **Read docs first.** Before making changes, read `~/dotfilesd/README.md` and `~/dotfilesd/docs/` for context. Follow the development guide in `docs/development.md`.
 
-3. Keep changes idempotent — reloading configs should work cleanly.
+3. **Check `.agents/skills/`** for project-specific skills before working. Load any relevant skill with the skills tool.
 
-4. Follow the Monokai palette (`#272822` bg, `#A6E22E` accent, etc.) when adding visual configs.
+4. Keep changes idempotent — reloading configs should work cleanly.
 
-5. **Use the dotfilesd daemon for dotfiles operations.** The daemon runs as a systemd user service and exposes:
+5. Follow the Monokai palette (`#272822` bg, `#A6E22E` accent, etc.) when adding visual configs.
+
+6. **Use the Makefile for building and installing the daemon/CLI.** Run `make build` to compile, then `make install` to deploy binaries. After modifying daemon or client code, always run `make install` and restart the daemon if needed.
+
+7. **Use the dotfilesd daemon for dotfiles operations.** The daemon runs as a systemd user service and exposes:
    - **MCP** via `dotfilesctl mcp` stdio — for AI agents (tools: `system_ping`, `system_info`, `system_sudo`, `dotfiles_status`, `dotfiles_git`, `exec_run`, `config_reload`).
    - **Connect RPC** at `http://127.0.0.1:9105` — accessible via the `dotfilesctl` CLI client (`~/dotfilesd/cmd/dotfilesctl/main.go`).
    - Prefer `dotfilesctl exec --sudo` for privileged commands instead of raw `pkexec`.
-   - When modifying dotfilesd source code, rebuild with `make build` and restart with `systemctl --user restart dotfilesd`.
+   - After modifying daemon/client code, run `make install` and restart the daemon if needed.
    - See `~/dotfilesd/docs/` for full daemon documentation.
