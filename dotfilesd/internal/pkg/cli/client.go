@@ -13,15 +13,15 @@ import (
 )
 
 type Clients struct {
-	Sys      dotfilesdv1connect.SystemServiceClient
-	Dot      dotfilesdv1connect.DotfilesServiceClient
-	Exec     dotfilesdv1connect.ExecServiceClient
-	Cfg      dotfilesdv1connect.ConfigServiceClient
-	Session  dotfilesdv1connect.SessionServiceClient
-	Callback *CallbackServer
-	SessionID string
-	mu        sync.Mutex
-	connected bool
+	Sys         dotfilesdv1connect.SystemServiceClient
+	Dot         dotfilesdv1connect.DotfilesServiceClient
+	Exec        dotfilesdv1connect.ExecServiceClient
+	Cfg         dotfilesdv1connect.ConfigServiceClient
+	Session     dotfilesdv1connect.SessionServiceClient
+	Feedback    *FeedbackServer
+	SessionID   string
+	mu          sync.Mutex
+	connected   bool
 }
 
 func NewClients(port string) *Clients {
@@ -45,21 +45,21 @@ func (c *Clients) Connect(ctx context.Context) error {
 
 	slog.Debug("client connecting to daemon")
 
-	cb, err := NewCallbackServer()
+	fb, err := NewFeedbackServer()
 	if err != nil {
-		return fmt.Errorf("start callback server: %w", err)
+		return fmt.Errorf("start feedback server: %w", err)
 	}
-	c.Callback = cb
+	c.Feedback = fb
 
 	req := connect.NewRequest(&dotfilesdv1.ConnectRequest{
-		CallbackUrl: cb.URL(),
+		CallbackUrl: fb.URL(),
 		SessionId:   c.SessionID,
 	})
 	req.Header().Set("Session-Id", c.SessionID)
 
 	resp, err := c.Session.Connect(ctx, req)
 	if err != nil {
-		cb.Close()
+		fb.Close()
 		return fmt.Errorf("daemon connect: %w", err)
 	}
 
@@ -68,13 +68,13 @@ func (c *Clients) Connect(ctx context.Context) error {
 	c.connected = true
 	c.mu.Unlock()
 
-	slog.Debug("client connected", "session_id", c.SessionID, "callback_url", cb.URL())
+	slog.Debug("client connected", "session_id", c.SessionID, "feedback_url", fb.URL())
 	return nil
 }
 
 func (c *Clients) Close() {
-	if c.Callback != nil {
-		c.Callback.Close()
+	if c.Feedback != nil {
+		c.Feedback.Close()
 	}
 }
 

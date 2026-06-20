@@ -89,16 +89,15 @@ func (sh *shellSession) Close() error {
 }
 
 type Session struct {
-	id             string
-	createdAt      time.Time
-	lastActive     time.Time
-	requestCount   int
-	finalized      bool
-	data           map[string]string
-	shell          *shellSession
-	callbackURL    string
-	callbackClient dotfilesdv1connect.ClientCallbackClient
-	mu             sync.RWMutex
+	id            string
+	createdAt     time.Time
+	lastActive    time.Time
+	requestCount  int
+	finalized     bool
+	data          map[string]string
+	shell         *shellSession
+	callbackURL   string
+	mu            sync.RWMutex
 }
 
 func newSession(id string) *Session {
@@ -166,39 +165,50 @@ func (s *Session) SetCallbackURL(url string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.callbackURL = url
-	s.callbackClient = nil
 }
 
-func (s *Session) CallFeedback(ctx context.Context, feedbackID, prompt string, contextKV map[string]string) (string, error) {
+func (s *Session) RequestInput(ctx context.Context, prompt, defaultValue string) (string, error) {
 	s.mu.RLock()
 	url := s.callbackURL
-	client := s.callbackClient
 	s.mu.RUnlock()
-
 	if url == "" {
 		return "", fmt.Errorf("no callback URL registered for session %s", s.id)
 	}
 
-	if client == nil {
-		client = dotfilesdv1connect.NewClientCallbackClient(http.DefaultClient, url)
-		s.mu.Lock()
-		s.callbackClient = client
-		s.mu.Unlock()
-	}
-
-	req := connect.NewRequest(&dotfilesdv1.FeedbackRequest{
-		FeedbackId: feedbackID,
-		Prompt:     prompt,
-		Context:    contextKV,
+	client := dotfilesdv1connect.NewInputServiceClient(http.DefaultClient, url)
+	req := connect.NewRequest(&dotfilesdv1.InputRequest{
+		Prompt:  prompt,
+		Default: defaultValue,
 	})
 	req.Header().Set("Session-Id", s.id)
 
-	resp, err := client.Feedback(ctx, req)
+	resp, err := client.RequestInput(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("feedback call failed: %w", err)
+		return "", fmt.Errorf("request input: %w", err)
+	}
+	return resp.Msg.Value, nil
+}
+
+func (s *Session) RequestConfirm(ctx context.Context, message string, defaultConfirm bool) (bool, error) {
+	s.mu.RLock()
+	url := s.callbackURL
+	s.mu.RUnlock()
+	if url == "" {
+		return false, fmt.Errorf("no callback URL registered for session %s", s.id)
 	}
 
-	return resp.Msg.Data, nil
+	client := dotfilesdv1connect.NewConfirmServiceClient(http.DefaultClient, url)
+	req := connect.NewRequest(&dotfilesdv1.ConfirmRequest{
+		Message:        message,
+		DefaultConfirm: defaultConfirm,
+	})
+	req.Header().Set("Session-Id", s.id)
+
+	resp, err := client.RequestConfirm(ctx, req)
+	if err != nil {
+		return false, fmt.Errorf("request confirm: %w", err)
+	}
+	return resp.Msg.Confirmed, nil
 }
 
 type SessionStore struct {

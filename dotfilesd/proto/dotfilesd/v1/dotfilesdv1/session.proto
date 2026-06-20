@@ -56,8 +56,8 @@ message GetSessionResponse {
 }
 
 message ConnectRequest {
-  // Callback URL where the client's ClientCallback server is listening
-  // (e.g. "http://127.0.0.1:43291").
+  // Base URL of the client's feedback server (e.g. "http://127.0.0.1:43291")
+  // where the daemon can call InputService, ConfirmService, etc.
   string callback_url = 1;
   // Session to register the callback with. If empty the daemon creates a
   // new session.

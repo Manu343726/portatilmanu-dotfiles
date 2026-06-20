@@ -379,8 +379,8 @@ func (x *GetSessionResponse) GetSession() *Session {
 
 type ConnectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Callback URL where the client's ClientCallback server is listening
-	// (e.g. "http://127.0.0.1:43291").
+	// Base URL of the client's feedback server (e.g. "http://127.0.0.1:43291")
+	// where the daemon can call InputService, ConfirmService, etc.
 	CallbackUrl string `protobuf:"bytes,1,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
 	// Session to register the callback with. If empty the daemon creates a
 	// new session.

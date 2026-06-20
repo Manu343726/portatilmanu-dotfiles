@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// InputService is called by the daemon when it needs arbitrary text input
+// from the user (e.g. a value for a shell variable, git identity config).
+service InputService {
+  rpc RequestInput(InputRequest) returns (InputResponse);
+}
+
+// ConfirmService is called by the daemon when it needs a yes/no
+// confirmation before proceeding (e.g. destructive file operation).
+service ConfirmService {
+  rpc RequestConfirm(ConfirmRequest) returns (ConfirmResponse);
+}
+
+message InputRequest {
+  string session_id = 100;
+  // Human-readable prompt describing what input is needed.
+  string prompt = 1;
+  // Optional default value if the user just presses enter.
+  string default = 2;
+}
+
+message InputResponse {
+  string session_id = 100;
+  // The value provided by the user (or the default).
+  string value = 1;
+}
+
+message ConfirmRequest {
+  string session_id = 100;
+  // Human-readable message describing what the user is confirming.
+  string message = 1;
+  // Default choice if the user just presses enter (true = yes).
+  bool default_confirm = 2;
+}
+
+message ConfirmResponse {
+  string session_id = 100;
+  // Whether the user confirmed.
+  bool confirmed = 1;
+}
