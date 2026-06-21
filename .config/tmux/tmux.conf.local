@@ -505,10 +505,10 @@ tmux_conf_uninstall_plugins_on_reload=true
 #   local mode
 #   mode=$(supergfxctl -g 2>/dev/null)
 #   case "$mode" in
-#     AsusMuxDgpu) printf '#[fg=#E8871A]NVIDIA#[default] ' ;;
-#     Hybrid)      printf '#[fg=#A6E22E]HYBRID#[default] ' ;;
-#     Integrated)  printf '#[fg=#66D9EF]IGPU#[default] ' ;;
-#     AsusEgpu)    printf '#[fg=#AE81FF]EGPU#[default] ' ;;
+#     AsusMuxDgpu) printf '#[fg=#E8871A]NVIDIA#[default] ' ;;   # monokai orange
+#     Hybrid)      printf '#[fg=#A6E22E]HYBRID#[default] ' ;;   # monokai green
+#     Integrated)  printf '#[fg=#66D9EF]IGPU#[default] ' ;;     # monokai blue
+#     AsusEgpu)    printf '#[fg=#AE81FF]EGPU#[default] ' ;;     # monokai purple
 #     *)           printf '? ' ;;
 #   esac
 #   sleep 5
