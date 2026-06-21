@@ -63,3 +63,12 @@
 !/.config/dotfilesctl/
 /.config/dotfilesctl/*
 !/.config/dotfilesctl/config.yaml
+
+# nchat
+!/.config/nchat/
+/.config/nchat/*
+!/.config/nchat/app.conf
+!/.config/nchat/color.conf
+!/.config/nchat/usercolor.conf
+!/.config/nchat/key.conf
+!/.config/nchat/ui.conf
