@@ -14,9 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+
+	"connectrpc.com/connect"
 )
 
 type shellSession struct {
@@ -89,15 +90,15 @@ func (sh *shellSession) Close() error {
 }
 
 type Session struct {
-	id            string
-	createdAt     time.Time
-	lastActive    time.Time
-	requestCount  int
-	finalized     bool
-	data          map[string]string
-	shell         *shellSession
-	callbackURL   string
-	mu            sync.RWMutex
+	id           string
+	createdAt    time.Time
+	lastActive   time.Time
+	requestCount int
+	finalized    bool
+	data         map[string]string
+	shell        *shellSession
+	callbackURL  string
+	mu           sync.RWMutex
 }
 
 func newSession(id string) *Session {

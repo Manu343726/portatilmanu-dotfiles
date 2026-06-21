@@ -15,13 +15,14 @@ import (
 
 func newRootCmd() *cobra.Command {
 	var (
-		rpcPort   string
-		noVerify  bool
-		logDir    string
-		logLevel  string
-		logMaxMB  int
-		logBackup int
-		logAge    int
+		rpcPort    string
+		noVerify   bool
+		logDir     string
+		logLevel   string
+		logMaxMB   int
+		logBackup  int
+		logAge     int
+		scriptsDir string
 	)
 
 	cmd := &cobra.Command{
@@ -49,14 +50,16 @@ func newRootCmd() *cobra.Command {
 			logMaxMB = firstNonZeroInt(logMaxMB, viper.GetInt("log.max_size_mb"), 10)
 			logBackup = firstNonZeroInt(logBackup, viper.GetInt("log.max_backups"), 5)
 			logAge = firstNonZeroInt(logAge, viper.GetInt("log.max_age_days"), 30)
+			scriptsDir = firstNonEmpty(scriptsDir, viper.GetString("scripts_dir"), os.Getenv("DOTFILESD_SCRIPTS_DIR"), "")
 
 			d := daemon.New(daemon.Config{
-				Port:      rpcPort,
-				LogDir:    logDir,
-				LogLevel:  logLevel,
-				LogMaxMB:  logMaxMB,
-				LogBackup: logBackup,
-				LogAge:    logAge,
+				Port:       rpcPort,
+				LogDir:     logDir,
+				LogLevel:   logLevel,
+				LogMaxMB:   logMaxMB,
+				LogBackup:  logBackup,
+				LogAge:     logAge,
+				ScriptsDir: scriptsDir,
 			})
 
 			if err := d.Start(); err != nil && err != http.ErrServerClosed {

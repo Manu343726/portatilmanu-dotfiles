@@ -14,25 +14,38 @@ import (
 )
 
 type Config struct {
-	Port      string
-	LogDir    string
-	LogLevel  string
-	LogMaxMB  int
-	LogBackup int
-	LogAge    int
+	Port       string
+	LogDir     string
+	LogLevel   string
+	LogMaxMB   int
+	LogBackup  int
+	LogAge     int
+	ScriptsDir string
 }
 
 type Daemon struct {
 	config   Config
 	server   *http.Server
 	sessions *SessionStore
+	scripts  *ScriptRegistry
 }
 
 func New(cfg Config) *Daemon {
+	scriptsDir := cfg.ScriptsDir
+	if scriptsDir == "" {
+		home, _ := os.UserHomeDir()
+		scriptsDir = home + "/.config/dotfilesd/scripts"
+	}
 	return &Daemon{
 		config:   cfg,
 		sessions: NewSessionStore(),
+		scripts:  NewScriptRegistry(scriptsDir),
 	}
+}
+
+// ScriptsRegistry returns the daemon's script registry.
+func (d *Daemon) ScriptsRegistry() *ScriptRegistry {
+	return d.scripts
 }
 
 func (d *Daemon) Start() error {
@@ -43,6 +56,7 @@ func (d *Daemon) Start() error {
 	execSvc := &execServer{sessions: d.sessions}
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
+	scriptSvc := newScriptServer(d.sessions, d.scripts)
 
 	mux := http.NewServeMux()
 	{
@@ -63,6 +77,10 @@ func (d *Daemon) Start() error {
 	}
 	{
 		p, h := dotfilesdv1connect.NewSessionServiceHandler(sessionSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewScriptServiceHandler(scriptSvc)
 		mux.Handle(p, h)
 	}
 

@@ -10,22 +10,24 @@ import (
 	"strings"
 	"sync"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+
+	"connectrpc.com/connect"
 	"golang.org/x/term"
 )
 
 type Clients struct {
-	Sys         dotfilesdv1connect.SystemServiceClient
-	Dot         dotfilesdv1connect.DotfilesServiceClient
-	Exec        dotfilesdv1connect.ExecServiceClient
-	Cfg         dotfilesdv1connect.ConfigServiceClient
-	Session     dotfilesdv1connect.SessionServiceClient
-	Feedback    *FeedbackServer
-	SessionID   string
-	mu          sync.Mutex
-	connected   bool
+	Sys       dotfilesdv1connect.SystemServiceClient
+	Dot       dotfilesdv1connect.DotfilesServiceClient
+	Exec      dotfilesdv1connect.ExecServiceClient
+	Cfg       dotfilesdv1connect.ConfigServiceClient
+	Session   dotfilesdv1connect.SessionServiceClient
+	Script    dotfilesdv1connect.ScriptServiceClient
+	Feedback  *FeedbackServer
+	SessionID string
+	mu        sync.Mutex
+	connected bool
 }
 
 func NewClients(port string) *Clients {
@@ -36,6 +38,7 @@ func NewClients(port string) *Clients {
 		Exec:    dotfilesdv1connect.NewExecServiceClient(http.DefaultClient, baseURL),
 		Cfg:     dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL),
 		Session: dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
+		Script:  dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
 	}
 }
 
@@ -172,5 +175,3 @@ func (c *Clients) Close() {
 		c.Feedback.Close()
 	}
 }
-
-

@@ -125,6 +125,22 @@ var mcpTools = []toolDef{
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}},
 	},
+	{
+		Name:        "script_run",
+		Description: "Run a multi-step script with shell commands and feedback directives (@confirm, @input, @choose). Scripts execute in a persistent session shell so variables set by @input/@choose are available to subsequent commands.",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"script":      {Type: "string", Description: "inline script content"},
+			"script_path": {Type: "string", Description: "path to script file on the daemon host"},
+			"session_id":  {Type: "string", Description: "optional session ID for grouping"},
+		}},
+	},
+	{
+		Name:        "script_list",
+		Description: "List all registered scripts available on the daemon, organized hierarchically by directory.",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}},
+	},
 }
 
 var stdoutMu sync.Mutex
@@ -491,6 +507,94 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			return mcpErr(id, -32603, err.Error())
 		}
 		return mcpToolResult(id, resp.Msg.Message)
+
+	case "script_run":
+		var p struct {
+			Script     string `json:"script"`
+			ScriptPath string `json:"script_path"`
+		}
+		json.Unmarshal(args, &p)
+
+		if p.Script == "" && p.ScriptPath == "" {
+			return mcpErr(id, -32602, "either 'script' or 'script_path' is required")
+		}
+
+		var req *connect.Request[dotfilesdv1.RunScriptRequest]
+		if p.ScriptPath != "" {
+			req = connect.NewRequest(&dotfilesdv1.RunScriptRequest{
+				Source: &dotfilesdv1.RunScriptRequest_ScriptPath{ScriptPath: p.ScriptPath},
+			})
+		} else {
+			req = connect.NewRequest(&dotfilesdv1.RunScriptRequest{
+				Source: &dotfilesdv1.RunScriptRequest_Script{Script: p.Script},
+			})
+		}
+		addSessionHeader(req, args, clients.SessionID)
+		resp, err := clients.Script.RunScript(context.Background(), req)
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+
+		var lines []string
+		for _, step := range resp.Msg.Steps {
+			switch step.StepKind {
+			case "exec":
+				l := fmt.Sprintf("[%d] $ %s", step.StepNumber, step.SourceLine)
+				lines = append(lines, l)
+				if step.Stdout != "" {
+					lines = append(lines, step.Stdout)
+				}
+				if step.Stderr != "" {
+					lines = append(lines, "stderr: "+step.Stderr)
+				}
+				if step.ExitCode != 0 {
+					lines = append(lines, fmt.Sprintf("→ exit code %d", step.ExitCode))
+				}
+			case "confirm", "input", "choose":
+				lines = append(lines, fmt.Sprintf("[%d] @%s → %s", step.StepNumber, step.StepKind, step.FeedbackValue))
+			}
+		}
+		text := strings.Join(lines, "\n")
+		if !resp.Msg.AllSucceeded {
+			return mcpResp(id, map[string]any{
+				"content": []map[string]any{{"type": "text", "text": text}},
+				"isError": true,
+			})
+		}
+		return mcpToolResult(id, text)
+
+	case "script_list":
+		req := connect.NewRequest(&dotfilesdv1.ListScriptsRequest{})
+		addSessionHeader(req, args, clients.SessionID)
+		resp, err := clients.Script.ListScripts(context.Background(), req)
+		if err != nil {
+			return mcpErr(id, -32603, err.Error())
+		}
+		var lines []string
+		var printEntries func(entries []*dotfilesdv1.ScriptEntry, indent string)
+		printEntries = func(entries []*dotfilesdv1.ScriptEntry, indent string) {
+			for _, e := range entries {
+				desc := e.Description
+				if desc == "" {
+					desc = e.Name
+				}
+				suffix := ""
+				if !e.Enabled {
+					suffix = " [disabled]"
+				}
+				if e.IsDirectory {
+					lines = append(lines, fmt.Sprintf("%s%s/  %s", indent, e.Name, desc))
+					printEntries(e.Children, indent+"  ")
+				} else {
+					lines = append(lines, fmt.Sprintf("%s%s  %s%s", indent, e.Name, desc, suffix))
+				}
+			}
+		}
+		printEntries(resp.Msg.Entries, "")
+		if len(lines) == 0 {
+			return mcpToolResult(id, "no registered scripts found")
+		}
+		return mcpToolResult(id, strings.Join(lines, "\n"))
 
 	default:
 		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))

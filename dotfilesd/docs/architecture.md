@@ -96,6 +96,9 @@ service ConfigService {
   rpc Reconfigure(ReconfigureRequest) returns (ReconfigureResponse);
   rpc Restart(RestartRequest) returns (RestartResponse);
 }
+service ScriptService {
+  rpc RunScript(RunScriptRequest) returns (RunScriptResponse);
+}
 ```
 
 ## MCP tools
@@ -113,6 +116,7 @@ The MCP stdio server (launched via `dotfilesctl mcp`) exposes these tools:
 | `config_reload` | ConfigService | Reload dotfiles configs |
 | `config_reconfigure` | ConfigService | Change daemon runtime config |
 | `config_restart` | ConfigService | Gracefully restart the daemon |
+| `script_run` | ScriptService | Run a multi-step script with feedback directives |
 
 ## Sessions
 

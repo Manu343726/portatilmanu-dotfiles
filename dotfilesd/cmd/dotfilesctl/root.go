@@ -83,6 +83,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newConfigCmd())
 	cmd.AddCommand(newMCPCmd())
 	cmd.AddCommand(newSessionCmd())
+	cmd.AddCommand(newScriptCmd())
 
 	return cmd
 }

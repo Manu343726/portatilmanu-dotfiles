@@ -94,6 +94,102 @@ dotfilesctl mcp
 
 Not meant to be invoked directly by a human — opencode launches it as a subprocess, configured in `opencode.jsonc` as a local MCP server.
 
+### `script`
+
+Run a multi-step script with shell commands interleaved with feedback directives. Scripts execute in a persistent session shell — variables set in one step are available in subsequent steps.
+
+**Syntax:**
+
+| Line type | Description |
+|-----------|-------------|
+| `# comment` | Ignored |
+| `shell command` | Executed in the session shell |
+| `@confirm "message"` | Yes/no confirmation prompt |
+| `@input "prompt" [as VARNAME]` | Text input (default var: `$_input`) |
+| `@choose "prompt" "opt1" "opt2" ... [as VARNAME]` | Pick from options (default var: `$_choose`) |
+
+**Examples:**
+
+```sh
+# Inline script (multi-line strings in the shell)
+dotfilesctl script '
+  echo "=== Setup ==="
+  @confirm "Ready?"
+  @input "Project name:" as PROJECT
+  @choose "Type:" "lib" "bin" "test" as TYPE
+  mkdir -p "$PROJECT/$TYPE"
+  echo "Created $PROJECT/$TYPE"
+'
+
+# Script file
+dotfilesctl script --file ~/myscript.dsh
+
+# Piped from stdin
+echo 'echo "hello"' | dotfilesctl script
+```
+
+### `script list`
+
+List all registered scripts from the daemon's scripts directory, organized hierarchically.
+
+```sh
+dotfilesctl script list
+# → git/
+# →   commit    Stage all changes and create a commit
+# →   status    Show working tree status
+# → system/
+# →   update    Update system packages via pacman
+```
+
+### `script run <relative-path>`
+
+Run a registered script by its path in the scripts tree. Supports tab completion.
+
+```sh
+dotfilesctl script run git/status
+dotfilesctl script run git/commit
+dotfilesctl script run system/update
+```
+
+**Scripts directory layout:**
+
+Scripts live in `~/.config/dotfilesd/scripts/` (configurable via `scripts_dir` in the daemon config or `DOTFILESD_SCRIPTS_DIR` env var). The directory is organized hierarchically:
+
+```
+scripts/
+├── git/
+│   ├── README.md       # Directory front matter (description, enabled, exclude)
+│   ├── commit.dsh      # Script with YAML front matter
+│   └── status.dsh
+└── system/
+    ├── README.md
+    └── update.dsh
+```
+
+Each `.dsh` file can include YAML front matter between `---` markers for metadata:
+
+```yaml
+---
+description: Stage all changes and create a commit
+params:
+  - name: message
+    description: Commit message
+    required: true
+---
+```
+
+Directory `README.md` files can also include front matter to enable/disable scripts and set descriptions:
+
+```yaml
+---
+description: Git operations and workflows
+enabled: true
+exclude:
+  - dangerous_script
+---
+```
+```
+
 ## MCP tools (for AI agents)
 
 Available when opencode launches `dotfilesctl mcp` as a stdio subprocess.
@@ -121,6 +217,14 @@ Git operations. Parameters: `action` (required), `message`, `paths`. Maps to `do
 ### `exec_run`
 
 Execute shell commands. Parameters: `command` (required), `sudo`. Returns stdout, stderr, and exit code. Maps to `dotfilesctl exec`.
+
+### `script_run`
+
+Run a multi-step script with shell commands and feedback directives (@confirm, @input, @choose). Parameters: `script` (inline content), `script_path` (path on daemon host), or `registered_script` (path in scripts tree). Maps to `dotfilesctl script`.
+
+### `script_list`
+
+List all registered scripts from the daemon's scripts directory, organized hierarchically. Maps to `dotfilesctl script list`.
 
 ### `config_reload`
 

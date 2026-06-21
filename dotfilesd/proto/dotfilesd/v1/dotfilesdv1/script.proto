@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// ScriptService — run a multi-step script with interleaved shell commands
+// and client feedback (input, confirm, choose). Scripts execute in a
+// session with a persistent shell so variables set in one step are
+// available in subsequent steps.
+service ScriptService {
+  // RunScript parses and executes a script. Feedback steps (input/confirm/
+  // choose) are handled through the session's callback URL mechanism.
+  rpc RunScript(RunScriptRequest) returns (RunScriptResponse);
+  // ListScripts returns the tree of registered scripts from the daemon's
+  // scripts directory, with front-matter metadata.
+  rpc ListScripts(ListScriptsRequest) returns (ListScriptsResponse);
+}
+
+// ---------------------------------------------------------------------------
+// Script source
+// ---------------------------------------------------------------------------
+message RunScriptRequest {
+  string session_id = 100;
+
+  oneof source {
+    string script = 1;            // inline script content
+    string script_path = 2;       // absolute path to a .dsh file on the daemon host
+    string registered_script = 3; // relative path in the scripts tree (e.g. "git/commit")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-step result
+// ---------------------------------------------------------------------------
+message StepResult {
+  int32 step_number = 1;
+  string source_line = 2;
+  string step_kind = 3;  // "exec", "confirm", "input", "choose"
+  int32 exit_code = 4;
+  string stdout = 5;
+  string stderr = 6;
+  string feedback_value = 7;
+}
+
+message RunScriptResponse {
+  repeated StepResult steps = 1;
+  bool all_succeeded = 2;
+  string error = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Script registry (ListScripts)
+// ---------------------------------------------------------------------------
+message ListScriptsRequest {
+  string session_id = 100;
+}
+
+message ListScriptsResponse {
+  // Root-level tree of registered scripts.
+  repeated ScriptEntry entries = 1;
+}
+
+// ScriptEntry represents a node in the scripts tree.
+message ScriptEntry {
+  // Relative path from the scripts root (e.g. "git/commit", "system").
+  string path = 1;
+  // Basename without .dsh (e.g. "commit", "system").
+  string name = 2;
+  // True if this is a directory with children.
+  bool is_directory = 3;
+  // Description from README.md front matter or script front matter.
+  string description = 4;
+  // Whether the entry is enabled (can be disabled via README.md exclude list).
+  bool enabled = 5;
+  // Child entries (only for directories).
+  repeated ScriptEntry children = 6;
+  // Parameter definitions from script front matter.
+  repeated ScriptParam params = 7;
+}
+
+message ScriptParam {
+  string name = 1;
+  string description = 2;
+  bool required = 3;
+  string default_value = 4;
+}
