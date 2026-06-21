@@ -110,11 +110,78 @@ make deps           # go mod tidy + go mod download
 
 ## Logging
 
-The daemon uses `log/slog` with a JSON handler writing to `io.MultiWriter(os.Stdout, lumberjack)`:
+Both the daemon and CLI use Go's `log/slog` package with structured text output to rotated log files.
+**Neither the daemon nor the CLI ever write log output to stdout or stderr** — program output
+(e.g. `dotfilesctl exec` displaying command results) goes to stdout/stderr directly via `fmt.Print`,
+but internal diagnostic logging goes exclusively to files.
 
-- **stdout** — captured by systemd-journald when running as a service
-- **rotated file** — `~/dotfilesd/logs/dotfilesd.log` (10 MB, 5 backups, 30 day retention, gzip compressed)
+| Component | Log file | Rotation | Retention |
+|-----------|----------|----------|-----------|
+| Daemon  | `~/dotfilesd/logs/dotfilesd.log` | 10 MB per file | 5 backups, 30 days, gzip |
+| CLI     | `~/dotfilesd/logs/dotfilesctl.log` | 10 MB per file | 5 backups, 30 days, gzip |
 
-The CLI logs to `~/dotfilesd/logs/dotfilesctl.log`. Pass `--verbose` to additionally log to stderr.
+The log directory can be overridden with the `$DOTFILESD_LOG_DIR` environment variable.
 
-Override the log directory with `$DOTFILESD_LOG_DIR`.
+### Log levels
+
+| Level | When to use |
+|-------|-------------|
+| `error` | Unrecoverable or unexpected failures that prevent an operation from completing |
+| `warn`  | Recoverable issues, deprecated usage, non-critical failures |
+| `info`  | General program workflow — operations starting/completing, state transitions |
+| `debug` | Diagnostic details — request payloads, response summaries, internal state |
+| `trace` | Verbose low-level details — individual function calls, loop iterations, wire bytes |
+
+### Daemon
+
+Configured via CLI flags, config file (`~/.config/dotfilesd/config.yaml`), or environment:
+
+```sh
+dotfilesd --log-level debug --log-dir ~/dotfilesd/logs
+# or
+DOTFILESD_LOG_LEVEL=debug dotfilesd
+```
+
+The daemon also writes logs to its own stdout (captured by systemd-journald when running as a service),
+so you can follow live logs with:
+
+```sh
+journalctl --user -u dotfilesd -f
+```
+
+### CLI
+
+Configured via `--log-level` / `-l` flag (`~/.config/dotfilesctl/config.yaml` or `DOTFILESCTL_LOG_LEVEL` env):
+
+```sh
+dotfilesctl --log-level debug exec 'echo hello'
+dotfilesctl -l trace system ping
+```
+
+The `--verbose` / `-v` flag is a shorthand for `--log-level debug`.
+
+### Adding logging to new code
+
+- **info** — log when an operation starts and completes
+- **debug** — log request/response summaries, key intermediate values
+- **trace** — log high-frequency events, loop iterations, raw data dumps
+- **error** — log failures before returning the error to the caller
+- **warn** — log non-fatal edge cases, deprecation notices
+
+Example pattern:
+
+```go
+slog.Debug("operation started", "key", value)
+result, err := doSomething()
+if err != nil {
+    slog.Error("operation failed", "key", value, "error", err)
+    return fmt.Errorf("operation failed: %w", err)
+}
+slog.Info("operation completed", "key", value, "result", result)
+```
+
+### Log file management
+
+Log files are rotated automatically by [lumberjack](https://github.com/natefinch/lumberjack).
+The log directory is created automatically on first use. Old compressed logs are cleaned
+up based on the backup count and age settings.

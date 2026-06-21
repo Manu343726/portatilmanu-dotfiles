@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -11,6 +10,9 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+// cliTraceLevel is a custom slog level for TRACE, below Debug.
+const cliTraceLevel = slog.Level(-8)
 
 // sessionProto creates a Session protobuf message from a session ID string.
 // Returns nil if the ID is empty, so the daemon creates an ephemeral session.
@@ -39,14 +41,41 @@ func sessionProto(id string) *dotfilesdv1.Session {
 	}
 }
 
-func SetupLogging(verbose bool) {
+// ParseLogLevelStr converts a level string to slog.Level.
+// Valid: trace, debug, info, warn, error.
+func parseLogLevelStr(s string) (slog.Level, bool) {
+	switch strings.ToLower(s) {
+	case "trace":
+		return cliTraceLevel, true
+	case "debug":
+		return slog.LevelDebug, true
+	case "info":
+		return slog.LevelInfo, true
+	case "warn", "warning":
+		return slog.LevelWarn, true
+	case "error":
+		return slog.LevelError, true
+	default:
+		return slog.LevelInfo, false
+	}
+}
+
+// SetupLogging configures the CLI's structured logger.
+//
+// Logs go exclusively to the log file — never to stdout or stderr.
+// The log file is created in the DOTFILESD_LOG_DIR (defaults to
+// ~/dotfilesd/logs/dotfilesctl.log) with rotation via lumberjack.
+//
+// level can be: trace, debug, info, warn, error.
+// If empty or invalid, info is used.
+func SetupLogging(level string) {
 	logDir := os.Getenv("DOTFILESD_LOG_DIR")
 	if logDir == "" {
 		logDir = os.Getenv("HOME") + "/dotfilesd/logs"
 	}
 	os.MkdirAll(logDir, 0755)
 
-	fileWriter := &lumberjack.Logger{
+	writer := &lumberjack.Logger{
 		Filename:   logDir + "/dotfilesctl.log",
 		MaxSize:    10,
 		MaxBackups: 5,
@@ -54,24 +83,23 @@ func SetupLogging(verbose bool) {
 		Compress:   true,
 	}
 
-	var writers []io.Writer
-	writers = append(writers, fileWriter)
-	if verbose {
-		writers = append(writers, os.Stderr)
+	lvl, ok := parseLogLevelStr(level)
+	if !ok {
+		lvl = slog.LevelInfo
 	}
 
-	var multi io.Writer
-	if len(writers) == 1 {
-		multi = writers[0]
-	} else {
-		multi = io.MultiWriter(writers...)
-	}
-
-	level := slog.LevelInfo
-	if verbose {
-		level = slog.LevelDebug
-	}
-	handler := slog.NewTextHandler(multi, &slog.HandlerOptions{Level: level})
+	handler := slog.NewTextHandler(writer, &slog.HandlerOptions{
+		Level: lvl,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.LevelKey {
+				level := a.Value.Any().(slog.Level)
+				if level == cliTraceLevel {
+					a.Value = slog.StringValue("TRACE")
+				}
+			}
+			return a
+		},
+	})
 	slog.SetDefault(slog.New(handler))
 }
 

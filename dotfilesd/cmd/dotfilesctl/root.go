@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	logLevel  string
 	verbose   bool
 	noVerify  bool
 	port      string
@@ -42,11 +43,21 @@ func newRootCmd() *cobra.Command {
 			if !cmd.Flags().Changed("port") {
 				port = viper.GetString("port")
 			}
-			if !cmd.Flags().Changed("verbose") {
-				verbose = viper.GetBool("verbose")
+			if !cmd.Flags().Changed("log-level") && !cmd.Flags().Changed("verbose") {
+				logLevel = viper.GetString("log-level")
+				if logLevel == "" {
+					logLevel = os.Getenv("DOTFILESCTL_LOG_LEVEL")
+				}
+			}
+			// --verbose is a shorthand for --log-level debug.
+			if verbose && !cmd.Flags().Changed("log-level") {
+				logLevel = "debug"
+			}
+			if logLevel == "" {
+				logLevel = "info"
 			}
 
-			cli.SetupLogging(verbose)
+			cli.SetupLogging(logLevel)
 			if port == "" {
 				port = os.Getenv("DOTFILESD_PORT")
 				if port == "" {
@@ -81,7 +92,8 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 	}
 
-	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose logging to stderr")
+	cmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "", "log level: trace|debug|info|warn|error (default info)")
+	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "shorthand for --log-level debug")
 	cmd.PersistentFlags().BoolVar(&noVerify, "no-verify", false, "skip source version check")
 	cmd.PersistentFlags().StringVarP(&port, "port", "p", "", "daemon port (default DOTFILESD_PORT env or 9105)")
 	cmd.PersistentFlags().StringVar(&sessionID, "session", "", "session ID for grouping requests")

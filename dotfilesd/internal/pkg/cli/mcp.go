@@ -161,8 +161,6 @@ func writeJSONLine(w io.Writer, v any) {
 }
 
 func RunMCP(clients *Clients) {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
-
 	bridge := NewMCPBridge(os.Stdout)
 	mcpBridge = bridge
 
