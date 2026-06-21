@@ -31,6 +31,7 @@ type Daemon struct {
 }
 
 func New(cfg Config) *Daemon {
+	SetDaemonPort(cfg.Port)
 	scriptsDir := cfg.ScriptsDir
 	if scriptsDir == "" {
 		home, _ := os.UserHomeDir()

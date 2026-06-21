@@ -52,6 +52,15 @@ func newRootCmd() *cobra.Command {
 					port = "9105"
 				}
 			}
+
+			// Inherit session from environment when running inside a daemon-managed shell.
+			// Skip for 'exec' which needs its own shell to avoid deadlock when nesting.
+			if cmd.Name() != "exec" && !cmd.Flags().Changed("session") {
+				if envSession := os.Getenv("DOTFILESD_SESSION"); envSession != "" {
+					sessionID = envSession
+				}
+			}
+
 			clients = cli.NewClients(port)
 			clients.SessionID = sessionID
 

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -20,6 +21,17 @@ import (
 	"connectrpc.com/connect"
 )
 
+// daemonPort is the RPC port the daemon listens on, set at startup via SetDaemonPort().
+// Used to inject DOTFILESD_PORT into shell sessions so nested dotfilesctl calls
+// know where to connect.
+var daemonPort string
+
+// SetDaemonPort configures the daemon port used for injecting DOTFILESD_PORT
+// into managed shell sessions.
+func SetDaemonPort(port string) {
+	daemonPort = port
+}
+
 type shellSession struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -27,8 +39,21 @@ type shellSession struct {
 	mu     sync.Mutex
 }
 
-func newShellSession() (*shellSession, error) {
+func newShellSession(sessionID string) (*shellSession, error) {
 	cmd := exec.Command("bash", "--norc", "--noprofile")
+	home := os.Getenv("HOME")
+	path := os.Getenv("PATH")
+	localBin := home + "/.local/bin"
+	if !strings.Contains(path, localBin) {
+		path = localBin + ":" + path
+	}
+	cmd.Env = []string{
+		"DOTFILESD_DAEMON=1",
+		"DOTFILESD_PORT=" + daemonPort,
+		"DOTFILESD_SESSION=" + sessionID,
+		"PATH=" + path,
+		"HOME=" + home,
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("stdin pipe: %w", err)
@@ -142,7 +167,7 @@ func (s *Session) ensureShell() (*shellSession, error) {
 		return nil, fmt.Errorf("session is finalized")
 	}
 	if s.shell == nil {
-		sh, err := newShellSession()
+		sh, err := newShellSession(s.id)
 		if err != nil {
 			return nil, err
 		}
