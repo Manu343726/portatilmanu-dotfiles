@@ -96,7 +96,7 @@ var mcpTools = []toolDef{
 		Description: "Execute a shell command",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
 			"command":    {Type: "string"},
-			"sudo":       {Type: "string", Enum: []string{"true", "false"}},
+			"sudo":       {Type: "boolean"},
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"command"}},
 	},
@@ -258,13 +258,20 @@ func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 	}
 }
 
-func addSessionHeader[T any](req *connect.Request[T], args json.RawMessage) {
+func addSessionHeader[T any](req *connect.Request[T], args json.RawMessage, defaultSessionID string) {
 	var p struct{ SessionID string `json:"session_id"` }
 	if err := json.Unmarshal(args, &p); err != nil {
+		if defaultSessionID != "" {
+			req.Header().Set("Session-Id", defaultSessionID)
+		}
 		return
 	}
-	if p.SessionID != "" {
-		req.Header().Set("Session-Id", p.SessionID)
+	id := p.SessionID
+	if id == "" {
+		id = defaultSessionID
+	}
+	if id != "" {
+		req.Header().Set("Session-Id", id)
 	}
 }
 
@@ -272,7 +279,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 	switch name {
 	case "system_ping":
 		req := connect.NewRequest(&dotfilesdv1.PingRequest{})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Sys.Ping(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -283,7 +290,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 
 	case "system_info":
 		req := connect.NewRequest(&dotfilesdv1.SystemInfoRequest{})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Sys.SystemInfo(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -298,7 +305,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 
 	case "system_sudo":
 		req := connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Sys.SudoMethods(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -310,7 +317,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 
 	case "dotfiles_status":
 		req := connect.NewRequest(&dotfilesdv1.StatusRequest{})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Dot.Status(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -332,7 +339,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			return mcpErr(id, -32602, fmt.Sprintf("unknown action: %s", p.Action))
 		}
 		req := connect.NewRequest(&dotfilesdv1.GitRequest{Action: action, Message: p.Message, Paths: p.Paths})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Dot.Git(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -348,15 +355,15 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 	case "exec_run":
 		var p struct {
 			Command string `json:"command"`
-			Sudo    string `json:"sudo"`
+			Sudo    bool   `json:"sudo"`
 		}
 		json.Unmarshal(args, &p)
 
 		req := connect.NewRequest(&dotfilesdv1.ExecRequest{
 			Command: p.Command,
-			Sudo:    p.Sudo == "true",
+			Sudo:    p.Sudo,
 		})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Exec.Exec(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -381,7 +388,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			}
 		}
 		req := connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Cfg.Reload(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -407,7 +414,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			return mcpErr(id, -32602, fmt.Sprintf("invalid log level: %s", p.LogLevel))
 		}
 		req := connect.NewRequest(&dotfilesdv1.ReconfigureRequest{LogLevel: logLevel})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Cfg.Reconfigure(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
@@ -422,7 +429,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 
 	case "config_restart":
 		req := connect.NewRequest(&dotfilesdv1.RestartRequest{})
-		addSessionHeader(req, args)
+		addSessionHeader(req, args, clients.SessionID)
 		resp, err := clients.Cfg.Restart(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
