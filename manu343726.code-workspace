@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"mcp.servers": {
+			"dotfilesctl": {
+				"type": "stdio",
+				"command": "/home/manu343726/.local/bin/dotfilesctl",
+				"args": ["mcp"]
+			}
+		}
+	}
+}

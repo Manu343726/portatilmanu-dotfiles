@@ -5,6 +5,7 @@
 # dotfiles
 !/README.md
 !/AGENTS.md
+!/manu343726.code-workspace
 !/.docs/
 /.docs/*
 !/.docs/*.md
