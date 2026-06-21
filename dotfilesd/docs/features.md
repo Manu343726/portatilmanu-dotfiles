@@ -96,9 +96,11 @@ Not meant to be invoked directly by a human — opencode launches it as a subpro
 
 ### `script`
 
-Run a multi-step script with shell commands interleaved with feedback directives. Scripts execute in a persistent session shell — variables set in one step are available in subsequent steps.
+Run a script (builtin registered, file, inline, or from stdin) with shell commands
+interleaved with feedback directives. Scripts execute in a persistent session shell —
+variables set in one step are available in subsequent steps.
 
-**Syntax:**
+**Syntax (for file, inline, and stdin scripts):**
 
 | Line type | Description |
 |-----------|-------------|
@@ -108,11 +110,42 @@ Run a multi-step script with shell commands interleaved with feedback directives
 | `@input "prompt" [as VARNAME]` | Text input (default var: `$_input`) |
 | `@choose "prompt" "opt1" "opt2" ... [as VARNAME]` | Pick from options (default var: `$_choose`) |
 
+**Flags (mutually exclusive):**
+
+| Flag | Description |
+|------|-------------|
+| `--file FILE` / `-f` | Run a script from FILE on the daemon host |
+| `--inline STR` | Run STR as an inline script |
+| `--stdin` | Read script text from stdin |
+
+Without any flag, positional arguments denote a **registered script path**
+(e.g., `git status` runs the `git/status` registered script).
+If no flags and no arguments are given, lists all registered scripts.
+
 **Examples:**
 
 ```sh
-# Inline script (multi-line strings in the shell)
-dotfilesctl script '
+# List registered scripts
+dotfilesctl script
+# → git/
+# →   commit    Stage all changes and create a commit
+# →   status    Show working tree status
+# → system/
+# →   update    Update system packages via pacman
+
+# Run a registered script by path (args are joined with "/")
+dotfilesctl script git status          # runs git/status
+dotfilesctl script git commit          # runs git/commit
+dotfilesctl script system update       # runs system/update
+
+# Tab completion works, so dotfilesctl script git <TAB>
+# shows status, commit, etc.
+
+# Run a script from a file on the daemon host
+dotfilesctl script --file ~/myscript.dsh
+
+# Run an inline script
+dotfilesctl script --inline '
   echo "=== Setup ==="
   @confirm "Ready?"
   @input "Project name:" as PROJECT
@@ -121,41 +154,14 @@ dotfilesctl script '
   echo "Created $PROJECT/$TYPE"
 '
 
-# Script file
-dotfilesctl script --file ~/myscript.dsh
-
-# Piped from stdin
-echo 'echo "hello"' | dotfilesctl script
-```
-
-### `script list`
-
-List all registered scripts from the daemon's scripts directory, organized hierarchically.
-
-```sh
-dotfilesctl script list
-# → git/
-# →   commit    Stage all changes and create a commit
-# →   status    Show working tree status
-# → system/
-# →   update    Update system packages via pacman
-```
-
-### `script run <directory>... <script>`
-
-Run a registered script by its path in the scripts tree. Path components are
-space-separated (use `run git status`, not `run git/status`). Supports tab
-completion — directories auto-suggest with a trailing `/`.
-
-```sh
-dotfilesctl script run git status
-dotfilesctl script run git commit
-dotfilesctl script run system update
+# Read script from stdin
+echo 'echo "hello"' | dotfilesctl script --stdin
 ```
 
 **Scripts directory layout:**
 
-Scripts live in `~/.config/dotfilesd/scripts/` (configurable via `scripts_dir` in the daemon config or `DOTFILESD_SCRIPTS_DIR` env var). The directory is organized hierarchically:
+Registered scripts live in `~/.config/dotfilesd/scripts/` (configurable via `scripts_dir`
+in the daemon config or `DOTFILESD_SCRIPTS_DIR` env var). The directory is organized hierarchically:
 
 ```
 scripts/
@@ -189,7 +195,6 @@ enabled: true
 exclude:
   - dangerous_script
 ---
-```
 ```
 
 ## MCP tools (for AI agents)
