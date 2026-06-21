@@ -75,9 +75,19 @@ ZSH_THEME="agnoster"
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(git tmux zsh-autosuggestions zsh-syntax-highlighting)
 
-ZSH_TMUX_AUTOSTART=true
+if [[ "$TERM_PROGRAM" == "vscode" ]]; then
+  ZSH_TMUX_AUTOSTART=false
+else
+  ZSH_TMUX_AUTOSTART=true
+fi
 
 source $ZSH/oh-my-zsh.sh
+
+# VS Code terminal: attach to a dedicated "vscode" tmux session instead of
+# sharing the main terminal session.
+if [[ "$TERM_PROGRAM" == "vscode" && -z "$TMUX" ]]; then
+  tmux new-session -A -s vscode
+fi
 
 # Monokai autosuggestion color
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#75715E'
