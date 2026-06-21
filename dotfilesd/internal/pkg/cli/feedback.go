@@ -88,9 +88,19 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 		}
 		var rpcResp struct {
 			Result json.RawMessage `json:"result"`
+			Error  *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error,omitempty"`
 		}
 		if err := json.Unmarshal(raw, &rpcResp); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
+		}
+		if rpcResp.Error != nil {
+			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("MCP input request rejected by client: %s", rpcResp.Error.Message))
+		}
+		if rpcResp.Result == nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP response missing result and error"))
 		}
 		var pbResp dotfilesdv1.InputResponse
 		if err := json.Unmarshal(rpcResp.Result, &pbResp); err != nil {
@@ -135,9 +145,19 @@ func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Reques
 		}
 		var rpcResp struct {
 			Result json.RawMessage `json:"result"`
+			Error  *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error,omitempty"`
 		}
 		if err := json.Unmarshal(raw, &rpcResp); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
+		}
+		if rpcResp.Error != nil {
+			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("MCP confirm request rejected by client: %s", rpcResp.Error.Message))
+		}
+		if rpcResp.Result == nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP response missing result and error"))
 		}
 		var pbResp dotfilesdv1.ConfirmResponse
 		if err := json.Unmarshal(rpcResp.Result, &pbResp); err != nil {

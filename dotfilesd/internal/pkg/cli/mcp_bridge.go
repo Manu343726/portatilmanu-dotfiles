@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -77,8 +76,4 @@ func (b *MCPBridge) HandleResponse(id string, data json.RawMessage) bool {
 	return true
 }
 
-// WriteResp is kept for compatibility but writeJSONLine (in mcp.go)
-// should be used directly for new code.
-func (b *MCPBridge) WriteResp(resp *mcpResponse) {
-	writeJSONLine(os.Stdout, resp)
-}
+
