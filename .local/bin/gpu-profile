@@ -1,0 +1,5 @@
+#!/usr/bin/env zsh
+profiles=("Integrated" "Hybrid" "AsusMuxDgpu" "AsusEgpu")
+current=$(supergfxctl -g)
+choice=$(printf '%s\n' "${profiles[@]}" | rofi -dmenu -p "GPU Profile" -mesg "Current: $current" -l "${#profiles[@]}" -theme /home/manu343726/.config/rofi/monokai.rasi)
+[[ -n "$choice" ]] && supergfxctl -m "$choice" && notify-send "GPU Profile" "$choice (logout to apply)"

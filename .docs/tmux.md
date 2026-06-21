@@ -84,6 +84,7 @@ Defined in `~/.config/tmux/tmux.conf.local` between `# EOF` and `# "$@"`:
 | Function | Displays | Source |
 |----------|----------|--------|
 | `asus_profile` | Power profile (PERF/BAL/QUIET) | `asusctl profile get` |
+| `gpu_profile` | GPU profile (IGPU/HYBRID/NVIDIA/EGPU) | `supergfxctl -g` |
 | `cpu_info` | CPU usage with 10-segment bar | `/proc/stat` |
 | `cpu_temp` | CPU temp with 10-segment bar, min/max tracking | `/sys/class/hwmon/hwmon5/temp1_input` |
 | `ram_info` | RAM usage with 10-segment bar | `free` |

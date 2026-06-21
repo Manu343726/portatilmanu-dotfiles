@@ -34,7 +34,8 @@ See `.docs/` for per-component setup guides.
 | clipboard | — | `.docs/clipboard.md` |
 | palette   | — | `.docs/index.md` |
 | dotfilesd | `~/dotfilesd/` | `dotfilesd/README.md` + `dotfilesd/docs/` |
-| **ASUS ROG** | `~/.local/bin/asus-profile` | Profile switcher via `asusctl` |
+| **ASUS ROG** | `~/.local/bin/asus-profile` | Power profile switcher via `asusctl` |
+| **ASUS GPU** | `~/.local/bin/gpu-profile` | GPU profile switcher via `supergfxctl` |
 | kmscon      | `~/.config/kmscon/kmscon.conf` → `/etc/kmscon/` | `.docs/kmscon.md` |
 
 ### ASUS ROG Flow X13 extras
@@ -42,6 +43,8 @@ See `.docs/` for per-component setup guides.
 | Feature | Binding / Trigger | Description |
 |---------|-------------------|-------------|
 | Profile switcher | `$mod+Ctrl+p` | rofi menu for Quiet / Balanced / Performance |
+| GPU profile switcher | `$mod+Ctrl+g` | rofi menu for Integrated / Hybrid / AsusMuxDgpu / AsusEgpu |
 | CPU temperature | tmux status bar | Adaptive bar with min/max tracking via `k10temp` |
 | ASUS profile indicator | tmux status bar | `PERF`/`BAL`/`QUIET` with color |
+| GPU profile indicator | tmux status bar | `IGPU`/`HYBRID`/`NVIDIA`/`EGPU` with color |
 
