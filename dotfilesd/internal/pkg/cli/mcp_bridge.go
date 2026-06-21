@@ -75,5 +75,3 @@ func (b *MCPBridge) HandleResponse(id string, data json.RawMessage) bool {
 	ch <- data
 	return true
 }
-
-

@@ -8,9 +8,10 @@ import (
 	"net"
 	"net/http"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+
+	"connectrpc.com/connect"
 )
 
 type FeedbackServer struct {
@@ -78,35 +79,39 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 	slog.Debug("input requested", "prompt", req.Msg.Prompt, "default", req.Msg.Default)
 
 	if mcpBridge != nil {
-		raw, err := mcpBridge.SendRequest("feedback/input_request", map[string]any{
-			"prompt":    req.Msg.Prompt,
-			"default":   req.Msg.Default,
-			"sensitive": req.Msg.Sensitive,
+		if req.Msg.Sensitive {
+			return nil, connect.NewError(connect.CodeUnimplemented,
+				fmt.Errorf("sensitive input not available via MCP elicitation form mode; use exec_run with password field instead"))
+		}
+		if !clientCaps.hasElicitation {
+			return nil, connect.NewError(connect.CodeUnavailable,
+				fmt.Errorf("MCP client does not support elicitation"))
+		}
+
+		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
+			"message": req.Msg.Prompt,
+			"mode":    "form",
+			"requestedSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"input": map[string]any{
+						"type":        "string",
+						"description": req.Msg.Prompt,
+						"default":     req.Msg.Default,
+					},
+				},
+				"required": []string{"input"},
+			},
 		})
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP input request: %w", err))
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP elicitation request: %w", err))
 		}
-		var rpcResp struct {
-			Result json.RawMessage `json:"result"`
-			Error  *struct {
-				Code    int    `json:"code"`
-				Message string `json:"message"`
-			} `json:"error,omitempty"`
+
+		pbResp, err := parseElicitationInputResponse(raw)
+		if err != nil {
+			return nil, err
 		}
-		if err := json.Unmarshal(raw, &rpcResp); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
-		}
-		if rpcResp.Error != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("MCP input request rejected by client: %s", rpcResp.Error.Message))
-		}
-		if rpcResp.Result == nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP response missing result and error"))
-		}
-		var pbResp dotfilesdv1.InputResponse
-		if err := json.Unmarshal(rpcResp.Result, &pbResp); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse InputResponse: %w", err))
-		}
-		return connect.NewResponse(&pbResp), nil
+		return connect.NewResponse(pbResp), nil
 	}
 
 	if h.handler == nil {
@@ -119,6 +124,53 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 	resp := connect.NewResponse(&dotfilesdv1.InputResponse{Value: value})
 	resp.Header().Set("Session-Id", req.Msg.SessionId)
 	return resp, nil
+}
+
+// parseElicitationInputResponse parses the JSON-RPC response from an
+// elicitation/create form request and maps the standard elicitation response
+// (action + content) into an InputResponse protobuf.
+func parseElicitationInputResponse(raw json.RawMessage) (*dotfilesdv1.InputResponse, error) {
+	var rpcResp struct {
+		Result json.RawMessage `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &rpcResp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
+	}
+	if rpcResp.Error != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("MCP elicitation rejected by client: %s", rpcResp.Error.Message))
+	}
+	if rpcResp.Result == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP response missing result and error"))
+	}
+
+	var elicitationResp struct {
+		Action  string          `json:"action"`
+		Content json.RawMessage `json:"content,omitempty"`
+	}
+	if err := json.Unmarshal(rpcResp.Result, &elicitationResp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse elicitation response: %w", err))
+	}
+
+	switch elicitationResp.Action {
+	case "accept":
+		var content struct {
+			Input string `json:"input"`
+		}
+		if err := json.Unmarshal(elicitationResp.Content, &content); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse elicitation content: %w", err))
+		}
+		return &dotfilesdv1.InputResponse{Value: content.Input}, nil
+	case "decline":
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("user declined input request"))
+	case "cancel":
+		return nil, connect.NewError(connect.CodeCanceled, fmt.Errorf("user cancelled input request"))
+	default:
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unknown elicitation action: %s", elicitationResp.Action))
+	}
 }
 
 type confirmHandler struct {
@@ -136,34 +188,35 @@ func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Reques
 	slog.Debug("confirm requested", "message", req.Msg.Message, "default", req.Msg.DefaultConfirm)
 
 	if mcpBridge != nil {
-		raw, err := mcpBridge.SendRequest("feedback/confirm", map[string]any{
-			"message":         req.Msg.Message,
-			"default_confirm": req.Msg.DefaultConfirm,
+		if !clientCaps.hasElicitation {
+			return nil, connect.NewError(connect.CodeUnavailable,
+				fmt.Errorf("MCP client does not support elicitation"))
+		}
+
+		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
+			"message": req.Msg.Message,
+			"mode":    "form",
+			"requestedSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"confirmed": map[string]any{
+						"type":        "boolean",
+						"description": "Confirm action",
+						"default":     req.Msg.DefaultConfirm,
+					},
+				},
+				"required": []string{"confirmed"},
+			},
 		})
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP confirm request: %w", err))
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP elicitation request: %w", err))
 		}
-		var rpcResp struct {
-			Result json.RawMessage `json:"result"`
-			Error  *struct {
-				Code    int    `json:"code"`
-				Message string `json:"message"`
-			} `json:"error,omitempty"`
+
+		pbResp, err := parseElicitationConfirmResponse(raw)
+		if err != nil {
+			return nil, err
 		}
-		if err := json.Unmarshal(raw, &rpcResp); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
-		}
-		if rpcResp.Error != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("MCP confirm request rejected by client: %s", rpcResp.Error.Message))
-		}
-		if rpcResp.Result == nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP response missing result and error"))
-		}
-		var pbResp dotfilesdv1.ConfirmResponse
-		if err := json.Unmarshal(rpcResp.Result, &pbResp); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse ConfirmResponse: %w", err))
-		}
-		return connect.NewResponse(&pbResp), nil
+		return connect.NewResponse(pbResp), nil
 	}
 
 	if h.handler == nil {
@@ -176,4 +229,52 @@ func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Reques
 	resp := connect.NewResponse(&dotfilesdv1.ConfirmResponse{Confirmed: confirmed})
 	resp.Header().Set("Session-Id", req.Msg.SessionId)
 	return resp, nil
+}
+
+// parseElicitationConfirmResponse parses the JSON-RPC response from an
+// elicitation/create form request and maps the standard elicitation response
+// (action + content) into a ConfirmResponse protobuf.
+func parseElicitationConfirmResponse(raw json.RawMessage) (*dotfilesdv1.ConfirmResponse, error) {
+	var rpcResp struct {
+		Result json.RawMessage `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &rpcResp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse MCP response: %w", err))
+	}
+	if rpcResp.Error != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("MCP elicitation rejected by client: %s", rpcResp.Error.Message))
+	}
+	if rpcResp.Result == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("MCP response missing result and error"))
+	}
+
+	var elicitationResp struct {
+		Action  string          `json:"action"`
+		Content json.RawMessage `json:"content,omitempty"`
+	}
+	if err := json.Unmarshal(rpcResp.Result, &elicitationResp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse elicitation response: %w", err))
+	}
+
+	switch elicitationResp.Action {
+	case "accept":
+		var content struct {
+			Confirmed bool `json:"confirmed"`
+		}
+		if err := json.Unmarshal(elicitationResp.Content, &content); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("parse elicitation content: %w", err))
+		}
+		return &dotfilesdv1.ConfirmResponse{Confirmed: content.Confirmed}, nil
+	case "decline":
+		// Explicit "no" — return false without error.
+		return &dotfilesdv1.ConfirmResponse{Confirmed: false}, nil
+	case "cancel":
+		return nil, connect.NewError(connect.CodeCanceled, fmt.Errorf("user cancelled confirm request"))
+	default:
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unknown elicitation action: %s", elicitationResp.Action))
+	}
 }

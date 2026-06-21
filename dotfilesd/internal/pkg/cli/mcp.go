@@ -11,8 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 type mcpRequest struct {
@@ -128,6 +129,13 @@ var mcpTools = []toolDef{
 
 var stdoutMu sync.Mutex
 
+// clientCaps tracks which MCP protocol capabilities the connected client declared
+// during initialization. Used to determine whether standard features like
+// elicitation are available before attempting to use them.
+var clientCaps struct {
+	hasElicitation bool
+}
+
 func writeJSONLine(w io.Writer, v any) {
 	data, _ := json.Marshal(v)
 	stdoutMu.Lock()
@@ -211,6 +219,18 @@ func RunMCP(clients *Clients) {
 func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 	switch req.Method {
 	case "initialize":
+		// Capture client capabilities from the initialize request.
+		var initParams struct {
+			Capabilities *struct {
+				Elicitation json.RawMessage `json:"elicitation"`
+			} `json:"capabilities"`
+		}
+		if err := json.Unmarshal(req.Params, &initParams); err == nil {
+			clientCaps.hasElicitation = initParams.Capabilities != nil && initParams.Capabilities.Elicitation != nil
+			if clientCaps.hasElicitation {
+				slog.Debug("client supports elicitation")
+			}
+		}
 		return mcpResp(req.ID, map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities": map[string]any{
@@ -241,7 +261,9 @@ func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 }
 
 func addSessionHeader[T any](req *connect.Request[T], args json.RawMessage, defaultSessionID string) {
-	var p struct{ SessionID string `json:"session_id"` }
+	var p struct {
+		SessionID string `json:"session_id"`
+	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		if defaultSessionID != "" {
 			req.Header().Set("Session-Id", defaultSessionID)
@@ -408,7 +430,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		})
 
 	case "config_reload":
-		var p struct{ Target string `json:"target"` }
+		var p struct {
+			Target string `json:"target"`
+		}
 		json.Unmarshal(args, &p)
 		target := dotfilesdv1.ReloadTarget_RELOAD_TARGET_ALL
 		if p.Target != "" {
@@ -434,7 +458,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		return mcpToolResult(id, linesJoin(lines, "\n"))
 
 	case "config_reconfigure":
-		var p struct{ LogLevel string `json:"log_level"` }
+		var p struct {
+			LogLevel string `json:"log_level"`
+		}
 		json.Unmarshal(args, &p)
 		if p.LogLevel == "" {
 			return mcpErr(id, -32602, "log_level is required")

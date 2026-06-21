@@ -11,6 +11,20 @@
 				"command": "/home/manu343726/.local/bin/dotfilesctl",
 				"args": ["mcp"]
 			}
+		},
+		"chat.tools.terminal.autoApprove": {
+			"/^cd /home/manu343726/dotfilesd && make build 2>&1$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^make build 2>&1$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^make install 2>&1$/": {
+				"approve": true,
+				"matchCommandLine": true
+			}
 		}
 	}
 }
