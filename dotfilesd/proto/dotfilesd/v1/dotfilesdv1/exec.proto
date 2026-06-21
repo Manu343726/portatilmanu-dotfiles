@@ -4,6 +4,8 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
 // ExecService - command execution.
 service ExecService {
   // Simple unary exec (no sudo).
@@ -21,7 +23,7 @@ enum SudoMethod {
 }
 
 message ExecRequest {
-  string session_id = 100;
+  Session session = 100;
   string command = 1;
   bool sudo = 2;
 }
@@ -35,7 +37,7 @@ message ExecResponse {
 // --- SudoExec protocol (challenge-response over unary RPC) -----------------
 
 message SudoExecRequest {
-  string session_id = 100;
+  Session session = 100;
   string command = 1;
   string password = 2;
   SudoMethod preferred_method = 3;

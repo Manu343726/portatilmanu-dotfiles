@@ -4,6 +4,8 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
 // ConfigService - dotfiles configuration reload, daemon reconfiguration, and restart.
 service ConfigService {
   rpc Reload(ReloadRequest) returns (ReloadResponse);
@@ -29,7 +31,7 @@ enum ReloadTarget {
 }
 
 message ReloadRequest {
-  string session_id = 100;
+  Session session = 100;
   ReloadTarget target = 1;
 }
 
@@ -43,7 +45,7 @@ message ReloadResponse {
 }
 
 message ReconfigureRequest {
-  string session_id = 100;
+  Session session = 100;
   LogLevel log_level = 1;
 }
 
@@ -53,7 +55,7 @@ message ReconfigureResponse {
 }
 
 message RestartRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 
 message RestartResponse {

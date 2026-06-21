@@ -22,8 +22,8 @@ const (
 )
 
 type InputRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	// Human-readable prompt describing what input is needed.
 	Prompt string `protobuf:"bytes,1,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// Optional default value if the user just presses enter.
@@ -64,11 +64,11 @@ func (*InputRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *InputRequest) GetSessionId() string {
+func (x *InputRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *InputRequest) GetPrompt() string {
@@ -146,8 +146,8 @@ func (x *InputResponse) GetValue() string {
 }
 
 type ConfirmRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	// Human-readable message describing what the user is confirming.
 	Message string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	// Default choice if the user just presses enter (true = yes).
@@ -186,11 +186,11 @@ func (*ConfirmRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ConfirmRequest) GetSessionId() string {
+func (x *ConfirmRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *ConfirmRequest) GetMessage() string {
@@ -261,8 +261,8 @@ func (x *ConfirmResponse) GetConfirmed() bool {
 }
 
 type ChooseRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	// Human-readable prompt describing what to choose.
 	Prompt string `protobuf:"bytes,1,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// The list of options to choose from.
@@ -303,11 +303,11 @@ func (*ChooseRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ChooseRequest) GetSessionId() string {
+func (x *ChooseRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *ChooseRequest) GetPrompt() string {
@@ -397,29 +397,26 @@ var File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto protoreflect.FileDescript
 
 const file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDesc = "" +
 	"\n" +
-	"-proto/dotfilesd/v1/dotfilesdv1/feedback.proto\x12\fdotfilesd.v1\"}\n" +
-	"\fInputRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x12\x16\n" +
+	"-proto/dotfilesd/v1/dotfilesdv1/feedback.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"\x8f\x01\n" +
+	"\fInputRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\x12\x18\n" +
 	"\adefault\x18\x02 \x01(\tR\adefault\x12\x1c\n" +
 	"\tsensitive\x18\x03 \x01(\bR\tsensitive\"D\n" +
 	"\rInputResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\"r\n" +
-	"\x0eConfirmRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\"\x84\x01\n" +
+	"\x0eConfirmRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12'\n" +
 	"\x0fdefault_confirm\x18\x02 \x01(\bR\x0edefaultConfirm\"N\n" +
 	"\x0fConfirmResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12\x1c\n" +
-	"\tconfirmed\x18\x01 \x01(\bR\tconfirmed\"\x85\x01\n" +
-	"\rChooseRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x12\x16\n" +
+	"\tconfirmed\x18\x01 \x01(\bR\tconfirmed\"\x97\x01\n" +
+	"\rChooseRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\x12\x18\n" +
 	"\aoptions\x18\x02 \x03(\tR\aoptions\x12#\n" +
 	"\rdefault_index\x18\x03 \x01(\x05R\fdefaultIndex\"\x7f\n" +
@@ -455,19 +452,23 @@ var file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_goTypes = []any{
 	(*ConfirmResponse)(nil), // 3: dotfilesd.v1.ConfirmResponse
 	(*ChooseRequest)(nil),   // 4: dotfilesd.v1.ChooseRequest
 	(*ChooseResponse)(nil),  // 5: dotfilesd.v1.ChooseResponse
+	(*Session)(nil),         // 6: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_depIdxs = []int32{
-	0, // 0: dotfilesd.v1.InputService.RequestInput:input_type -> dotfilesd.v1.InputRequest
-	2, // 1: dotfilesd.v1.ConfirmService.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
-	4, // 2: dotfilesd.v1.ChooseService.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
-	1, // 3: dotfilesd.v1.InputService.RequestInput:output_type -> dotfilesd.v1.InputResponse
-	3, // 4: dotfilesd.v1.ConfirmService.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
-	5, // 5: dotfilesd.v1.ChooseService.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	6, // 0: dotfilesd.v1.InputRequest.session:type_name -> dotfilesd.v1.Session
+	6, // 1: dotfilesd.v1.ConfirmRequest.session:type_name -> dotfilesd.v1.Session
+	6, // 2: dotfilesd.v1.ChooseRequest.session:type_name -> dotfilesd.v1.Session
+	0, // 3: dotfilesd.v1.InputService.RequestInput:input_type -> dotfilesd.v1.InputRequest
+	2, // 4: dotfilesd.v1.ConfirmService.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
+	4, // 5: dotfilesd.v1.ChooseService.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
+	1, // 6: dotfilesd.v1.InputService.RequestInput:output_type -> dotfilesd.v1.InputResponse
+	3, // 7: dotfilesd.v1.ConfirmService.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
+	5, // 8: dotfilesd.v1.ChooseService.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_init() }
@@ -475,6 +476,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto != nil {
 		return
 	}
+	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -9,6 +9,7 @@ import (
 
 	"dotfilesd/internal/pkg/daemon"
 	"dotfilesd/internal/pkg/shared"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

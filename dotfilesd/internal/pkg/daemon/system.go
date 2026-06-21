@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 type systemServer struct {
@@ -20,7 +21,7 @@ type systemServer struct {
 
 func (s *systemServer) Ping(ctx context.Context, req *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
 	slog.Log(ctx, levelTrace, "Ping", "request", req.Msg)
-	s.sessions.Resolve(GetSessionID(req))
+	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	resp := connect.NewResponse(&dotfilesdv1.PingResponse{
 		Version:    "0.1.0",
@@ -34,7 +35,7 @@ func (s *systemServer) Ping(ctx context.Context, req *connect.Request[dotfilesdv
 
 func (s *systemServer) SystemInfo(ctx context.Context, req *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
 	slog.Log(ctx, levelTrace, "SystemInfo", "request", req.Msg)
-	s.sessions.Resolve(GetSessionID(req))
+	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	kernel, _ := runCmd("uname", "-r")
 	shell := os.Getenv("SHELL")
@@ -75,7 +76,7 @@ func (s *systemServer) SystemInfo(ctx context.Context, req *connect.Request[dotf
 
 func (s *systemServer) SudoMethods(ctx context.Context, req *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
 	slog.Log(ctx, levelTrace, "SudoMethods", "request", req.Msg)
-	s.sessions.Resolve(GetSessionID(req))
+	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	var available []string
 	for _, name := range []string{"pkexec", "sudo"} {

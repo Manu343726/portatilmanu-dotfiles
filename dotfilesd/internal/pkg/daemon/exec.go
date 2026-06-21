@@ -9,8 +9,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 type execServer struct {
@@ -20,7 +21,7 @@ type execServer struct {
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	slog.Log(ctx, levelTrace, "Exec", "command", req.Msg.Command, "sudo", req.Msg.Sudo)
 
-	session := s.sessions.Resolve(GetSessionID(req))
+	session := s.sessions.ResolveSession(req.Msg.GetSession())
 
 	if req.Msg.Sudo {
 		if session.HasCallbackURL() {
@@ -42,7 +43,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 		}), nil
 	}
 
-	stdout, stderr, exitCode := shell.Exec(req.Msg.Command)
+	stdout, stderr, exitCode := shell.Exec(req.Msg.Command, session.Variables())
 
 	if exitCode != 0 {
 		slog.Warn("Exec command failed", "command", req.Msg.Command, "exit_code", exitCode, "stderr", truncate(stderr, 200))
@@ -134,7 +135,7 @@ func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*c
 
 func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
 	r := req.Msg
-	s.sessions.Resolve(GetSessionID(req))
+	s.sessions.ResolveSession(req.Msg.GetSession())
 	password := r.Password
 	method := r.PreferredMethod
 

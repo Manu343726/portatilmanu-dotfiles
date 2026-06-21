@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,8 +19,8 @@ import (
 
 // ScriptFrontMatter is YAML front matter embedded at the top of a .dsh file.
 type ScriptFrontMatter struct {
-	Description string              `yaml:"description"`
-	Params      []ScriptParamYAML   `yaml:"params"`
+	Description string            `yaml:"description"`
+	Params      []ScriptParamYAML `yaml:"params"`
 }
 
 // ScriptParamYAML describes one parameter in front matter.

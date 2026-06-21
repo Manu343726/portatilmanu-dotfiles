@@ -4,6 +4,8 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
 // ScriptService — run a multi-step script with interleaved shell commands
 // and client feedback (input, confirm, choose). Scripts execute in a
 // session with a persistent shell so variables set in one step are
@@ -21,7 +23,7 @@ service ScriptService {
 // Script source
 // ---------------------------------------------------------------------------
 message RunScriptRequest {
-  string session_id = 100;
+  Session session = 100;
 
   oneof source {
     string script = 1;            // inline script content
@@ -53,7 +55,7 @@ message RunScriptResponse {
 // Script registry (ListScripts)
 // ---------------------------------------------------------------------------
 message ListScriptsRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 
 message ListScriptsResponse {

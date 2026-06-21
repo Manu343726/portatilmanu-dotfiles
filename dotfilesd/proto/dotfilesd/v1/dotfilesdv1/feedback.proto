@@ -4,6 +4,8 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
 // InputService is called by the daemon when it needs arbitrary text input
 // from the user (e.g. a value for a shell variable, git identity config).
 service InputService {
@@ -23,7 +25,7 @@ service ChooseService {
 }
 
 message InputRequest {
-  string session_id = 100;
+  Session session = 100;
   // Human-readable prompt describing what input is needed.
   string prompt = 1;
   // Optional default value if the user just presses enter.
@@ -39,7 +41,7 @@ message InputResponse {
 }
 
 message ConfirmRequest {
-  string session_id = 100;
+  Session session = 100;
   // Human-readable message describing what the user is confirming.
   string message = 1;
   // Default choice if the user just presses enter (true = yes).
@@ -53,7 +55,7 @@ message ConfirmResponse {
 }
 
 message ChooseRequest {
-  string session_id = 100;
+  Session session = 100;
   // Human-readable prompt describing what to choose.
   string prompt = 1;
   // The list of options to choose from.

@@ -5,15 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 func RunPing(clients *Clients, sessionID string) error {
-	req := connect.NewRequest(&dotfilesdv1.PingRequest{})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
+	req := connect.NewRequest(&dotfilesdv1.PingRequest{Session: sessionProto(sessionID)})
 	resp, err := clients.Sys.Ping(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("ping failed: %w", err)
@@ -24,10 +22,7 @@ func RunPing(clients *Clients, sessionID string) error {
 }
 
 func RunInfo(clients *Clients, sessionID string) error {
-	req := connect.NewRequest(&dotfilesdv1.SystemInfoRequest{})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
+	req := connect.NewRequest(&dotfilesdv1.SystemInfoRequest{Session: sessionProto(sessionID)})
 	resp, err := clients.Sys.SystemInfo(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("info failed: %w", err)
@@ -46,10 +41,7 @@ func RunInfo(clients *Clients, sessionID string) error {
 }
 
 func RunSudoMethods(clients *Clients, sessionID string) error {
-	req := connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
+	req := connect.NewRequest(&dotfilesdv1.SudoMethodsRequest{Session: sessionProto(sessionID)})
 	resp, err := clients.Sys.SudoMethods(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("sudo methods failed: %w", err)

@@ -23,7 +23,7 @@ const (
 
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -58,11 +58,11 @@ func (*PingRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *PingRequest) GetSessionId() string {
+func (x *PingRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type PingResponse struct {
@@ -127,7 +127,7 @@ func (x *PingResponse) GetUptimeSecs() int64 {
 
 type SystemInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -162,11 +162,11 @@ func (*SystemInfoRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *SystemInfoRequest) GetSessionId() string {
+func (x *SystemInfoRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type SystemInfoResponse struct {
@@ -287,7 +287,7 @@ func (x *SystemInfoResponse) GetI3Version() string {
 
 type SudoMethodsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -322,11 +322,11 @@ func (*SudoMethodsRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *SudoMethodsRequest) GetSessionId() string {
+func (x *SudoMethodsRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type SudoMethodsResponse struct {
@@ -393,18 +393,16 @@ var File_proto_dotfilesd_v1_dotfilesdv1_system_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\",\n" +
-	"\vPingRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"[\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\">\n" +
+	"\vPingRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"[\n" +
 	"\fPingResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x10\n" +
 	"\x03pid\x18\x02 \x01(\x03R\x03pid\x12\x1f\n" +
 	"\vuptime_secs\x18\x03 \x01(\x03R\n" +
-	"uptimeSecs\"2\n" +
-	"\x11SystemInfoRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"\xc3\x02\n" +
+	"uptimeSecs\"D\n" +
+	"\x11SystemInfoRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\xc3\x02\n" +
 	"\x12SystemInfoResponse\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x16\n" +
 	"\x06kernel\x18\x02 \x01(\tR\x06kernel\x12\x14\n" +
@@ -417,10 +415,9 @@ const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\rkitty_version\x18\t \x01(\tR\fkittyVersion\x12\x1d\n" +
 	"\n" +
 	"i3_version\x18\n" +
-	" \x01(\tR\ti3Version\"3\n" +
-	"\x12SudoMethodsRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"\x8e\x01\n" +
+	" \x01(\tR\ti3Version\"E\n" +
+	"\x12SudoMethodsRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\x8e\x01\n" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
@@ -451,19 +448,23 @@ var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_goTypes = []any{
 	(*SystemInfoResponse)(nil),  // 3: dotfilesd.v1.SystemInfoResponse
 	(*SudoMethodsRequest)(nil),  // 4: dotfilesd.v1.SudoMethodsRequest
 	(*SudoMethodsResponse)(nil), // 5: dotfilesd.v1.SudoMethodsResponse
+	(*Session)(nil),             // 6: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_depIdxs = []int32{
-	0, // 0: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
-	2, // 1: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
-	4, // 2: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
-	1, // 3: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
-	3, // 4: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
-	5, // 5: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	6, // 0: dotfilesd.v1.PingRequest.session:type_name -> dotfilesd.v1.Session
+	6, // 1: dotfilesd.v1.SystemInfoRequest.session:type_name -> dotfilesd.v1.Session
+	6, // 2: dotfilesd.v1.SudoMethodsRequest.session:type_name -> dotfilesd.v1.Session
+	0, // 3: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
+	2, // 4: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
+	4, // 5: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
+	1, // 6: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
+	3, // 7: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	5, // 8: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_system_proto_init() }
@@ -471,6 +472,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_system_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_system_proto != nil {
 		return
 	}
+	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

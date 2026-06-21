@@ -5,9 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"connectrpc.com/connect"
 	"dotfilesd/internal/pkg/cli"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 )
 
@@ -108,10 +109,11 @@ func completeRegisteredScripts(prefix string) ([]string, cobra.ShellCompDirectiv
 	if clients == nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	req := connect.NewRequest(&dotfilesdv1.ListScriptsRequest{})
+	var sess *dotfilesdv1.Session
 	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
+		sess = &dotfilesdv1.Session{Id: sessionID}
 	}
+	req := connect.NewRequest(&dotfilesdv1.ListScriptsRequest{Session: sess})
 	resp, err := clients.Script.ListScripts(context.Background(), req)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp

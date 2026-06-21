@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 // RunScript sends a script (inline content) to the daemon for execution.
@@ -15,10 +16,8 @@ func RunScript(clients *Clients, sessionID, script string) error {
 		Source: &dotfilesdv1.RunScriptRequest_Script{
 			Script: script,
 		},
+		Session: sessionProto(sessionID),
 	})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
 	resp, err := clients.Script.RunScript(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("script run failed: %w", err)
@@ -32,10 +31,8 @@ func RunScriptFile(clients *Clients, sessionID, path string) error {
 		Source: &dotfilesdv1.RunScriptRequest_ScriptPath{
 			ScriptPath: path,
 		},
+		Session: sessionProto(sessionID),
 	})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
 	resp, err := clients.Script.RunScript(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("script run failed: %w", err)
@@ -45,10 +42,7 @@ func RunScriptFile(clients *Clients, sessionID, path string) error {
 
 // RunListScripts fetches the registered script tree from the daemon and prints it.
 func RunListScripts(clients *Clients, sessionID string) error {
-	req := connect.NewRequest(&dotfilesdv1.ListScriptsRequest{})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
+	req := connect.NewRequest(&dotfilesdv1.ListScriptsRequest{Session: sessionProto(sessionID)})
 	resp, err := clients.Script.ListScripts(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("list scripts failed: %w", err)
@@ -86,10 +80,8 @@ func RunRegisteredScript(clients *Clients, sessionID, relPath string) error {
 		Source: &dotfilesdv1.RunScriptRequest_RegisteredScript{
 			RegisteredScript: relPath,
 		},
+		Session: sessionProto(sessionID),
 	})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
 	resp, err := clients.Script.RunScript(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("script run failed: %w", err)

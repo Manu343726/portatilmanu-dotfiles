@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 type configServer struct {
@@ -18,7 +19,7 @@ type configServer struct {
 
 func (s *configServer) Reload(ctx context.Context, req *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
 	slog.Log(ctx, levelTrace, "Config.Reload", "target", req.Msg.Target)
-	s.sessions.Resolve(GetSessionID(req))
+	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	target := req.Msg.Target
 
@@ -69,7 +70,7 @@ func (s *configServer) Reload(ctx context.Context, req *connect.Request[dotfiles
 func (s *configServer) Reconfigure(ctx context.Context, req *connect.Request[dotfilesdv1.ReconfigureRequest]) (*connect.Response[dotfilesdv1.ReconfigureResponse], error) {
 	r := req.Msg
 	slog.Log(ctx, levelTrace, "Config.Reconfigure", "log_level", r.LogLevel)
-	s.sessions.Resolve(GetSessionID(req))
+	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	newLevel := logLevelToSlog(r.LogLevel)
 	if r.LogLevel == dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED {
@@ -93,7 +94,7 @@ func (s *configServer) Reconfigure(ctx context.Context, req *connect.Request[dot
 
 func (s *configServer) Restart(ctx context.Context, req *connect.Request[dotfilesdv1.RestartRequest]) (*connect.Response[dotfilesdv1.RestartResponse], error) {
 	slog.Warn("Restart requested")
-	s.sessions.Resolve(GetSessionID(req))
+	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	go gracefulRestart(500 * time.Millisecond)
 

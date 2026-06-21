@@ -132,7 +132,9 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 		return nil, err
 	}
 	resp := connect.NewResponse(&dotfilesdv1.InputResponse{Value: value})
-	resp.Header().Set("Session-Id", req.Msg.SessionId)
+	if sm := req.Msg.GetSession(); sm != nil {
+		resp.Header().Set("Session-Id", sm.GetId())
+	}
 	return resp, nil
 }
 
@@ -237,7 +239,9 @@ func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Reques
 		return nil, err
 	}
 	resp := connect.NewResponse(&dotfilesdv1.ConfirmResponse{Confirmed: confirmed})
-	resp.Header().Set("Session-Id", req.Msg.SessionId)
+	if sm := req.Msg.GetSession(); sm != nil {
+		resp.Header().Set("Session-Id", sm.GetId())
+	}
 	return resp, nil
 }
 
@@ -353,7 +357,9 @@ func (h *chooseHandler) RequestChoose(ctx context.Context, req *connect.Request[
 		return nil, err
 	}
 	resp := connect.NewResponse(&dotfilesdv1.ChooseResponse{SelectedIndex: int32(idx), SelectedOption: option})
-	resp.Header().Set("Session-Id", req.Msg.SessionId)
+	if sm := req.Msg.GetSession(); sm != nil {
+		resp.Header().Set("Session-Id", sm.GetId())
+	}
 	return resp, nil
 }
 

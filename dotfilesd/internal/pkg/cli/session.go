@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 func RunCreateSession(clients *Clients) error {
@@ -21,7 +22,7 @@ func RunCreateSession(clients *Clients) error {
 
 func RunFinalizeSession(clients *Clients, sessionID string) error {
 	resp, err := clients.Session.FinalizeSession(context.Background(), connect.NewRequest(&dotfilesdv1.FinalizeSessionRequest{
-		SessionId: sessionID,
+		Session: sessionProto(sessionID),
 	}))
 	if err != nil {
 		return fmt.Errorf("finalize session failed: %w", err)
@@ -34,7 +35,7 @@ func RunFinalizeSession(clients *Clients, sessionID string) error {
 }
 
 func RunListSessions(clients *Clients) error {
-	resp, err := clients.Session.ListSessions(context.Background(), connect.NewRequest(&dotfilesdv1.ListSessionsRequest{}))
+	resp, err := clients.Session.ListSessions(context.Background(), connect.NewRequest(&dotfilesdv1.ListSessionsRequest{Session: &dotfilesdv1.Session{}}))
 	if err != nil {
 		return fmt.Errorf("list sessions failed: %w", err)
 	}

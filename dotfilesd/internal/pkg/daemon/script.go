@@ -9,19 +9,20 @@ import (
 	"regexp"
 	"strings"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 // scriptStep describes one parsed step from a script file.
 type scriptStep struct {
-	kind       string // "exec", "confirm", "input", "choose"
-	rawLine    string // original source line for result reporting
-	command    string // shell command (exec only)
-	message    string // prompt text (confirm/input/choose)
-	varName    string // shell variable to export feedback value into
+	kind       string   // "exec", "confirm", "input", "choose"
+	rawLine    string   // original source line for result reporting
+	command    string   // shell command (exec only)
+	message    string   // prompt text (confirm/input/choose)
+	varName    string   // shell variable to export feedback value into
 	options    []string // options list (choose only)
-	defaultIdx int    // default option index (choose only)
+	defaultIdx int      // default option index (choose only)
 }
 
 // ScriptRunner parses and executes .dsh (dotfiles script) files.
@@ -37,7 +38,7 @@ func NewScriptRunner(store *SessionStore, registry *ScriptRegistry) *ScriptRunne
 // ListScripts returns the registered script tree.
 func (r *ScriptRunner) ListScripts(ctx context.Context, req *connect.Request[dotfilesdv1.ListScriptsRequest]) (*connect.Response[dotfilesdv1.ListScriptsResponse], error) {
 	slog.Debug("ScriptService.ListScripts")
-	r.store.Resolve(GetSessionID(req))
+	r.store.ResolveSession(req.Msg.GetSession())
 
 	entries, err := r.registry.ListScripts()
 	if err != nil {
@@ -51,15 +52,12 @@ func (r *ScriptRunner) ListScripts(ctx context.Context, req *connect.Request[dot
 // variables set by @input / @choose are available to later commands.
 func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfilesdv1.RunScriptRequest]) (*connect.Response[dotfilesdv1.RunScriptResponse], error) {
 	rpcReq := req.Msg
-	sessionID := GetSessionID(req)
-	slog.Debug("ScriptService.RunScript", "session_id", sessionID)
-
-	// Resolve session (or create one).
-	session := r.store.Resolve(sessionID)
+	session := r.store.ResolveSession(req.Msg.GetSession())
+	slog.Debug("ScriptService.RunScript", "session_id", session.id)
 	if session == nil {
 		return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
 			AllSucceeded: false,
-			Error: "no session available",
+			Error:        "no session available",
 		}), nil
 	}
 
@@ -69,7 +67,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 		slog.Error("failed to ensure session shell", "error", err)
 		return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
 			AllSucceeded: false,
-			Error:       fmt.Sprintf("session shell error: %v", err),
+			Error:        fmt.Sprintf("session shell error: %v", err),
 		}), nil
 	}
 
@@ -84,7 +82,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 			slog.Error("read script file", "path", src.ScriptPath, "error", err)
 			return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
 				AllSucceeded: false,
-				Error:       fmt.Sprintf("read script file: %v", err),
+				Error:        fmt.Sprintf("read script file: %v", err),
 			}), nil
 		}
 		script = string(data)
@@ -94,14 +92,14 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 			slog.Error("registered script not found", "name", src.RegisteredScript, "error", err)
 			return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
 				AllSucceeded: false,
-				Error:       fmt.Sprintf("registered script not found: %v", err),
+				Error:        fmt.Sprintf("registered script not found: %v", err),
 			}), nil
 		}
 		script = content
 	default:
 		return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
 			AllSucceeded: false,
-			Error:       "no script source provided (use 'script' or 'script_path')",
+			Error:        "no script source provided (use 'script' or 'script_path')",
 		}), nil
 	}
 
@@ -110,7 +108,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 	if err != nil {
 		return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
 			AllSucceeded: false,
-			Error:       fmt.Sprintf("parse error: %v", err),
+			Error:        fmt.Sprintf("parse error: %v", err),
 		}), nil
 	}
 
@@ -129,7 +127,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 
 		switch step.kind {
 		case "exec":
-			stdout, stderr, exitCode := shell.Exec(step.command)
+			stdout, stderr, exitCode := shell.Exec(step.command, session.Variables())
 			result.Stdout = stdout
 			result.Stderr = stderr
 			result.ExitCode = int32(exitCode)
@@ -159,7 +157,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 			result.FeedbackValue = val
 			result.Stdout = val + "\n"
 			if step.varName != "" {
-				shell.Exec(fmt.Sprintf("%s=%s", step.varName, val))
+				shell.Exec(fmt.Sprintf("%s=%s", step.varName, val), nil)
 			}
 
 		case "input":
@@ -180,7 +178,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 			result.Stdout = val + "\n"
 			if step.varName != "" {
 				// Export as a shell variable for subsequent commands.
-				shell.Exec(fmt.Sprintf("%s=%q", step.varName, val))
+				shell.Exec(fmt.Sprintf("%s=%q", step.varName, val), nil)
 			}
 
 		case "choose":
@@ -206,7 +204,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 			result.FeedbackValue = option
 			result.Stdout = option + "\n"
 			if step.varName != "" {
-				shell.Exec(fmt.Sprintf("%s=%q", step.varName, option))
+				shell.Exec(fmt.Sprintf("%s=%q", step.varName, option), nil)
 			}
 
 		default:
@@ -223,9 +221,9 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 		errMsg = "one or more steps failed"
 	}
 	return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
-		Steps:         results,
-		AllSucceeded:  allOK,
-		Error:         errMsg,
+		Steps:        results,
+		AllSucceeded: allOK,
+		Error:        errMsg,
 	}), nil
 }
 

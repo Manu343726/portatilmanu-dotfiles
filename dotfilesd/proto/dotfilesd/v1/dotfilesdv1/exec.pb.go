@@ -75,7 +75,7 @@ func (SudoMethod) EnumDescriptor() ([]byte, []int) {
 
 type ExecRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	Command       string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
 	Sudo          bool                   `protobuf:"varint,2,opt,name=sudo,proto3" json:"sudo,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -112,11 +112,11 @@ func (*ExecRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ExecRequest) GetSessionId() string {
+func (x *ExecRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *ExecRequest) GetCommand() string {
@@ -195,7 +195,7 @@ func (x *ExecResponse) GetStderr() string {
 
 type SudoExecRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session         *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	Command         string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
 	Password        string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
 	PreferredMethod SudoMethod             `protobuf:"varint,3,opt,name=preferred_method,json=preferredMethod,proto3,enum=dotfilesd.v1.SudoMethod" json:"preferred_method,omitempty"`
@@ -233,11 +233,11 @@ func (*SudoExecRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *SudoExecRequest) GetSessionId() string {
+func (x *SudoExecRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *SudoExecRequest) GetCommand() string {
@@ -467,19 +467,17 @@ var File_proto_dotfilesd_v1_dotfilesdv1_exec_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc = "" +
 	"\n" +
-	")proto/dotfilesd/v1/dotfilesdv1/exec.proto\x12\fdotfilesd.v1\"Z\n" +
-	"\vExecRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
+	")proto/dotfilesd/v1/dotfilesdv1/exec.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"l\n" +
+	"\vExecRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
 	"\x04sudo\x18\x02 \x01(\bR\x04sudo\"[\n" +
 	"\fExecResponse\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"\xab\x01\n" +
-	"\x0fSudoExecRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"\xbd\x01\n" +
+	"\x0fSudoExecRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12C\n" +
 	"\x10preferred_method\x18\x03 \x01(\x0e2\x18.dotfilesd.v1.SudoMethodR\x0fpreferredMethod\"\x97\x01\n" +
@@ -528,20 +526,23 @@ var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_goTypes = []any{
 	(*SudoExecResponse)(nil), // 4: dotfilesd.v1.SudoExecResponse
 	(*AuthChallenge)(nil),    // 5: dotfilesd.v1.AuthChallenge
 	(*SudoResult)(nil),       // 6: dotfilesd.v1.SudoResult
+	(*Session)(nil),          // 7: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_depIdxs = []int32{
-	0, // 0: dotfilesd.v1.SudoExecRequest.preferred_method:type_name -> dotfilesd.v1.SudoMethod
-	6, // 1: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
-	5, // 2: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
-	1, // 3: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
-	3, // 4: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
-	2, // 5: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
-	4, // 6: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	7, // 0: dotfilesd.v1.ExecRequest.session:type_name -> dotfilesd.v1.Session
+	7, // 1: dotfilesd.v1.SudoExecRequest.session:type_name -> dotfilesd.v1.Session
+	0, // 2: dotfilesd.v1.SudoExecRequest.preferred_method:type_name -> dotfilesd.v1.SudoMethod
+	6, // 3: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
+	5, // 4: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
+	1, // 5: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
+	3, // 6: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
+	2, // 7: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
+	4, // 8: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_init() }
@@ -549,6 +550,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_exec_proto != nil {
 		return
 	}
+	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
 	file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[3].OneofWrappers = []any{
 		(*SudoExecResponse_Result)(nil),
 		(*SudoExecResponse_AuthChallenge)(nil),

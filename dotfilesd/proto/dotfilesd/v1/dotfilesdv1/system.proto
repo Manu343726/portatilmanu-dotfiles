@@ -4,6 +4,8 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
 // SystemService - daemon health and system information.
 service SystemService {
   rpc Ping(PingRequest) returns (PingResponse);
@@ -12,7 +14,7 @@ service SystemService {
 }
 
 message PingRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 message PingResponse {
   string version = 1;
@@ -21,7 +23,7 @@ message PingResponse {
 }
 
 message SystemInfoRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 message SystemInfoResponse {
   string os = 1;
@@ -37,7 +39,7 @@ message SystemInfoResponse {
 }
 
 message SudoMethodsRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 message SudoMethodsResponse {
   repeated string available_methods = 1;

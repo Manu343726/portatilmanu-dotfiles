@@ -151,9 +151,8 @@ func (c *Clients) Connect(ctx context.Context) error {
 
 	req := connect.NewRequest(&dotfilesdv1.ConnectRequest{
 		CallbackUrl: fb.URL(),
-		SessionId:   c.SessionID,
+		Session:     &dotfilesdv1.Session{Id: c.SessionID},
 	})
-	req.Header().Set("Session-Id", c.SessionID)
 
 	resp, err := c.Session.Connect(ctx, req)
 	if err != nil {

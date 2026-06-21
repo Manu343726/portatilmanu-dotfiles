@@ -5,15 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 func RunStatus(clients *Clients, sessionID string) error {
-	req := connect.NewRequest(&dotfilesdv1.StatusRequest{})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
+	req := connect.NewRequest(&dotfilesdv1.StatusRequest{Session: sessionProto(sessionID)})
 	resp, err := clients.Dot.Status(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("status failed: %w", err)
@@ -38,10 +36,8 @@ func RunGit(clients *Clients, sessionID, actionStr, message, paths string) error
 
 	req := connect.NewRequest(&dotfilesdv1.GitRequest{
 		Action: action, Message: message, Paths: paths,
+		Session: sessionProto(sessionID),
 	})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
 	resp, err := clients.Dot.Git(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("git failed: %w", err)

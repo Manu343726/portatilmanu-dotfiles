@@ -25,8 +25,8 @@ const (
 // Script source
 // ---------------------------------------------------------------------------
 type RunScriptRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	SessionId string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	// Types that are valid to be assigned to Source:
 	//
 	//	*RunScriptRequest_Script
@@ -67,11 +67,11 @@ func (*RunScriptRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_script_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RunScriptRequest) GetSessionId() string {
+func (x *RunScriptRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *RunScriptRequest) GetSource() isRunScriptRequest_Source {
@@ -290,7 +290,7 @@ func (x *RunScriptResponse) GetError() string {
 // ---------------------------------------------------------------------------
 type ListScriptsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -325,11 +325,11 @@ func (*ListScriptsRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_script_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ListScriptsRequest) GetSessionId() string {
+func (x *ListScriptsRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type ListScriptsResponse struct {
@@ -549,10 +549,9 @@ var File_proto_dotfilesd_v1_dotfilesdv1_script_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_script_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/script.proto\x12\fdotfilesd.v1\"\xa7\x01\n" +
-	"\x10RunScriptRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x12\x18\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/script.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"\xb9\x01\n" +
+	"\x10RunScriptRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x18\n" +
 	"\x06script\x18\x01 \x01(\tH\x00R\x06script\x12!\n" +
 	"\vscript_path\x18\x02 \x01(\tH\x00R\n" +
 	"scriptPath\x12-\n" +
@@ -572,10 +571,9 @@ const file_proto_dotfilesd_v1_dotfilesdv1_script_proto_rawDesc = "" +
 	"\x11RunScriptResponse\x12.\n" +
 	"\x05steps\x18\x01 \x03(\v2\x18.dotfilesd.v1.StepResultR\x05steps\x12#\n" +
 	"\rall_succeeded\x18\x02 \x01(\bR\fallSucceeded\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"3\n" +
-	"\x12ListScriptsRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"J\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"E\n" +
+	"\x12ListScriptsRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"J\n" +
 	"\x13ListScriptsResponse\x123\n" +
 	"\aentries\x18\x01 \x03(\v2\x19.dotfilesd.v1.ScriptEntryR\aentries\"\xfe\x01\n" +
 	"\vScriptEntry\x12\x12\n" +
@@ -616,21 +614,24 @@ var file_proto_dotfilesd_v1_dotfilesdv1_script_proto_goTypes = []any{
 	(*ListScriptsResponse)(nil), // 4: dotfilesd.v1.ListScriptsResponse
 	(*ScriptEntry)(nil),         // 5: dotfilesd.v1.ScriptEntry
 	(*ScriptParam)(nil),         // 6: dotfilesd.v1.ScriptParam
+	(*Session)(nil),             // 7: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_script_proto_depIdxs = []int32{
-	1, // 0: dotfilesd.v1.RunScriptResponse.steps:type_name -> dotfilesd.v1.StepResult
-	5, // 1: dotfilesd.v1.ListScriptsResponse.entries:type_name -> dotfilesd.v1.ScriptEntry
-	5, // 2: dotfilesd.v1.ScriptEntry.children:type_name -> dotfilesd.v1.ScriptEntry
-	6, // 3: dotfilesd.v1.ScriptEntry.params:type_name -> dotfilesd.v1.ScriptParam
-	0, // 4: dotfilesd.v1.ScriptService.RunScript:input_type -> dotfilesd.v1.RunScriptRequest
-	3, // 5: dotfilesd.v1.ScriptService.ListScripts:input_type -> dotfilesd.v1.ListScriptsRequest
-	2, // 6: dotfilesd.v1.ScriptService.RunScript:output_type -> dotfilesd.v1.RunScriptResponse
-	4, // 7: dotfilesd.v1.ScriptService.ListScripts:output_type -> dotfilesd.v1.ListScriptsResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7, // 0: dotfilesd.v1.RunScriptRequest.session:type_name -> dotfilesd.v1.Session
+	1, // 1: dotfilesd.v1.RunScriptResponse.steps:type_name -> dotfilesd.v1.StepResult
+	7, // 2: dotfilesd.v1.ListScriptsRequest.session:type_name -> dotfilesd.v1.Session
+	5, // 3: dotfilesd.v1.ListScriptsResponse.entries:type_name -> dotfilesd.v1.ScriptEntry
+	5, // 4: dotfilesd.v1.ScriptEntry.children:type_name -> dotfilesd.v1.ScriptEntry
+	6, // 5: dotfilesd.v1.ScriptEntry.params:type_name -> dotfilesd.v1.ScriptParam
+	0, // 6: dotfilesd.v1.ScriptService.RunScript:input_type -> dotfilesd.v1.RunScriptRequest
+	3, // 7: dotfilesd.v1.ScriptService.ListScripts:input_type -> dotfilesd.v1.ListScriptsRequest
+	2, // 8: dotfilesd.v1.ScriptService.RunScript:output_type -> dotfilesd.v1.RunScriptResponse
+	4, // 9: dotfilesd.v1.ScriptService.ListScripts:output_type -> dotfilesd.v1.ListScriptsResponse
+	8, // [8:10] is the sub-list for method output_type
+	6, // [6:8] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_script_proto_init() }
@@ -638,6 +639,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_script_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_script_proto != nil {
 		return
 	}
+	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
 	file_proto_dotfilesd_v1_dotfilesdv1_script_proto_msgTypes[0].OneofWrappers = []any{
 		(*RunScriptRequest_Script)(nil),
 		(*RunScriptRequest_ScriptPath)(nil),

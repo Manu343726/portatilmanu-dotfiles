@@ -39,7 +39,7 @@ type shellSession struct {
 	mu     sync.Mutex
 }
 
-func newShellSession(sessionID string) (*shellSession, error) {
+func newShellSession(sessionID string, variables map[string]string) (*shellSession, error) {
 	cmd := exec.Command("bash", "--norc", "--noprofile")
 	home := os.Getenv("HOME")
 	path := os.Getenv("PATH")
@@ -53,6 +53,9 @@ func newShellSession(sessionID string) (*shellSession, error) {
 		"DOTFILESD_SESSION=" + sessionID,
 		"PATH=" + path,
 		"HOME=" + home,
+	}
+	for k, v := range variables {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -73,12 +76,21 @@ func newShellSession(sessionID string) (*shellSession, error) {
 	}, nil
 }
 
-func (sh *shellSession) Exec(command string) (string, string, int) {
+func bashQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func (sh *shellSession) Exec(command string, variables map[string]string) (string, string, int) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 
 	delim := fmt.Sprintf("__GS_%x__", rand.Int63())
-	cmdLine := fmt.Sprintf("%s 2>&1\necho \"%s=$?\"\n", command, delim)
+	// Prepend exports for session variables so they are available in the shell.
+	var prefix string
+	for k, v := range variables {
+		prefix += fmt.Sprintf("export %s=%s; ", k, bashQuote(v))
+	}
+	cmdLine := fmt.Sprintf("%s%s 2>&1\necho \"%s=$?\"\n", prefix, command, delim)
 	if _, err := io.WriteString(sh.stdin, cmdLine); err != nil {
 		slog.Warn("shell write failed", "error", err)
 		return "", "", -1
@@ -121,6 +133,7 @@ type Session struct {
 	requestCount int
 	finalized    bool
 	data         map[string]string
+	variables    map[string]string // session variables injected into shell env
 	shell        *shellSession
 	callbackURL  string
 	mu           sync.RWMutex
@@ -134,6 +147,27 @@ func newSession(id string) *Session {
 		lastActive: now,
 		data:       make(map[string]string),
 	}
+}
+
+func (s *Session) SetVariables(vars map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.variables == nil {
+		s.variables = make(map[string]string, len(vars))
+	}
+	for k, v := range vars {
+		s.variables[k] = v
+	}
+}
+
+func (s *Session) Variables() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make(map[string]string, len(s.variables))
+	for k, v := range s.variables {
+		result[k] = v
+	}
+	return result
 }
 
 func (s *Session) touch() {
@@ -150,6 +184,10 @@ func (s *Session) toProto() *dotfilesdv1.Session {
 	for k, v := range s.data {
 		data[k] = v
 	}
+	vars := make(map[string]string, len(s.variables))
+	for k, v := range s.variables {
+		vars[k] = v
+	}
 	return &dotfilesdv1.Session{
 		Id:           s.id,
 		CreatedAt:    s.createdAt.Unix(),
@@ -157,6 +195,7 @@ func (s *Session) toProto() *dotfilesdv1.Session {
 		RequestCount: int32(s.requestCount),
 		Finalized:    s.finalized,
 		Data:         data,
+		Variables:    vars,
 	}
 }
 
@@ -167,7 +206,7 @@ func (s *Session) ensureShell() (*shellSession, error) {
 		return nil, fmt.Errorf("session is finalized")
 	}
 	if s.shell == nil {
-		sh, err := newShellSession(s.id)
+		sh, err := newShellSession(s.id, s.variables)
 		if err != nil {
 			return nil, err
 		}
@@ -209,11 +248,11 @@ func (s *Session) RequestInput(ctx context.Context, prompt, defaultValue string,
 
 	client := dotfilesdv1connect.NewInputServiceClient(http.DefaultClient, url)
 	req := connect.NewRequest(&dotfilesdv1.InputRequest{
+		Session:   &dotfilesdv1.Session{Id: s.id},
 		Prompt:    prompt,
 		Default:   defaultValue,
 		Sensitive: sensitive,
 	})
-	req.Header().Set("Session-Id", s.id)
 
 	resp, err := client.RequestInput(ctx, req)
 	if err != nil {
@@ -232,10 +271,10 @@ func (s *Session) RequestConfirm(ctx context.Context, message string, defaultCon
 
 	client := dotfilesdv1connect.NewConfirmServiceClient(http.DefaultClient, url)
 	req := connect.NewRequest(&dotfilesdv1.ConfirmRequest{
+		Session:        &dotfilesdv1.Session{Id: s.id},
 		Message:        message,
 		DefaultConfirm: defaultConfirm,
 	})
-	req.Header().Set("Session-Id", s.id)
 
 	resp, err := client.RequestConfirm(ctx, req)
 	if err != nil {
@@ -257,11 +296,11 @@ func (s *Session) RequestChoose(ctx context.Context, prompt string, options []st
 
 	client := dotfilesdv1connect.NewChooseServiceClient(http.DefaultClient, url)
 	req := connect.NewRequest(&dotfilesdv1.ChooseRequest{
+		Session:      &dotfilesdv1.Session{Id: s.id},
 		Prompt:       prompt,
 		Options:      options,
 		DefaultIndex: int32(defaultIndex),
 	})
-	req.Header().Set("Session-Id", s.id)
 
 	resp, err := client.RequestChoose(ctx, req)
 	if err != nil {
@@ -353,11 +392,33 @@ func (ss *SessionStore) Resolve(id string) *Session {
 	return s
 }
 
-func GetSessionID[T any](req *connect.Request[T]) string {
-	if id := req.Header().Get("Session-Id"); id != "" {
-		return id
+// ResolveSession resolves or creates a session from a protobuf Session message.
+// If the message is nil or has an empty id, an ephemeral session is created.
+// Session variables from the message are applied to the resolved session.
+func (ss *SessionStore) ResolveSession(sessionMsg *dotfilesdv1.Session) *Session {
+	if sessionMsg == nil {
+		return ss.CreateEphemeral()
 	}
-	return ""
+	id := sessionMsg.GetId()
+	var s *Session
+	if id == "" {
+		s = ss.CreateEphemeral()
+	} else {
+		s = ss.Get(id)
+		if s == nil {
+			slog.Warn("session not found, creating ephemeral", "session_id", id)
+			s = ss.CreateEphemeral()
+		} else if s.finalized {
+			slog.Warn("session already finalized, creating ephemeral", "session_id", id)
+			s = ss.CreateEphemeral()
+		} else {
+			s.touch()
+		}
+	}
+	if vars := sessionMsg.GetVariables(); len(vars) > 0 {
+		s.SetVariables(vars)
+	}
+	return s
 }
 
 type sessionServer struct {
@@ -381,16 +442,23 @@ func (s *sessionServer) CreateSession(ctx context.Context, req *connect.Request[
 }
 
 func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error) {
-	slog.Log(ctx, levelTrace, "Session.Connect", "session_id", req.Msg.SessionId, "callback_url", req.Msg.CallbackUrl)
+	slog.Log(ctx, levelTrace, "Session.Connect", "callback_url", req.Msg.CallbackUrl)
 
+	sessionMsg := req.Msg.GetSession()
 	var session *Session
-	if req.Msg.SessionId == "" {
+	if sessionMsg == nil || sessionMsg.GetId() == "" {
 		session = s.store.Create()
 	} else {
-		session = s.store.Get(req.Msg.SessionId)
+		session = s.store.Get(sessionMsg.GetId())
 		if session == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session %s not found", req.Msg.SessionId))
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session %s not found", sessionMsg.GetId()))
 		}
+		session.touch()
+	}
+
+	// Apply session variables from the Connect request.
+	if sessionMsg != nil && len(sessionMsg.GetVariables()) > 0 {
+		session.SetVariables(sessionMsg.GetVariables())
 	}
 
 	session.SetCallbackURL(req.Msg.CallbackUrl)
@@ -404,26 +472,34 @@ func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfil
 }
 
 func (s *sessionServer) FinalizeSession(ctx context.Context, req *connect.Request[dotfilesdv1.FinalizeSessionRequest]) (*connect.Response[dotfilesdv1.FinalizeSessionResponse], error) {
-	slog.Log(ctx, levelTrace, "Session.FinalizeSession", "session_id", req.Msg.SessionId)
+	sessionID := ""
+	if sm := req.Msg.GetSession(); sm != nil {
+		sessionID = sm.GetId()
+	}
+	slog.Log(ctx, levelTrace, "Session.FinalizeSession", "session_id", sessionID)
 
-	ok := s.store.Finalize(req.Msg.SessionId)
+	ok := s.store.Finalize(sessionID)
 	if !ok {
 		return connect.NewResponse(&dotfilesdv1.FinalizeSessionResponse{
 			Success: false,
-			Message: fmt.Sprintf("session not found: %s", req.Msg.SessionId),
+			Message: fmt.Sprintf("session not found: %s", sessionID),
 		}), nil
 	}
 
 	return connect.NewResponse(&dotfilesdv1.FinalizeSessionResponse{
 		Success: true,
-		Message: fmt.Sprintf("session %s finalized", req.Msg.SessionId),
+		Message: fmt.Sprintf("session %s finalized", sessionID),
 	}), nil
 }
 
 func (s *sessionServer) GetSession(ctx context.Context, req *connect.Request[dotfilesdv1.GetSessionRequest]) (*connect.Response[dotfilesdv1.GetSessionResponse], error) {
-	slog.Log(ctx, levelTrace, "Session.GetSession", "session_id", req.Msg.SessionId)
+	sessionID := ""
+	if sm := req.Msg.GetSession(); sm != nil {
+		sessionID = sm.GetId()
+	}
+	slog.Log(ctx, levelTrace, "Session.GetSession", "session_id", sessionID)
 
-	session := s.store.Get(req.Msg.SessionId)
+	session := s.store.Get(sessionID)
 	if session == nil {
 		return connect.NewResponse(&dotfilesdv1.GetSessionResponse{}), nil
 	}

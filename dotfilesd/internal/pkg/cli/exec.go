@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"os"
 
-	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 func execCommand(clients *Clients, sessionID, command string, sudo bool) error {
 	req := connect.NewRequest(&dotfilesdv1.ExecRequest{
 		Command: command,
 		Sudo:    sudo,
+		Session: sessionProto(sessionID),
 	})
-	if sessionID != "" {
-		req.Header().Set("Session-Id", sessionID)
-	}
 	resp, err := clients.Exec.Exec(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("exec failed: %w", err)

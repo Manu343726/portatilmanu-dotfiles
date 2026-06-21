@@ -4,6 +4,8 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
 // DotfilesService - dotfiles repository management.
 service DotfilesService {
   rpc Status(StatusRequest) returns (StatusResponse);
@@ -21,7 +23,7 @@ enum GitAction {
 }
 
 message StatusRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 message StatusResponse {
   bool git_clean = 1;
@@ -34,7 +36,7 @@ message StatusResponse {
 }
 
 message GitRequest {
-  string session_id = 100;
+  Session session = 100;
   GitAction action = 1;
   string message = 2;
   string paths = 3;

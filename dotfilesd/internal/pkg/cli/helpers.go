@@ -6,8 +6,19 @@ import (
 	"log/slog"
 	"os"
 
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+// sessionProto creates a Session protobuf message from a session ID string.
+// Returns nil if the ID is empty, so the daemon creates an ephemeral session.
+func sessionProto(id string) *dotfilesdv1.Session {
+	if id == "" {
+		return nil
+	}
+	return &dotfilesdv1.Session{Id: id}
+}
 
 func SetupLogging(verbose bool) {
 	logDir := os.Getenv("DOTFILESD_LOG_DIR")

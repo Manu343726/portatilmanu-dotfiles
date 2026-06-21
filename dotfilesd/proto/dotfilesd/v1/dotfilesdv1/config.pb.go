@@ -136,7 +136,7 @@ func (ReloadTarget) EnumDescriptor() ([]byte, []int) {
 
 type ReloadRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	Target        ReloadTarget           `protobuf:"varint,1,opt,name=target,proto3,enum=dotfilesd.v1.ReloadTarget" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -172,11 +172,11 @@ func (*ReloadRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ReloadRequest) GetSessionId() string {
+func (x *ReloadRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *ReloadRequest) GetTarget() ReloadTarget {
@@ -232,7 +232,7 @@ func (x *ReloadResponse) GetResults() []*ReloadResponse_ReloadResult {
 
 type ReconfigureRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	LogLevel      LogLevel               `protobuf:"varint,1,opt,name=log_level,json=logLevel,proto3,enum=dotfilesd.v1.LogLevel" json:"log_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -268,11 +268,11 @@ func (*ReconfigureRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ReconfigureRequest) GetSessionId() string {
+func (x *ReconfigureRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 func (x *ReconfigureRequest) GetLogLevel() LogLevel {
@@ -336,7 +336,7 @@ func (x *ReconfigureResponse) GetMessage() string {
 
 type RestartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -371,11 +371,11 @@ func (*RestartRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *RestartRequest) GetSessionId() string {
+func (x *RestartRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type RestartResponse struct {
@@ -486,27 +486,24 @@ var File_proto_dotfilesd_v1_dotfilesdv1_config_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/config.proto\x12\fdotfilesd.v1\"b\n" +
-	"\rReloadRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x122\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/config.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"t\n" +
+	"\rReloadRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x122\n" +
 	"\x06target\x18\x01 \x01(\x0e2\x1a.dotfilesd.v1.ReloadTargetR\x06target\"\xb1\x01\n" +
 	"\x0eReloadResponse\x12C\n" +
 	"\aresults\x18\x01 \x03(\v2).dotfilesd.v1.ReloadResponse.ReloadResultR\aresults\x1aZ\n" +
 	"\fReloadResult\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"h\n" +
-	"\x12ReconfigureRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\x123\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"z\n" +
+	"\x12ReconfigureRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x123\n" +
 	"\tlog_level\x18\x01 \x01(\x0e2\x16.dotfilesd.v1.LogLevelR\blogLevel\"I\n" +
 	"\x13ReconfigureResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"/\n" +
-	"\x0eRestartRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"+\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"A\n" +
+	"\x0eRestartRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"+\n" +
 	"\x0fRestartResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage*\x8c\x01\n" +
 	"\bLogLevel\x12\x19\n" +
@@ -551,22 +548,26 @@ var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_goTypes = []any{
 	(*RestartRequest)(nil),              // 6: dotfilesd.v1.RestartRequest
 	(*RestartResponse)(nil),             // 7: dotfilesd.v1.RestartResponse
 	(*ReloadResponse_ReloadResult)(nil), // 8: dotfilesd.v1.ReloadResponse.ReloadResult
+	(*Session)(nil),                     // 9: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_depIdxs = []int32{
-	1, // 0: dotfilesd.v1.ReloadRequest.target:type_name -> dotfilesd.v1.ReloadTarget
-	8, // 1: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
-	0, // 2: dotfilesd.v1.ReconfigureRequest.log_level:type_name -> dotfilesd.v1.LogLevel
-	2, // 3: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
-	4, // 4: dotfilesd.v1.ConfigService.Reconfigure:input_type -> dotfilesd.v1.ReconfigureRequest
-	6, // 5: dotfilesd.v1.ConfigService.Restart:input_type -> dotfilesd.v1.RestartRequest
-	3, // 6: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
-	5, // 7: dotfilesd.v1.ConfigService.Reconfigure:output_type -> dotfilesd.v1.ReconfigureResponse
-	7, // 8: dotfilesd.v1.ConfigService.Restart:output_type -> dotfilesd.v1.RestartResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	9, // 0: dotfilesd.v1.ReloadRequest.session:type_name -> dotfilesd.v1.Session
+	1, // 1: dotfilesd.v1.ReloadRequest.target:type_name -> dotfilesd.v1.ReloadTarget
+	8, // 2: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
+	9, // 3: dotfilesd.v1.ReconfigureRequest.session:type_name -> dotfilesd.v1.Session
+	0, // 4: dotfilesd.v1.ReconfigureRequest.log_level:type_name -> dotfilesd.v1.LogLevel
+	9, // 5: dotfilesd.v1.RestartRequest.session:type_name -> dotfilesd.v1.Session
+	2, // 6: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
+	4, // 7: dotfilesd.v1.ConfigService.Reconfigure:input_type -> dotfilesd.v1.ReconfigureRequest
+	6, // 8: dotfilesd.v1.ConfigService.Restart:input_type -> dotfilesd.v1.RestartRequest
+	3, // 9: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
+	5, // 10: dotfilesd.v1.ConfigService.Reconfigure:output_type -> dotfilesd.v1.ReconfigureResponse
+	7, // 11: dotfilesd.v1.ConfigService.Restart:output_type -> dotfilesd.v1.RestartResponse
+	9, // [9:12] is the sub-list for method output_type
+	6, // [6:9] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_config_proto_init() }
@@ -574,6 +575,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_config_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_config_proto != nil {
 		return
 	}
+	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -29,6 +29,7 @@ type Session struct {
 	RequestCount  int32                  `protobuf:"varint,4,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
 	Finalized     bool                   `protobuf:"varint,5,opt,name=finalized,proto3" json:"finalized,omitempty"`
 	Data          map[string]string      `protobuf:"bytes,6,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Variables     map[string]string      `protobuf:"bytes,7,rep,name=variables,proto3" json:"variables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // session variables injected into shell env
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -105,9 +106,16 @@ func (x *Session) GetData() map[string]string {
 	return nil
 }
 
+func (x *Session) GetVariables() map[string]string {
+	if x != nil {
+		return x.Variables
+	}
+	return nil
+}
+
 type CreateSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,11 +150,11 @@ func (*CreateSessionRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *CreateSessionRequest) GetSessionId() string {
+func (x *CreateSessionRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type CreateSessionResponse struct {
@@ -195,7 +203,7 @@ func (x *CreateSessionResponse) GetSession() *Session {
 
 type FinalizeSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -230,11 +238,11 @@ func (*FinalizeSessionRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *FinalizeSessionRequest) GetSessionId() string {
+func (x *FinalizeSessionRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type FinalizeSessionResponse struct {
@@ -291,7 +299,7 @@ func (x *FinalizeSessionResponse) GetMessage() string {
 
 type GetSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -326,11 +334,11 @@ func (*GetSessionRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetSessionRequest) GetSessionId() string {
+func (x *GetSessionRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type GetSessionResponse struct {
@@ -384,7 +392,7 @@ type ConnectRequest struct {
 	CallbackUrl string `protobuf:"bytes,1,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
 	// Session to register the callback with. If empty the daemon creates a
 	// new session.
-	SessionId     string `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -426,11 +434,11 @@ func (x *ConnectRequest) GetCallbackUrl() string {
 	return ""
 }
 
-func (x *ConnectRequest) GetSessionId() string {
+func (x *ConnectRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type ConnectResponse struct {
@@ -479,7 +487,7 @@ func (x *ConnectResponse) GetSession() *Session {
 
 type ListSessionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -514,11 +522,11 @@ func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *ListSessionsRequest) GetSessionId() string {
+func (x *ListSessionsRequest) GetSession() *Session {
 	if x != nil {
-		return x.SessionId
+		return x.Session
 	}
-	return ""
+	return nil
 }
 
 type ListSessionsResponse struct {
@@ -569,7 +577,7 @@ var File_proto_dotfilesd_v1_dotfilesdv1_session_proto protoreflect.FileDescripto
 
 const file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc = "" +
 	"\n" +
-	",proto/dotfilesd/v1/dotfilesdv1/session.proto\x12\fdotfilesd.v1\"\x8a\x02\n" +
+	",proto/dotfilesd/v1/dotfilesdv1/session.proto\x12\fdotfilesd.v1\"\x8c\x03\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -578,35 +586,34 @@ const file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc = "" +
 	"lastActive\x12#\n" +
 	"\rrequest_count\x18\x04 \x01(\x05R\frequestCount\x12\x1c\n" +
 	"\tfinalized\x18\x05 \x01(\bR\tfinalized\x123\n" +
-	"\x04data\x18\x06 \x03(\v2\x1f.dotfilesd.v1.Session.DataEntryR\x04data\x1a7\n" +
+	"\x04data\x18\x06 \x03(\v2\x1f.dotfilesd.v1.Session.DataEntryR\x04data\x12B\n" +
+	"\tvariables\x18\a \x03(\v2$.dotfilesd.v1.Session.VariablesEntryR\tvariables\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"5\n" +
-	"\x14CreateSessionRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"H\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a<\n" +
+	"\x0eVariablesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"G\n" +
+	"\x14CreateSessionRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"H\n" +
 	"\x15CreateSessionResponse\x12/\n" +
-	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"7\n" +
-	"\x16FinalizeSessionRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"M\n" +
+	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"I\n" +
+	"\x16FinalizeSessionRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"M\n" +
 	"\x17FinalizeSessionResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"2\n" +
-	"\x11GetSessionRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"E\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"D\n" +
+	"\x11GetSessionRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"E\n" +
 	"\x12GetSessionResponse\x12/\n" +
-	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"R\n" +
+	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"d\n" +
 	"\x0eConnectRequest\x12!\n" +
-	"\fcallback_url\x18\x01 \x01(\tR\vcallbackUrl\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"B\n" +
+	"\fcallback_url\x18\x01 \x01(\tR\vcallbackUrl\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"B\n" +
 	"\x0fConnectResponse\x12/\n" +
-	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"4\n" +
-	"\x13ListSessionsRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18d \x01(\tR\tsessionId\"I\n" +
+	"\asession\x18\x01 \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"F\n" +
+	"\x13ListSessionsRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"I\n" +
 	"\x14ListSessionsResponse\x121\n" +
 	"\bsessions\x18\x01 \x03(\v2\x15.dotfilesd.v1.SessionR\bsessions2\xba\x03\n" +
 	"\x0eSessionService\x12X\n" +
@@ -629,7 +636,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_goTypes = []any{
 	(*Session)(nil),                 // 0: dotfilesd.v1.Session
 	(*CreateSessionRequest)(nil),    // 1: dotfilesd.v1.CreateSessionRequest
@@ -643,28 +650,35 @@ var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_goTypes = []any{
 	(*ListSessionsRequest)(nil),     // 9: dotfilesd.v1.ListSessionsRequest
 	(*ListSessionsResponse)(nil),    // 10: dotfilesd.v1.ListSessionsResponse
 	nil,                             // 11: dotfilesd.v1.Session.DataEntry
+	nil,                             // 12: dotfilesd.v1.Session.VariablesEntry
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_depIdxs = []int32{
 	11, // 0: dotfilesd.v1.Session.data:type_name -> dotfilesd.v1.Session.DataEntry
-	0,  // 1: dotfilesd.v1.CreateSessionResponse.session:type_name -> dotfilesd.v1.Session
-	0,  // 2: dotfilesd.v1.GetSessionResponse.session:type_name -> dotfilesd.v1.Session
-	0,  // 3: dotfilesd.v1.ConnectResponse.session:type_name -> dotfilesd.v1.Session
-	0,  // 4: dotfilesd.v1.ListSessionsResponse.sessions:type_name -> dotfilesd.v1.Session
-	1,  // 5: dotfilesd.v1.SessionService.CreateSession:input_type -> dotfilesd.v1.CreateSessionRequest
-	7,  // 6: dotfilesd.v1.SessionService.Connect:input_type -> dotfilesd.v1.ConnectRequest
-	3,  // 7: dotfilesd.v1.SessionService.FinalizeSession:input_type -> dotfilesd.v1.FinalizeSessionRequest
-	5,  // 8: dotfilesd.v1.SessionService.GetSession:input_type -> dotfilesd.v1.GetSessionRequest
-	9,  // 9: dotfilesd.v1.SessionService.ListSessions:input_type -> dotfilesd.v1.ListSessionsRequest
-	2,  // 10: dotfilesd.v1.SessionService.CreateSession:output_type -> dotfilesd.v1.CreateSessionResponse
-	8,  // 11: dotfilesd.v1.SessionService.Connect:output_type -> dotfilesd.v1.ConnectResponse
-	4,  // 12: dotfilesd.v1.SessionService.FinalizeSession:output_type -> dotfilesd.v1.FinalizeSessionResponse
-	6,  // 13: dotfilesd.v1.SessionService.GetSession:output_type -> dotfilesd.v1.GetSessionResponse
-	10, // 14: dotfilesd.v1.SessionService.ListSessions:output_type -> dotfilesd.v1.ListSessionsResponse
-	10, // [10:15] is the sub-list for method output_type
-	5,  // [5:10] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	12, // 1: dotfilesd.v1.Session.variables:type_name -> dotfilesd.v1.Session.VariablesEntry
+	0,  // 2: dotfilesd.v1.CreateSessionRequest.session:type_name -> dotfilesd.v1.Session
+	0,  // 3: dotfilesd.v1.CreateSessionResponse.session:type_name -> dotfilesd.v1.Session
+	0,  // 4: dotfilesd.v1.FinalizeSessionRequest.session:type_name -> dotfilesd.v1.Session
+	0,  // 5: dotfilesd.v1.GetSessionRequest.session:type_name -> dotfilesd.v1.Session
+	0,  // 6: dotfilesd.v1.GetSessionResponse.session:type_name -> dotfilesd.v1.Session
+	0,  // 7: dotfilesd.v1.ConnectRequest.session:type_name -> dotfilesd.v1.Session
+	0,  // 8: dotfilesd.v1.ConnectResponse.session:type_name -> dotfilesd.v1.Session
+	0,  // 9: dotfilesd.v1.ListSessionsRequest.session:type_name -> dotfilesd.v1.Session
+	0,  // 10: dotfilesd.v1.ListSessionsResponse.sessions:type_name -> dotfilesd.v1.Session
+	1,  // 11: dotfilesd.v1.SessionService.CreateSession:input_type -> dotfilesd.v1.CreateSessionRequest
+	7,  // 12: dotfilesd.v1.SessionService.Connect:input_type -> dotfilesd.v1.ConnectRequest
+	3,  // 13: dotfilesd.v1.SessionService.FinalizeSession:input_type -> dotfilesd.v1.FinalizeSessionRequest
+	5,  // 14: dotfilesd.v1.SessionService.GetSession:input_type -> dotfilesd.v1.GetSessionRequest
+	9,  // 15: dotfilesd.v1.SessionService.ListSessions:input_type -> dotfilesd.v1.ListSessionsRequest
+	2,  // 16: dotfilesd.v1.SessionService.CreateSession:output_type -> dotfilesd.v1.CreateSessionResponse
+	8,  // 17: dotfilesd.v1.SessionService.Connect:output_type -> dotfilesd.v1.ConnectResponse
+	4,  // 18: dotfilesd.v1.SessionService.FinalizeSession:output_type -> dotfilesd.v1.FinalizeSessionResponse
+	6,  // 19: dotfilesd.v1.SessionService.GetSession:output_type -> dotfilesd.v1.GetSessionResponse
+	10, // 20: dotfilesd.v1.SessionService.ListSessions:output_type -> dotfilesd.v1.ListSessionsResponse
+	16, // [16:21] is the sub-list for method output_type
+	11, // [11:16] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init() }
@@ -678,7 +692,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

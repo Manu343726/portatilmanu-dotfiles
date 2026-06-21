@@ -28,10 +28,11 @@ message Session {
   int32 request_count = 4;
   bool finalized = 5;
   map<string, string> data = 6;
+  map<string, string> variables = 7; // session variables injected into shell env
 }
 
 message CreateSessionRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 
 message CreateSessionResponse {
@@ -39,7 +40,7 @@ message CreateSessionResponse {
 }
 
 message FinalizeSessionRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 
 message FinalizeSessionResponse {
@@ -48,7 +49,7 @@ message FinalizeSessionResponse {
 }
 
 message GetSessionRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 
 message GetSessionResponse {
@@ -61,7 +62,7 @@ message ConnectRequest {
   string callback_url = 1;
   // Session to register the callback with. If empty the daemon creates a
   // new session.
-  string session_id = 100;
+  Session session = 100;
 }
 
 message ConnectResponse {
@@ -69,7 +70,7 @@ message ConnectResponse {
 }
 
 message ListSessionsRequest {
-  string session_id = 100;
+  Session session = 100;
 }
 
 message ListSessionsResponse {
