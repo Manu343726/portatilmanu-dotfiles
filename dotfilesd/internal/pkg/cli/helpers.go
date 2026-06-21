@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
@@ -13,11 +14,29 @@ import (
 
 // sessionProto creates a Session protobuf message from a session ID string.
 // Returns nil if the ID is empty, so the daemon creates an ephemeral session.
+// When a session is created, the current shell context (cwd, SHELL, env) is
+// captured and sent to the daemon so commands behave as if run in the CLI
+// terminal directly.
 func sessionProto(id string) *dotfilesdv1.Session {
 	if id == "" {
 		return nil
 	}
-	return &dotfilesdv1.Session{Id: id}
+	cwd, _ := os.Getwd()
+	shell := os.Getenv("SHELL")
+	env := make(map[string]string)
+	for _, e := range os.Environ() {
+		if k, v, ok := strings.Cut(e, "="); ok {
+			env[k] = v
+		}
+	}
+	return &dotfilesdv1.Session{
+		Id: id,
+		Shell: &dotfilesdv1.Shell{
+			CurrentShell: shell,
+			Cwd:          cwd,
+			Env:          env,
+		},
+	}
 }
 
 func SetupLogging(verbose bool) {

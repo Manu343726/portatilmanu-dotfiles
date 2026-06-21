@@ -21,6 +21,68 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Shell context from the CLI — tells the daemon the exact terminal environment
+// so commands behave as if run directly in the user's terminal.
+type Shell struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CurrentShell  string                 `protobuf:"bytes,1,opt,name=current_shell,json=currentShell,proto3" json:"current_shell,omitempty"`                                     // shell binary path (e.g. "/usr/bin/zsh")
+	Cwd           string                 `protobuf:"bytes,2,opt,name=cwd,proto3" json:"cwd,omitempty"`                                                                           // current working directory
+	Env           map[string]string      `protobuf:"bytes,3,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // environment variables
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Shell) Reset() {
+	*x = Shell{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Shell) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Shell) ProtoMessage() {}
+
+func (x *Shell) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Shell.ProtoReflect.Descriptor instead.
+func (*Shell) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Shell) GetCurrentShell() string {
+	if x != nil {
+		return x.CurrentShell
+	}
+	return ""
+}
+
+func (x *Shell) GetCwd() string {
+	if x != nil {
+		return x.Cwd
+	}
+	return ""
+}
+
+func (x *Shell) GetEnv() map[string]string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
 type Session struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -30,13 +92,14 @@ type Session struct {
 	Finalized     bool                   `protobuf:"varint,5,opt,name=finalized,proto3" json:"finalized,omitempty"`
 	Data          map[string]string      `protobuf:"bytes,6,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Variables     map[string]string      `protobuf:"bytes,7,rep,name=variables,proto3" json:"variables,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // session variables injected into shell env
+	Shell         *Shell                 `protobuf:"bytes,8,opt,name=shell,proto3" json:"shell,omitempty"`                                                                                   // CLI shell context (cwd, shell, env)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Session) Reset() {
 	*x = Session{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[0]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +111,7 @@ func (x *Session) String() string {
 func (*Session) ProtoMessage() {}
 
 func (x *Session) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[0]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +124,7 @@ func (x *Session) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Session.ProtoReflect.Descriptor instead.
 func (*Session) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{0}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Session) GetId() string {
@@ -113,6 +176,13 @@ func (x *Session) GetVariables() map[string]string {
 	return nil
 }
 
+func (x *Session) GetShell() *Shell {
+	if x != nil {
+		return x.Shell
+	}
+	return nil
+}
+
 type CreateSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
@@ -122,7 +192,7 @@ type CreateSessionRequest struct {
 
 func (x *CreateSessionRequest) Reset() {
 	*x = CreateSessionRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[1]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -134,7 +204,7 @@ func (x *CreateSessionRequest) String() string {
 func (*CreateSessionRequest) ProtoMessage() {}
 
 func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[1]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -147,7 +217,7 @@ func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{1}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateSessionRequest) GetSession() *Session {
@@ -166,7 +236,7 @@ type CreateSessionResponse struct {
 
 func (x *CreateSessionResponse) Reset() {
 	*x = CreateSessionResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -178,7 +248,7 @@ func (x *CreateSessionResponse) String() string {
 func (*CreateSessionResponse) ProtoMessage() {}
 
 func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -191,7 +261,7 @@ func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionResponse.ProtoReflect.Descriptor instead.
 func (*CreateSessionResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{2}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateSessionResponse) GetSession() *Session {
@@ -210,7 +280,7 @@ type FinalizeSessionRequest struct {
 
 func (x *FinalizeSessionRequest) Reset() {
 	*x = FinalizeSessionRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +292,7 @@ func (x *FinalizeSessionRequest) String() string {
 func (*FinalizeSessionRequest) ProtoMessage() {}
 
 func (x *FinalizeSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +305,7 @@ func (x *FinalizeSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinalizeSessionRequest.ProtoReflect.Descriptor instead.
 func (*FinalizeSessionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{3}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *FinalizeSessionRequest) GetSession() *Session {
@@ -255,7 +325,7 @@ type FinalizeSessionResponse struct {
 
 func (x *FinalizeSessionResponse) Reset() {
 	*x = FinalizeSessionResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -267,7 +337,7 @@ func (x *FinalizeSessionResponse) String() string {
 func (*FinalizeSessionResponse) ProtoMessage() {}
 
 func (x *FinalizeSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +350,7 @@ func (x *FinalizeSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinalizeSessionResponse.ProtoReflect.Descriptor instead.
 func (*FinalizeSessionResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{4}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *FinalizeSessionResponse) GetSuccess() bool {
@@ -306,7 +376,7 @@ type GetSessionRequest struct {
 
 func (x *GetSessionRequest) Reset() {
 	*x = GetSessionRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -318,7 +388,7 @@ func (x *GetSessionRequest) String() string {
 func (*GetSessionRequest) ProtoMessage() {}
 
 func (x *GetSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -331,7 +401,7 @@ func (x *GetSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionRequest.ProtoReflect.Descriptor instead.
 func (*GetSessionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{5}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetSessionRequest) GetSession() *Session {
@@ -350,7 +420,7 @@ type GetSessionResponse struct {
 
 func (x *GetSessionResponse) Reset() {
 	*x = GetSessionResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[6]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -362,7 +432,7 @@ func (x *GetSessionResponse) String() string {
 func (*GetSessionResponse) ProtoMessage() {}
 
 func (x *GetSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[6]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -375,7 +445,7 @@ func (x *GetSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionResponse.ProtoReflect.Descriptor instead.
 func (*GetSessionResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{6}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetSessionResponse) GetSession() *Session {
@@ -399,7 +469,7 @@ type ConnectRequest struct {
 
 func (x *ConnectRequest) Reset() {
 	*x = ConnectRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +481,7 @@ func (x *ConnectRequest) String() string {
 func (*ConnectRequest) ProtoMessage() {}
 
 func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[7]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +494,7 @@ func (x *ConnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectRequest.ProtoReflect.Descriptor instead.
 func (*ConnectRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{7}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ConnectRequest) GetCallbackUrl() string {
@@ -450,7 +520,7 @@ type ConnectResponse struct {
 
 func (x *ConnectResponse) Reset() {
 	*x = ConnectResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -462,7 +532,7 @@ func (x *ConnectResponse) String() string {
 func (*ConnectResponse) ProtoMessage() {}
 
 func (x *ConnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[8]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -475,7 +545,7 @@ func (x *ConnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectResponse.ProtoReflect.Descriptor instead.
 func (*ConnectResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{8}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ConnectResponse) GetSession() *Session {
@@ -494,7 +564,7 @@ type ListSessionsRequest struct {
 
 func (x *ListSessionsRequest) Reset() {
 	*x = ListSessionsRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[9]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -506,7 +576,7 @@ func (x *ListSessionsRequest) String() string {
 func (*ListSessionsRequest) ProtoMessage() {}
 
 func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[9]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -519,7 +589,7 @@ func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{9}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListSessionsRequest) GetSession() *Session {
@@ -538,7 +608,7 @@ type ListSessionsResponse struct {
 
 func (x *ListSessionsResponse) Reset() {
 	*x = ListSessionsResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[10]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -550,7 +620,7 @@ func (x *ListSessionsResponse) String() string {
 func (*ListSessionsResponse) ProtoMessage() {}
 
 func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[10]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -563,7 +633,7 @@ func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{10}
+	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListSessionsResponse) GetSessions() []*Session {
@@ -577,7 +647,14 @@ var File_proto_dotfilesd_v1_dotfilesdv1_session_proto protoreflect.FileDescripto
 
 const file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc = "" +
 	"\n" +
-	",proto/dotfilesd/v1/dotfilesdv1/session.proto\x12\fdotfilesd.v1\"\x8c\x03\n" +
+	",proto/dotfilesd/v1/dotfilesdv1/session.proto\x12\fdotfilesd.v1\"\xa6\x01\n" +
+	"\x05Shell\x12#\n" +
+	"\rcurrent_shell\x18\x01 \x01(\tR\fcurrentShell\x12\x10\n" +
+	"\x03cwd\x18\x02 \x01(\tR\x03cwd\x12.\n" +
+	"\x03env\x18\x03 \x03(\v2\x1c.dotfilesd.v1.Shell.EnvEntryR\x03env\x1a6\n" +
+	"\bEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb7\x03\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -587,7 +664,8 @@ const file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc = "" +
 	"\rrequest_count\x18\x04 \x01(\x05R\frequestCount\x12\x1c\n" +
 	"\tfinalized\x18\x05 \x01(\bR\tfinalized\x123\n" +
 	"\x04data\x18\x06 \x03(\v2\x1f.dotfilesd.v1.Session.DataEntryR\x04data\x12B\n" +
-	"\tvariables\x18\a \x03(\v2$.dotfilesd.v1.Session.VariablesEntryR\tvariables\x1a7\n" +
+	"\tvariables\x18\a \x03(\v2$.dotfilesd.v1.Session.VariablesEntryR\tvariables\x12)\n" +
+	"\x05shell\x18\b \x01(\v2\x13.dotfilesd.v1.ShellR\x05shell\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a<\n" +
@@ -636,49 +714,53 @@ func file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_goTypes = []any{
-	(*Session)(nil),                 // 0: dotfilesd.v1.Session
-	(*CreateSessionRequest)(nil),    // 1: dotfilesd.v1.CreateSessionRequest
-	(*CreateSessionResponse)(nil),   // 2: dotfilesd.v1.CreateSessionResponse
-	(*FinalizeSessionRequest)(nil),  // 3: dotfilesd.v1.FinalizeSessionRequest
-	(*FinalizeSessionResponse)(nil), // 4: dotfilesd.v1.FinalizeSessionResponse
-	(*GetSessionRequest)(nil),       // 5: dotfilesd.v1.GetSessionRequest
-	(*GetSessionResponse)(nil),      // 6: dotfilesd.v1.GetSessionResponse
-	(*ConnectRequest)(nil),          // 7: dotfilesd.v1.ConnectRequest
-	(*ConnectResponse)(nil),         // 8: dotfilesd.v1.ConnectResponse
-	(*ListSessionsRequest)(nil),     // 9: dotfilesd.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),    // 10: dotfilesd.v1.ListSessionsResponse
-	nil,                             // 11: dotfilesd.v1.Session.DataEntry
-	nil,                             // 12: dotfilesd.v1.Session.VariablesEntry
+	(*Shell)(nil),                   // 0: dotfilesd.v1.Shell
+	(*Session)(nil),                 // 1: dotfilesd.v1.Session
+	(*CreateSessionRequest)(nil),    // 2: dotfilesd.v1.CreateSessionRequest
+	(*CreateSessionResponse)(nil),   // 3: dotfilesd.v1.CreateSessionResponse
+	(*FinalizeSessionRequest)(nil),  // 4: dotfilesd.v1.FinalizeSessionRequest
+	(*FinalizeSessionResponse)(nil), // 5: dotfilesd.v1.FinalizeSessionResponse
+	(*GetSessionRequest)(nil),       // 6: dotfilesd.v1.GetSessionRequest
+	(*GetSessionResponse)(nil),      // 7: dotfilesd.v1.GetSessionResponse
+	(*ConnectRequest)(nil),          // 8: dotfilesd.v1.ConnectRequest
+	(*ConnectResponse)(nil),         // 9: dotfilesd.v1.ConnectResponse
+	(*ListSessionsRequest)(nil),     // 10: dotfilesd.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),    // 11: dotfilesd.v1.ListSessionsResponse
+	nil,                             // 12: dotfilesd.v1.Shell.EnvEntry
+	nil,                             // 13: dotfilesd.v1.Session.DataEntry
+	nil,                             // 14: dotfilesd.v1.Session.VariablesEntry
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_session_proto_depIdxs = []int32{
-	11, // 0: dotfilesd.v1.Session.data:type_name -> dotfilesd.v1.Session.DataEntry
-	12, // 1: dotfilesd.v1.Session.variables:type_name -> dotfilesd.v1.Session.VariablesEntry
-	0,  // 2: dotfilesd.v1.CreateSessionRequest.session:type_name -> dotfilesd.v1.Session
-	0,  // 3: dotfilesd.v1.CreateSessionResponse.session:type_name -> dotfilesd.v1.Session
-	0,  // 4: dotfilesd.v1.FinalizeSessionRequest.session:type_name -> dotfilesd.v1.Session
-	0,  // 5: dotfilesd.v1.GetSessionRequest.session:type_name -> dotfilesd.v1.Session
-	0,  // 6: dotfilesd.v1.GetSessionResponse.session:type_name -> dotfilesd.v1.Session
-	0,  // 7: dotfilesd.v1.ConnectRequest.session:type_name -> dotfilesd.v1.Session
-	0,  // 8: dotfilesd.v1.ConnectResponse.session:type_name -> dotfilesd.v1.Session
-	0,  // 9: dotfilesd.v1.ListSessionsRequest.session:type_name -> dotfilesd.v1.Session
-	0,  // 10: dotfilesd.v1.ListSessionsResponse.sessions:type_name -> dotfilesd.v1.Session
-	1,  // 11: dotfilesd.v1.SessionService.CreateSession:input_type -> dotfilesd.v1.CreateSessionRequest
-	7,  // 12: dotfilesd.v1.SessionService.Connect:input_type -> dotfilesd.v1.ConnectRequest
-	3,  // 13: dotfilesd.v1.SessionService.FinalizeSession:input_type -> dotfilesd.v1.FinalizeSessionRequest
-	5,  // 14: dotfilesd.v1.SessionService.GetSession:input_type -> dotfilesd.v1.GetSessionRequest
-	9,  // 15: dotfilesd.v1.SessionService.ListSessions:input_type -> dotfilesd.v1.ListSessionsRequest
-	2,  // 16: dotfilesd.v1.SessionService.CreateSession:output_type -> dotfilesd.v1.CreateSessionResponse
-	8,  // 17: dotfilesd.v1.SessionService.Connect:output_type -> dotfilesd.v1.ConnectResponse
-	4,  // 18: dotfilesd.v1.SessionService.FinalizeSession:output_type -> dotfilesd.v1.FinalizeSessionResponse
-	6,  // 19: dotfilesd.v1.SessionService.GetSession:output_type -> dotfilesd.v1.GetSessionResponse
-	10, // 20: dotfilesd.v1.SessionService.ListSessions:output_type -> dotfilesd.v1.ListSessionsResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	12, // 0: dotfilesd.v1.Shell.env:type_name -> dotfilesd.v1.Shell.EnvEntry
+	13, // 1: dotfilesd.v1.Session.data:type_name -> dotfilesd.v1.Session.DataEntry
+	14, // 2: dotfilesd.v1.Session.variables:type_name -> dotfilesd.v1.Session.VariablesEntry
+	0,  // 3: dotfilesd.v1.Session.shell:type_name -> dotfilesd.v1.Shell
+	1,  // 4: dotfilesd.v1.CreateSessionRequest.session:type_name -> dotfilesd.v1.Session
+	1,  // 5: dotfilesd.v1.CreateSessionResponse.session:type_name -> dotfilesd.v1.Session
+	1,  // 6: dotfilesd.v1.FinalizeSessionRequest.session:type_name -> dotfilesd.v1.Session
+	1,  // 7: dotfilesd.v1.GetSessionRequest.session:type_name -> dotfilesd.v1.Session
+	1,  // 8: dotfilesd.v1.GetSessionResponse.session:type_name -> dotfilesd.v1.Session
+	1,  // 9: dotfilesd.v1.ConnectRequest.session:type_name -> dotfilesd.v1.Session
+	1,  // 10: dotfilesd.v1.ConnectResponse.session:type_name -> dotfilesd.v1.Session
+	1,  // 11: dotfilesd.v1.ListSessionsRequest.session:type_name -> dotfilesd.v1.Session
+	1,  // 12: dotfilesd.v1.ListSessionsResponse.sessions:type_name -> dotfilesd.v1.Session
+	2,  // 13: dotfilesd.v1.SessionService.CreateSession:input_type -> dotfilesd.v1.CreateSessionRequest
+	8,  // 14: dotfilesd.v1.SessionService.Connect:input_type -> dotfilesd.v1.ConnectRequest
+	4,  // 15: dotfilesd.v1.SessionService.FinalizeSession:input_type -> dotfilesd.v1.FinalizeSessionRequest
+	6,  // 16: dotfilesd.v1.SessionService.GetSession:input_type -> dotfilesd.v1.GetSessionRequest
+	10, // 17: dotfilesd.v1.SessionService.ListSessions:input_type -> dotfilesd.v1.ListSessionsRequest
+	3,  // 18: dotfilesd.v1.SessionService.CreateSession:output_type -> dotfilesd.v1.CreateSessionResponse
+	9,  // 19: dotfilesd.v1.SessionService.Connect:output_type -> dotfilesd.v1.ConnectResponse
+	5,  // 20: dotfilesd.v1.SessionService.FinalizeSession:output_type -> dotfilesd.v1.FinalizeSessionResponse
+	7,  // 21: dotfilesd.v1.SessionService.GetSession:output_type -> dotfilesd.v1.GetSessionResponse
+	11, // 22: dotfilesd.v1.SessionService.ListSessions:output_type -> dotfilesd.v1.ListSessionsResponse
+	18, // [18:23] is the sub-list for method output_type
+	13, // [13:18] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init() }
@@ -692,7 +774,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

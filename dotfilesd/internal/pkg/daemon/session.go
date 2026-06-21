@@ -37,26 +37,103 @@ type shellSession struct {
 	stdin  io.WriteCloser
 	reader *bufio.Reader
 	mu     sync.Mutex
+	cwd    string
 }
 
-func newShellSession(sessionID string, variables map[string]string) (*shellSession, error) {
+func newShellSession(sessionID string, variables map[string]string, shellInfo *dotfilesdv1.Shell) (*shellSession, error) {
+	// Always use bash as the execution engine — it's predictable and reliable
+	// for command capture. CLI env vars and cwd are injected from Shell info.
 	cmd := exec.Command("bash", "--norc", "--noprofile")
+
 	home := os.Getenv("HOME")
-	path := os.Getenv("PATH")
+
+	// Build environment: start with CLI env (if provided), then override
+	// with daemon mandatory vars, then add session variables.
+	var cmdEnv []string
+
+	if shellInfo != nil && len(shellInfo.Env) > 0 {
+		for k, v := range shellInfo.Env {
+			cmdEnv = append(cmdEnv, fmt.Sprintf("%s=%s", k, v))
+		}
+	} else {
+		// Fallback when no CLI env provided.
+		path := os.Getenv("PATH")
+		localBin := home + "/.local/bin"
+		if !strings.Contains(path, localBin) {
+			path = localBin + ":" + path
+		}
+		cmdEnv = []string{
+			"HOME=" + home,
+			"PATH=" + path,
+		}
+	}
+
+	// Ensure PATH includes ~/.local/bin.
 	localBin := home + "/.local/bin"
-	if !strings.Contains(path, localBin) {
-		path = localBin + ":" + path
+	pathVal := ""
+	for _, e := range cmdEnv {
+		if strings.HasPrefix(e, "PATH=") {
+			pathVal = strings.TrimPrefix(e, "PATH=")
+			break
+		}
 	}
-	cmd.Env = []string{
+	if !strings.Contains(pathVal, localBin) {
+		if pathVal != "" {
+			pathVal = localBin + ":" + pathVal
+		} else {
+			pathVal = localBin
+		}
+		found := false
+		for i, e := range cmdEnv {
+			if strings.HasPrefix(e, "PATH=") {
+				cmdEnv[i] = "PATH=" + pathVal
+				found = true
+				break
+			}
+		}
+		if !found {
+			cmdEnv = append(cmdEnv, "PATH="+pathVal)
+		}
+	}
+
+	// Override daemon mandatory vars.
+	cmdEnv = append(cmdEnv,
 		"DOTFILESD_DAEMON=1",
-		"DOTFILESD_PORT=" + daemonPort,
-		"DOTFILESD_SESSION=" + sessionID,
-		"PATH=" + path,
-		"HOME=" + home,
+		"DOTFILESD_PORT="+daemonPort,
+		"DOTFILESD_SESSION="+sessionID,
+	)
+	// Ensure HOME is consistently set.
+	homeSet := false
+	for _, e := range cmdEnv {
+		if strings.HasPrefix(e, "HOME=") {
+			homeSet = true
+			break
+		}
 	}
+	if !homeSet {
+		cmdEnv = append(cmdEnv, "HOME="+home)
+	} else {
+		// Override HOME to daemon's value (should match CLI's).
+		for i, e := range cmdEnv {
+			if strings.HasPrefix(e, "HOME=") {
+				cmdEnv[i] = "HOME=" + home
+				break
+			}
+		}
+	}
+
+	// Add session variables on top.
 	for k, v := range variables {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		cmdEnv = append(cmdEnv, fmt.Sprintf("%s=%s", k, v))
 	}
+
+	cmd.Env = cmdEnv
+
+	// Set working directory from CLI context.
+	if shellInfo != nil && shellInfo.Cwd != "" {
+		cmd.Dir = shellInfo.Cwd
+	}
+
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("stdin pipe: %w", err)
@@ -69,10 +146,16 @@ func newShellSession(sessionID string, variables map[string]string) (*shellSessi
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start shell: %w", err)
 	}
+
+	cwd := ""
+	if shellInfo != nil {
+		cwd = shellInfo.Cwd
+	}
 	return &shellSession{
 		cmd:    cmd,
 		stdin:  stdin,
 		reader: bufio.NewReader(stdout),
+		cwd:    cwd,
 	}, nil
 }
 
@@ -85,8 +168,14 @@ func (sh *shellSession) Exec(command string, variables map[string]string) (strin
 	defer sh.mu.Unlock()
 
 	delim := fmt.Sprintf("__GS_%x__", rand.Int63())
-	// Prepend exports for session variables so they are available in the shell.
+
+	// Prepend cd to cwd so commands run in the CLI's working directory.
 	var prefix string
+	if sh.cwd != "" {
+		prefix += fmt.Sprintf("cd %s\n", bashQuote(sh.cwd))
+	}
+
+	// Prepend exports for session variables so they are available in the shell.
 	for k, v := range variables {
 		prefix += fmt.Sprintf("export %s=%s; ", k, bashQuote(v))
 	}
@@ -135,6 +224,7 @@ type Session struct {
 	data         map[string]string
 	variables    map[string]string // session variables injected into shell env
 	shell        *shellSession
+	shellInfo    *dotfilesdv1.Shell // CLI shell context (cwd, shell, env)
 	callbackURL  string
 	mu           sync.RWMutex
 }
@@ -177,6 +267,23 @@ func (s *Session) touch() {
 	s.mu.Unlock()
 }
 
+func (s *Session) SetShellInfo(si *dotfilesdv1.Shell) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if si != nil {
+		// Copy to avoid holding a reference to the request message.
+		env := make(map[string]string, len(si.Env))
+		for k, v := range si.Env {
+			env[k] = v
+		}
+		s.shellInfo = &dotfilesdv1.Shell{
+			CurrentShell: si.CurrentShell,
+			Cwd:          si.Cwd,
+			Env:          env,
+		}
+	}
+}
+
 func (s *Session) toProto() *dotfilesdv1.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -196,6 +303,7 @@ func (s *Session) toProto() *dotfilesdv1.Session {
 		Finalized:    s.finalized,
 		Data:         data,
 		Variables:    vars,
+		Shell:        s.shellInfo,
 	}
 }
 
@@ -206,7 +314,7 @@ func (s *Session) ensureShell() (*shellSession, error) {
 		return nil, fmt.Errorf("session is finalized")
 	}
 	if s.shell == nil {
-		sh, err := newShellSession(s.id, s.variables)
+		sh, err := newShellSession(s.id, s.variables, s.shellInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -394,7 +502,8 @@ func (ss *SessionStore) Resolve(id string) *Session {
 
 // ResolveSession resolves or creates a session from a protobuf Session message.
 // If the message is nil or has an empty id, an ephemeral session is created.
-// Session variables from the message are applied to the resolved session.
+// Session variables and shell context from the message are applied to the
+// resolved session.
 func (ss *SessionStore) ResolveSession(sessionMsg *dotfilesdv1.Session) *Session {
 	if sessionMsg == nil {
 		return ss.CreateEphemeral()
@@ -417,6 +526,9 @@ func (ss *SessionStore) ResolveSession(sessionMsg *dotfilesdv1.Session) *Session
 	}
 	if vars := sessionMsg.GetVariables(); len(vars) > 0 {
 		s.SetVariables(vars)
+	}
+	if shellInfo := sessionMsg.GetShell(); shellInfo != nil {
+		s.SetShellInfo(shellInfo)
 	}
 	return s
 }
@@ -456,9 +568,14 @@ func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfil
 		session.touch()
 	}
 
-	// Apply session variables from the Connect request.
-	if sessionMsg != nil && len(sessionMsg.GetVariables()) > 0 {
-		session.SetVariables(sessionMsg.GetVariables())
+	// Apply session variables and shell context from the Connect request.
+	if sessionMsg != nil {
+		if len(sessionMsg.GetVariables()) > 0 {
+			session.SetVariables(sessionMsg.GetVariables())
+		}
+		if shellInfo := sessionMsg.GetShell(); shellInfo != nil {
+			session.SetShellInfo(shellInfo)
+		}
 	}
 
 	session.SetCallbackURL(req.Msg.CallbackUrl)

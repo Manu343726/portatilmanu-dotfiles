@@ -21,6 +21,14 @@ service SessionService {
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
 }
 
+// Shell context from the CLI — tells the daemon the exact terminal environment
+// so commands behave as if run directly in the user's terminal.
+message Shell {
+  string current_shell = 1;     // shell binary path (e.g. "/usr/bin/zsh")
+  string cwd = 2;               // current working directory
+  map<string, string> env = 3;  // environment variables
+}
+
 message Session {
   string id = 1;
   int64 created_at = 2;      // unix timestamp (seconds)
@@ -29,6 +37,7 @@ message Session {
   bool finalized = 5;
   map<string, string> data = 6;
   map<string, string> variables = 7; // session variables injected into shell env
+  Shell shell = 8;                  // CLI shell context (cwd, shell, env)
 }
 
 message CreateSessionRequest {
