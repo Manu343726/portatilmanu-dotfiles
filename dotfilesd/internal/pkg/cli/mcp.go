@@ -8,8 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
+	"sync"
 
 	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -125,58 +125,58 @@ var mcpTools = []toolDef{
 	},
 }
 
+var stdoutMu sync.Mutex
+
+func writeJSONLine(w io.Writer, v any) {
+	data, _ := json.Marshal(v)
+	stdoutMu.Lock()
+	w.Write(data)
+	w.Write([]byte("\n"))
+	stdoutMu.Unlock()
+}
+
 func RunMCP(clients *Clients) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	bridge := NewMCPBridge(os.Stdout)
 	mcpBridge = bridge
 
-	requests := make(chan []byte, 16)
-	done := make(chan struct{})
-
-	// Stdin reader runs in a goroutine so it can route bridge responses
-	// even while the main goroutine is blocked on a synchronous tool call.
-	go func() {
-		defer close(requests)
-		reader := bufio.NewReader(os.Stdin)
-		for {
-			raw, err := readMCPFrame(reader)
-			if err != nil {
-				if err == io.EOF {
-					return
-				}
-				slog.Error("read frame", "error", err)
-				// Keep reading on transient errors; don't exit the goroutine.
-				continue
-			}
-
-			var msgType struct {
-				ID     json.RawMessage `json:"id,omitempty"`
-				Method string          `json:"method,omitempty"`
-			}
-			if err := json.Unmarshal(raw, &msgType); err != nil {
-				slog.Error("parse msg type", "error", err)
-				continue
-			}
-
-			// Responses to server-initiated requests are routed directly to the bridge.
-			if msgType.ID != nil && msgType.Method == "" {
-				var idStr string
-				json.Unmarshal(msgType.ID, &idStr)
-				if idStr != "" && bridge.HandleResponse(idStr, raw) {
-					continue
-				}
-			}
-
-			select {
-			case requests <- raw:
-			case <-done:
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
 				return
 			}
+			slog.Error("read stdin", "error", err)
+			continue
 		}
-	}()
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			continue
+		}
 
-	for raw := range requests {
+		raw := json.RawMessage(line)
+
+		// Check if this is a response to a server-initiated request (has ID, no method).
+		var msgType struct {
+			ID     json.RawMessage `json:"id,omitempty"`
+			Method string          `json:"method,omitempty"`
+		}
+		if err := json.Unmarshal(raw, &msgType); err != nil {
+			slog.Error("parse msg type", "error", err)
+			continue
+		}
+
+		if msgType.ID != nil && msgType.Method == "" {
+			var idStr string
+			json.Unmarshal(msgType.ID, &idStr)
+			if idStr != "" && bridge.HandleResponse(idStr, raw) {
+				continue
+			}
+		}
+
+		// Parse as a request (must have method + id).
 		var req mcpRequest
 		if err := json.Unmarshal(raw, &req); err != nil {
 			slog.Error("parse request", "error", err)
@@ -186,45 +186,25 @@ func RunMCP(clients *Clients) {
 			continue
 		}
 
-		resp := dispatchMCP(clients, req)
-		if resp != nil {
-			bridge.WriteResp(resp)
+		// Tool calls run in a background goroutine so the main loop keeps
+		// reading stdin. This is critical for the MCP bridge: when a tool
+		// call triggers feedback, the bridge sends a request to the client
+		// via stdout and blocks waiting for a response on stdin. The main
+		// goroutine reads that response and routes it to the bridge.
+		if req.Method == "tools/call" {
+			go func() {
+				resp := dispatchMCP(clients, req)
+				if resp != nil {
+					writeJSONLine(os.Stdout, resp)
+				}
+			}()
+		} else {
+			resp := dispatchMCP(clients, req)
+			if resp != nil {
+				writeJSONLine(os.Stdout, resp)
+			}
 		}
 	}
-	close(done)
-}
-
-func readMCPFrame(reader *bufio.Reader) ([]byte, error) {
-	var contentLength int
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return nil, err
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			break
-		}
-		if strings.HasPrefix(line, "Content-Length: ") {
-			contentLength, _ = strconv.Atoi(strings.TrimPrefix(line, "Content-Length: "))
-		}
-	}
-	if contentLength == 0 {
-		return nil, fmt.Errorf("no Content-Length header")
-	}
-	body := make([]byte, contentLength)
-	_, err := io.ReadFull(reader, body)
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
-}
-
-func writeMCPFrame(w io.Writer, resp *mcpResponse) {
-	data, _ := json.Marshal(resp)
-	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(data))
-	w.Write([]byte(header))
-	w.Write(data)
 }
 
 func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -41,9 +42,12 @@ func (b *MCPBridge) SendRequest(method string, params any) (json.RawMessage, err
 		"params":  params,
 	}
 
-	b.mu.Lock()
-	writeJSONFrame(b.out, frame)
-	b.mu.Unlock()
+	// Write as newline-delimited JSON (MCP stdio transport).
+	data, _ := json.Marshal(frame)
+	stdoutMu.Lock()
+	b.out.Write(data)
+	b.out.Write([]byte("\n"))
+	stdoutMu.Unlock()
 
 	slog.Debug("mcp bridge sent request", "id", id, "method", method)
 
@@ -73,19 +77,8 @@ func (b *MCPBridge) HandleResponse(id string, data json.RawMessage) bool {
 	return true
 }
 
+// WriteResp is kept for compatibility but writeJSONLine (in mcp.go)
+// should be used directly for new code.
 func (b *MCPBridge) WriteResp(resp *mcpResponse) {
-	b.mu.Lock()
-	writeMCPFrame(b.out, resp)
-	b.mu.Unlock()
-}
-
-func writeJSONFrame(w io.Writer, v any) {
-	data, err := json.Marshal(v)
-	if err != nil {
-		slog.Error("json marshal frame", "error", err)
-		return
-	}
-	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(data))
-	w.Write([]byte(header))
-	w.Write(data)
+	writeJSONLine(os.Stdout, resp)
 }
