@@ -131,42 +131,56 @@ func RunMCP(clients *Clients) {
 	bridge := NewMCPBridge(os.Stdout)
 	mcpBridge = bridge
 
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		raw, err := readMCPFrame(reader)
-		if err != nil {
-			if err == io.EOF {
+	requests := make(chan []byte, 16)
+	done := make(chan struct{})
+
+	// Stdin reader runs in a goroutine so it can route bridge responses
+	// even while the main goroutine is blocked on a synchronous tool call.
+	go func() {
+		defer close(requests)
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			raw, err := readMCPFrame(reader)
+			if err != nil {
+				if err == io.EOF {
+					return
+				}
+				slog.Error("read frame", "error", err)
 				return
 			}
-			slog.Error("read frame", "error", err)
-			return
-		}
 
-		// Check if this is a response to a server-initiated request
-		var msgType struct {
-			ID     json.RawMessage `json:"id,omitempty"`
-			Method string          `json:"method,omitempty"`
-		}
-		if err := json.Unmarshal(raw, &msgType); err != nil {
-			slog.Error("parse msg type", "error", err)
-			continue
-		}
-
-		if msgType.ID != nil && msgType.Method == "" {
-			var idStr string
-			json.Unmarshal(msgType.ID, &idStr)
-			if idStr != "" && bridge.HandleResponse(idStr, raw) {
+			var msgType struct {
+				ID     json.RawMessage `json:"id,omitempty"`
+				Method string          `json:"method,omitempty"`
+			}
+			if err := json.Unmarshal(raw, &msgType); err != nil {
+				slog.Error("parse msg type", "error", err)
 				continue
 			}
-			// unknown response id — fall through to dispatch
-		}
 
+			// Responses to server-initiated requests are routed directly to the bridge.
+			if msgType.ID != nil && msgType.Method == "" {
+				var idStr string
+				json.Unmarshal(msgType.ID, &idStr)
+				if idStr != "" && bridge.HandleResponse(idStr, raw) {
+					continue
+				}
+			}
+
+			select {
+			case requests <- raw:
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	for raw := range requests {
 		var req mcpRequest
 		if err := json.Unmarshal(raw, &req); err != nil {
 			slog.Error("parse request", "error", err)
 			continue
 		}
-
 		if req.ID == nil || len(req.ID) == 0 {
 			continue
 		}
@@ -176,6 +190,7 @@ func RunMCP(clients *Clients) {
 			bridge.WriteResp(resp)
 		}
 	}
+	close(done)
 }
 
 func readMCPFrame(reader *bufio.Reader) ([]byte, error) {
