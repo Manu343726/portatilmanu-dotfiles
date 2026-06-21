@@ -26,14 +26,16 @@ Directives:
   @choose "prompt" "opt1" "opt2" ... [as VARNAME]  Choose from options (default: $_choose)
 
 You can also run registered scripts (from the daemon's scripts directory) by path.
-Use "script list" to see available registered scripts.
+Use "script list" to see available registered scripts. Path components are
+space-separated, not slash-separated — use "run git status" not "run git/status".
 
 Examples:
   dotfilesctl script 'echo "hello"'
   dotfilesctl script --file ~/myscript.dsh
   dotfilesctl script list
-  dotfilesctl script run git/commit
-  dotfilesctl script run git/status
+  dotfilesctl script run git status
+  dotfilesctl script run git commit
+  dotfilesctl script run system update
   dotfilesctl script '
     echo "Starting setup..."
     @confirm "Ready to proceed?"
@@ -82,30 +84,34 @@ func newScriptListCmd() *cobra.Command {
 	}
 }
 
-// newScriptRunCmd returns the "script run <relPath>" subcommand.
+// newScriptRunCmd returns the "script run <path...>" subcommand.
 func newScriptRunCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "run <relative-path>",
-		Short: "run a registered script by relative path",
-		Long: `Run a registered script by its relative path in the scripts tree.
+		Use:   "run <directory>... <script>",
+		Short: "run a registered script by path (space-separated)",
+		Long: `Run a registered script by its path in the scripts tree.
+Path components are space-separated (not slash-separated).
 
 Examples:
-  dotfilesctl script run git/status
-  dotfilesctl script run git/commit
-  dotfilesctl script run system/update
+  dotfilesctl script run git status
+  dotfilesctl script run git commit
+  dotfilesctl script run system update
 `,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return completeRegisteredScripts(toComplete)
+			return completeRegisteredScripts(args, toComplete)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.RunRegisteredScript(clients, sessionID, args[0])
+			path := strings.Join(args, "/")
+			return cli.RunRegisteredScript(clients, sessionID, path)
 		},
 	}
 }
 
 // completeRegisteredScripts provides shell completion for registered script paths.
-func completeRegisteredScripts(prefix string) ([]string, cobra.ShellCompDirective) {
+// args holds the already-completed positional args (path components typed so far),
+// toComplete is the current word being completed.
+func completeRegisteredScripts(args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if clients == nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -118,27 +124,56 @@ func completeRegisteredScripts(prefix string) ([]string, cobra.ShellCompDirectiv
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
+
+	// Build the parent prefix from already-completed args.
+	parentPrefix := strings.Join(args, "/")
+
+	// Find the subtree matching parentPrefix, then suggest children filtered by toComplete.
 	var suggestions []string
-	var collectPaths func(entries []*dotfilesdv1.ScriptEntry, parent string)
-	collectPaths = func(entries []*dotfilesdv1.ScriptEntry, parent string) {
+	var findAndSuggest func(entries []*dotfilesdv1.ScriptEntry, prefix string)
+	findAndSuggest = func(entries []*dotfilesdv1.ScriptEntry, prefix string) {
 		for _, e := range entries {
-			fullPath := parent + e.Name
-			if parent != "" {
-				fullPath = parent + "/" + e.Name
+			childPath := e.Name
+			if prefix != "" {
+				childPath = prefix + "/" + e.Name
 			}
-			if e.IsDirectory {
-				// Add directory path as a completion (without trailing slash)
-				if strings.HasPrefix(fullPath, prefix) {
-					suggestions = append(suggestions, fullPath+"/")
+
+			if childPath == parentPrefix || prefix == parentPrefix {
+				// We're at the target parent — suggest its direct children.
+				if e.IsDirectory {
+					for _, c := range e.Children {
+						if strings.HasPrefix(c.Name, toComplete) {
+							if c.IsDirectory {
+								suggestions = append(suggestions, c.Name+"/")
+							} else {
+								suggestions = append(suggestions, c.Name)
+							}
+						}
+					}
 				}
-				collectPaths(e.Children, fullPath)
-			} else {
-				if strings.HasPrefix(fullPath, prefix) {
-					suggestions = append(suggestions, fullPath)
-				}
+				return
+			}
+
+			if strings.HasPrefix(parentPrefix, childPath+"/") || strings.HasPrefix(parentPrefix, childPath) {
+				findAndSuggest(e.Children, childPath)
 			}
 		}
 	}
-	collectPaths(resp.Msg.Entries, "")
+
+	// If no args yet, suggest top-level entries.
+	if parentPrefix == "" {
+		for _, e := range resp.Msg.Entries {
+			if strings.HasPrefix(e.Name, toComplete) {
+				if e.IsDirectory {
+					suggestions = append(suggestions, e.Name+"/")
+				} else {
+					suggestions = append(suggestions, e.Name)
+				}
+			}
+		}
+	} else {
+		findAndSuggest(resp.Msg.Entries, "")
+	}
+
 	return suggestions, cobra.ShellCompDirectiveNoFileComp
 }

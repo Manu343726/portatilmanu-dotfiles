@@ -141,14 +141,16 @@ dotfilesctl script list
 # →   update    Update system packages via pacman
 ```
 
-### `script run <relative-path>`
+### `script run <directory>... <script>`
 
-Run a registered script by its path in the scripts tree. Supports tab completion.
+Run a registered script by its path in the scripts tree. Path components are
+space-separated (use `run git status`, not `run git/status`). Supports tab
+completion — directories auto-suggest with a trailing `/`.
 
 ```sh
-dotfilesctl script run git/status
-dotfilesctl script run git/commit
-dotfilesctl script run system/update
+dotfilesctl script run git status
+dotfilesctl script run git commit
+dotfilesctl script run system update
 ```
 
 **Scripts directory layout:**
