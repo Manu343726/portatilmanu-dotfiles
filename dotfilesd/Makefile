@@ -51,7 +51,7 @@ build:
 	@echo "$(BUILD_HASH)" > $(HASH_FILE)
 	@echo "  built (hash: $(BUILD_HASH))"
 
-# -- Install (fast: skip if hash unchanged) -----------------------------------
+# -- Install (fast: skip if hash unchanged, auto-restarts daemon) ------------
 
 install:
 	@h=$$(git rev-parse HEAD 2>/dev/null || echo "dev"); \
@@ -62,6 +62,7 @@ install:
 		$(GO) build $(GOFLAGS) -o $(DAEMON_BIN) $(CMD_DIR)/dotfilesd; \
 		$(GO) build $(GOFLAGS) -o $(CLI_BIN) $(CMD_DIR)/dotfilesctl; \
 		echo "$$h" > $(HASH_FILE); \
+		$(MAKE) service-restart; \
 	fi
 	@mkdir -p $(HOME)/.config/dotfilesd $(HOME)/.config/dotfilesctl
 	@echo "  installed"
@@ -110,6 +111,10 @@ service-start: service-install
 service-stop:
 	-systemctl --user stop dotfilesd.service
 	-systemctl --user disable dotfilesd.service
+
+service-restart:
+	systemctl --user restart dotfilesd.service
+	@echo "service restarted."
 
 service-logs:
 	journalctl --user -u dotfilesd.service -f

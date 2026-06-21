@@ -5,8 +5,7 @@
 1. **Read the docs** — start with `README.md` and the files in `docs/`.
 2. **Make your changes** — edit source code as needed.
 3. **Build** — run `make build` to compile daemon + CLI.
-4. **Install** — run `make install` to deploy binaries to `~/.local/bin/`.
-5. **Restart the daemon** if you changed daemon code: `systemctl --user restart dotfilesd`.
+4. **Install** — run `make install` to deploy binaries and restart the daemon.
 6. **Test** — run `dotfilesctl ping` to verify, use other subcommands as needed.
 7. **Commit and push** — all changes (dotfiles, daemon, CLI, docs) must be committed and pushed.
 
