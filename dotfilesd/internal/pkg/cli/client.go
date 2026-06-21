@@ -119,6 +119,31 @@ func (c *Clients) Connect(ctx context.Context) error {
 			return defaultVal, nil
 		}
 	})
+	fb.SetChooseHandler(func(ctx context.Context, req *dotfilesdv1.ChooseRequest) (int, string, error) {
+		fmt.Fprintln(os.Stderr, req.Prompt)
+		for i, opt := range req.Options {
+			mark := " "
+			if int(req.DefaultIndex) == i {
+				mark = ">"
+			}
+			fmt.Fprintf(os.Stderr, "  %s %d. %s\n", mark, i+1, opt)
+		}
+		fmt.Fprint(os.Stderr, "Enter number (or empty to cancel): ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			return -1, "", err
+		}
+		line = strings.TrimRight(line, "\n\r")
+		if line == "" {
+			return -1, "", nil
+		}
+		var n int
+		if _, err := fmt.Sscanf(line, "%d", &n); err != nil || n < 1 || n > len(req.Options) {
+			return -1, "", fmt.Errorf("invalid selection: enter 1-%d", len(req.Options))
+		}
+		idx := n - 1
+		return idx, req.Options[idx], nil
+	})
 	c.Feedback = fb
 
 	req := connect.NewRequest(&dotfilesdv1.ConnectRequest{

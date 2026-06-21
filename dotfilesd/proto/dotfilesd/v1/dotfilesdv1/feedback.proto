@@ -16,6 +16,12 @@ service ConfirmService {
   rpc RequestConfirm(ConfirmRequest) returns (ConfirmResponse);
 }
 
+// ChooseService is called by the daemon when it needs the user to pick
+// from a list of options (e.g. select a git branch, choose a target).
+service ChooseService {
+  rpc RequestChoose(ChooseRequest) returns (ChooseResponse);
+}
+
 message InputRequest {
   string session_id = 100;
   // Human-readable prompt describing what input is needed.
@@ -44,4 +50,22 @@ message ConfirmResponse {
   string session_id = 100;
   // Whether the user confirmed.
   bool confirmed = 1;
+}
+
+message ChooseRequest {
+  string session_id = 100;
+  // Human-readable prompt describing what to choose.
+  string prompt = 1;
+  // The list of options to choose from.
+  repeated string options = 2;
+  // Index of the default option, -1 if no default.
+  int32 default_index = 3;
+}
+
+message ChooseResponse {
+  string session_id = 100;
+  // Index of the selected option, -1 if cancelled.
+  int32 selected_index = 1;
+  // The selected option text (empty if cancelled).
+  string selected_option = 2;
 }

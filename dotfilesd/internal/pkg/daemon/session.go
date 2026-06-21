@@ -218,6 +218,32 @@ func (s *Session) RequestConfirm(ctx context.Context, message string, defaultCon
 	return resp.Msg.Confirmed, nil
 }
 
+// RequestChoose asks the user to pick from a list of options via the session's
+// callback URL. Returns the selected index (0-based) and option text, or -1/empty
+// if the user cancelled.
+func (s *Session) RequestChoose(ctx context.Context, prompt string, options []string, defaultIndex int) (int, string, error) {
+	s.mu.RLock()
+	url := s.callbackURL
+	s.mu.RUnlock()
+	if url == "" {
+		return -1, "", fmt.Errorf("no callback URL registered for session %s", s.id)
+	}
+
+	client := dotfilesdv1connect.NewChooseServiceClient(http.DefaultClient, url)
+	req := connect.NewRequest(&dotfilesdv1.ChooseRequest{
+		Prompt:       prompt,
+		Options:      options,
+		DefaultIndex: int32(defaultIndex),
+	})
+	req.Header().Set("Session-Id", s.id)
+
+	resp, err := client.RequestChoose(ctx, req)
+	if err != nil {
+		return -1, "", fmt.Errorf("request choose: %w", err)
+	}
+	return int(resp.Msg.SelectedIndex), resp.Msg.SelectedOption, nil
+}
+
 type SessionStore struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session

@@ -260,6 +260,139 @@ func (x *ConfirmResponse) GetConfirmed() bool {
 	return false
 }
 
+type ChooseRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Human-readable prompt describing what to choose.
+	Prompt string `protobuf:"bytes,1,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	// The list of options to choose from.
+	Options []string `protobuf:"bytes,2,rep,name=options,proto3" json:"options,omitempty"`
+	// Index of the default option, -1 if no default.
+	DefaultIndex  int32 `protobuf:"varint,3,opt,name=default_index,json=defaultIndex,proto3" json:"default_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChooseRequest) Reset() {
+	*x = ChooseRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChooseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChooseRequest) ProtoMessage() {}
+
+func (x *ChooseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChooseRequest.ProtoReflect.Descriptor instead.
+func (*ChooseRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ChooseRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ChooseRequest) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *ChooseRequest) GetOptions() []string {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *ChooseRequest) GetDefaultIndex() int32 {
+	if x != nil {
+		return x.DefaultIndex
+	}
+	return 0
+}
+
+type ChooseResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,100,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Index of the selected option, -1 if cancelled.
+	SelectedIndex int32 `protobuf:"varint,1,opt,name=selected_index,json=selectedIndex,proto3" json:"selected_index,omitempty"`
+	// The selected option text (empty if cancelled).
+	SelectedOption string `protobuf:"bytes,2,opt,name=selected_option,json=selectedOption,proto3" json:"selected_option,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ChooseResponse) Reset() {
+	*x = ChooseResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChooseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChooseResponse) ProtoMessage() {}
+
+func (x *ChooseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChooseResponse.ProtoReflect.Descriptor instead.
+func (*ChooseResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ChooseResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ChooseResponse) GetSelectedIndex() int32 {
+	if x != nil {
+		return x.SelectedIndex
+	}
+	return 0
+}
+
+func (x *ChooseResponse) GetSelectedOption() string {
+	if x != nil {
+		return x.SelectedOption
+	}
+	return ""
+}
+
 var File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDesc = "" +
@@ -283,11 +416,24 @@ const file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDesc = "" +
 	"\x0fConfirmResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12\x1c\n" +
-	"\tconfirmed\x18\x01 \x01(\bR\tconfirmed2W\n" +
+	"\tconfirmed\x18\x01 \x01(\bR\tconfirmed\"\x85\x01\n" +
+	"\rChooseRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x12\x16\n" +
+	"\x06prompt\x18\x01 \x01(\tR\x06prompt\x12\x18\n" +
+	"\aoptions\x18\x02 \x03(\tR\aoptions\x12#\n" +
+	"\rdefault_index\x18\x03 \x01(\x05R\fdefaultIndex\"\x7f\n" +
+	"\x0eChooseResponse\x12\x1d\n" +
+	"\n" +
+	"session_id\x18d \x01(\tR\tsessionId\x12%\n" +
+	"\x0eselected_index\x18\x01 \x01(\x05R\rselectedIndex\x12'\n" +
+	"\x0fselected_option\x18\x02 \x01(\tR\x0eselectedOption2W\n" +
 	"\fInputService\x12G\n" +
 	"\fRequestInput\x12\x1a.dotfilesd.v1.InputRequest\x1a\x1b.dotfilesd.v1.InputResponse2_\n" +
 	"\x0eConfirmService\x12M\n" +
-	"\x0eRequestConfirm\x12\x1c.dotfilesd.v1.ConfirmRequest\x1a\x1d.dotfilesd.v1.ConfirmResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\x0eRequestConfirm\x12\x1c.dotfilesd.v1.ConfirmRequest\x1a\x1d.dotfilesd.v1.ConfirmResponse2[\n" +
+	"\rChooseService\x12J\n" +
+	"\rRequestChoose\x12\x1b.dotfilesd.v1.ChooseRequest\x1a\x1c.dotfilesd.v1.ChooseResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescOnce sync.Once
@@ -301,20 +447,24 @@ func file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_goTypes = []any{
 	(*InputRequest)(nil),    // 0: dotfilesd.v1.InputRequest
 	(*InputResponse)(nil),   // 1: dotfilesd.v1.InputResponse
 	(*ConfirmRequest)(nil),  // 2: dotfilesd.v1.ConfirmRequest
 	(*ConfirmResponse)(nil), // 3: dotfilesd.v1.ConfirmResponse
+	(*ChooseRequest)(nil),   // 4: dotfilesd.v1.ChooseRequest
+	(*ChooseResponse)(nil),  // 5: dotfilesd.v1.ChooseResponse
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_depIdxs = []int32{
 	0, // 0: dotfilesd.v1.InputService.RequestInput:input_type -> dotfilesd.v1.InputRequest
 	2, // 1: dotfilesd.v1.ConfirmService.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
-	1, // 2: dotfilesd.v1.InputService.RequestInput:output_type -> dotfilesd.v1.InputResponse
-	3, // 3: dotfilesd.v1.ConfirmService.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: dotfilesd.v1.ChooseService.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
+	1, // 3: dotfilesd.v1.InputService.RequestInput:output_type -> dotfilesd.v1.InputResponse
+	3, // 4: dotfilesd.v1.ConfirmService.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
+	5, // 5: dotfilesd.v1.ChooseService.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -331,9 +481,9 @@ func file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_goTypes,
 		DependencyIndexes: file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_depIdxs,

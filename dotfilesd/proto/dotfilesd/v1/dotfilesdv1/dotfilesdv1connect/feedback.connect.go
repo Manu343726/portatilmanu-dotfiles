@@ -25,6 +25,8 @@ const (
 	InputServiceName = "dotfilesd.v1.InputService"
 	// ConfirmServiceName is the fully-qualified name of the ConfirmService service.
 	ConfirmServiceName = "dotfilesd.v1.ConfirmService"
+	// ChooseServiceName is the fully-qualified name of the ChooseService service.
+	ChooseServiceName = "dotfilesd.v1.ChooseService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -41,6 +43,9 @@ const (
 	// ConfirmServiceRequestConfirmProcedure is the fully-qualified name of the ConfirmService's
 	// RequestConfirm RPC.
 	ConfirmServiceRequestConfirmProcedure = "/dotfilesd.v1.ConfirmService/RequestConfirm"
+	// ChooseServiceRequestChooseProcedure is the fully-qualified name of the ChooseService's
+	// RequestChoose RPC.
+	ChooseServiceRequestChooseProcedure = "/dotfilesd.v1.ChooseService/RequestChoose"
 )
 
 // InputServiceClient is a client for the dotfilesd.v1.InputService service.
@@ -181,4 +186,74 @@ type UnimplementedConfirmServiceHandler struct{}
 
 func (UnimplementedConfirmServiceHandler) RequestConfirm(context.Context, *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ConfirmService.RequestConfirm is not implemented"))
+}
+
+// ChooseServiceClient is a client for the dotfilesd.v1.ChooseService service.
+type ChooseServiceClient interface {
+	RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error)
+}
+
+// NewChooseServiceClient constructs a client for the dotfilesd.v1.ChooseService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewChooseServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ChooseServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	chooseServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto.Services().ByName("ChooseService").Methods()
+	return &chooseServiceClient{
+		requestChoose: connect.NewClient[dotfilesdv1.ChooseRequest, dotfilesdv1.ChooseResponse](
+			httpClient,
+			baseURL+ChooseServiceRequestChooseProcedure,
+			connect.WithSchema(chooseServiceMethods.ByName("RequestChoose")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// chooseServiceClient implements ChooseServiceClient.
+type chooseServiceClient struct {
+	requestChoose *connect.Client[dotfilesdv1.ChooseRequest, dotfilesdv1.ChooseResponse]
+}
+
+// RequestChoose calls dotfilesd.v1.ChooseService.RequestChoose.
+func (c *chooseServiceClient) RequestChoose(ctx context.Context, req *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error) {
+	return c.requestChoose.CallUnary(ctx, req)
+}
+
+// ChooseServiceHandler is an implementation of the dotfilesd.v1.ChooseService service.
+type ChooseServiceHandler interface {
+	RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error)
+}
+
+// NewChooseServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewChooseServiceHandler(svc ChooseServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	chooseServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto.Services().ByName("ChooseService").Methods()
+	chooseServiceRequestChooseHandler := connect.NewUnaryHandler(
+		ChooseServiceRequestChooseProcedure,
+		svc.RequestChoose,
+		connect.WithSchema(chooseServiceMethods.ByName("RequestChoose")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/dotfilesd.v1.ChooseService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case ChooseServiceRequestChooseProcedure:
+			chooseServiceRequestChooseHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedChooseServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedChooseServiceHandler struct{}
+
+func (UnimplementedChooseServiceHandler) RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ChooseService.RequestChoose is not implemented"))
 }
