@@ -40,15 +40,12 @@ type shellSession struct {
 	cwd    string
 }
 
-func newShellSession(sessionID string, variables map[string]string, shellInfo *dotfilesdv1.Shell) (*shellSession, error) {
-	// Always use bash as the execution engine — it's predictable and reliable
-	// for command capture. CLI env vars and cwd are injected from Shell info.
-	cmd := exec.Command("bash", "--norc", "--noprofile")
-
+// buildShellEnv constructs the environment variable list for a shell session.
+// It merges CLI env (from shellInfo) with daemon mandatory vars and session variables.
+// Exported for testing.
+func buildShellEnv(sessionID string, variables map[string]string, shellInfo *dotfilesdv1.Shell) []string {
 	home := os.Getenv("HOME")
 
-	// Build environment: start with CLI env (if provided), then override
-	// with daemon mandatory vars, then add session variables.
 	var cmdEnv []string
 
 	if shellInfo != nil && len(shellInfo.Env) > 0 {
@@ -113,7 +110,6 @@ func newShellSession(sessionID string, variables map[string]string, shellInfo *d
 	if !homeSet {
 		cmdEnv = append(cmdEnv, "HOME="+home)
 	} else {
-		// Override HOME to daemon's value (should match CLI's).
 		for i, e := range cmdEnv {
 			if strings.HasPrefix(e, "HOME=") {
 				cmdEnv[i] = "HOME=" + home
@@ -127,7 +123,15 @@ func newShellSession(sessionID string, variables map[string]string, shellInfo *d
 		cmdEnv = append(cmdEnv, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	cmd.Env = cmdEnv
+	return cmdEnv
+}
+
+func newShellSession(sessionID string, variables map[string]string, shellInfo *dotfilesdv1.Shell) (*shellSession, error) {
+	// Always use bash as the execution engine — it's predictable and reliable
+	// for command capture. CLI env vars and cwd are injected from Shell info.
+	cmd := execCommand("bash", "--norc", "--noprofile")
+
+	cmd.Env = buildShellEnv(sessionID, variables, shellInfo)
 
 	// Set working directory from CLI context.
 	if shellInfo != nil && shellInfo.Cwd != "" {

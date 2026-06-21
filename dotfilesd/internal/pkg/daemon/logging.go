@@ -51,7 +51,8 @@ func parseLogLevel(s string) (dotfilesdv1.LogLevel, slog.Level, bool) {
 	key := "LOG_LEVEL_" + strings.ToUpper(s)
 	v, ok := dotfilesdv1.LogLevel_value[key]
 	if !ok {
-		if strings.ToLower(s) == "warn" {
+		switch strings.ToLower(s) {
+		case "warn", "warning":
 			return dotfilesdv1.LogLevel_LOG_LEVEL_WARN, slog.LevelWarn, true
 		}
 		return dotfilesdv1.LogLevel_LOG_LEVEL_UNSPECIFIED, slog.LevelInfo, false

@@ -111,6 +111,9 @@ func (d *Daemon) Start() error {
 	}
 }
 
+// restartDaemon is a function variable that can be replaced in tests.
+var restartDaemon = gracefulRestart
+
 func gracefulRestart(delay time.Duration) {
 	slog.Warn("daemon restart requested, starting new instance", "delay_ms", delay.Milliseconds())
 	time.Sleep(delay)

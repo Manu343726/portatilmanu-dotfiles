@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// execCommand is used instead of exec.Command directly so tests can replace it.
+var execCommand = exec.Command
+
 func hasSudo() bool {
 	_, err := exec.LookPath("sudo")
 	return err == nil
@@ -24,13 +27,13 @@ func truncate(s string, n int) string {
 }
 
 func runCmd(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
+	out, err := execCommand(name, args...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
 
 func runCmdFull(name string, args ...string) (string, string, int) {
 	var stdout, stderr strings.Builder
-	cmd := exec.Command(name, args...)
+	cmd := execCommand(name, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()

@@ -374,10 +374,12 @@ func extractQuotedString(s string) (string, error) {
 	}
 	var buf strings.Builder
 	i := 1
+	found := false
 	for i < len(s) {
 		ch := s[i]
 		if ch == '"' {
 			i++
+			found = true
 			// Allow trailing content after closing quote.
 			break
 		}
@@ -388,6 +390,9 @@ func extractQuotedString(s string) (string, error) {
 			buf.WriteByte(ch)
 		}
 		i++
+	}
+	if !found {
+		return "", fmt.Errorf("unclosed quoted string")
 	}
 	return buf.String(), nil
 }

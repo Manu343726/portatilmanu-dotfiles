@@ -96,7 +96,7 @@ func (s *configServer) Restart(ctx context.Context, req *connect.Request[dotfile
 	slog.Warn("Restart requested")
 	s.sessions.ResolveSession(req.Msg.GetSession())
 
-	go gracefulRestart(500 * time.Millisecond)
+	go restartDaemon(500 * time.Millisecond)
 
 	return connect.NewResponse(&dotfilesdv1.RestartResponse{
 		Message: "daemon restarting in 500ms, reconnect after ~3s",

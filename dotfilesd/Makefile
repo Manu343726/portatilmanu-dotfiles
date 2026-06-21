@@ -120,6 +120,17 @@ service-restart:
 service-logs:
 	journalctl --user -u dotfilesd.service -f
 
+# -- Tests ------------------------------------------------------------------
+
+test:
+	$(GO) test -count=1 ./internal/pkg/... ./test/e2e/...
+
+test-verbose:
+	$(GO) test -count=1 -v ./internal/pkg/... ./test/e2e/...
+
+test-short:
+	$(GO) test -short -count=1 ./internal/pkg/... ./test/e2e/...
+
 # -- Clean ------------------------------------------------------------------
 
 clean:
