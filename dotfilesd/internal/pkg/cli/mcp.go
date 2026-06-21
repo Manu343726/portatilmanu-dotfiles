@@ -146,7 +146,8 @@ func RunMCP(clients *Clients) {
 					return
 				}
 				slog.Error("read frame", "error", err)
-				return
+				// Keep reading on transient errors; don't exit the goroutine.
+				continue
 			}
 
 			var msgType struct {
@@ -276,6 +277,11 @@ func addSessionHeader[T any](req *connect.Request[T], args json.RawMessage, defa
 }
 
 func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMessage) *mcpResponse {
+	// Connect lazily on first tool call so MCP mode starts without
+	// requiring the daemon to be reachable at launch time.
+	if err := clients.Connect(context.Background()); err != nil {
+		return mcpErr(id, -32000, fmt.Sprintf("daemon connection failed: %v", err))
+	}
 	switch name {
 	case "system_ping":
 		req := connect.NewRequest(&dotfilesdv1.PingRequest{})

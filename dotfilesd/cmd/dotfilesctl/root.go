@@ -55,10 +55,13 @@ func newRootCmd() *cobra.Command {
 			clients = cli.NewClients(port)
 			clients.SessionID = sessionID
 
-			if err := clients.Connect(context.Background()); err != nil {
-				return err
+			// Skip daemon connect in MCP mode — tools connect lazily on first use.
+			if cmd.Name() != "mcp" {
+				if err := clients.Connect(context.Background()); err != nil {
+					return err
+				}
+				sessionID = clients.SessionID
 			}
-			sessionID = clients.SessionID
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
