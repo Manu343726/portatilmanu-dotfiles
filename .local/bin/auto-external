@@ -15,8 +15,8 @@
 #   this only triggers when an external output is actually present.
 #
 # Assumptions:
-#   - The internal display is always named "eDP" (common on Intel/AMD laptops)
-#   - External displays show up as something other than "eDP" (e.g. "DisplayPort-1")
+#   - The internal display is always named "DP-0" (ASUS ROG Flow X13)
+#   - External displays show up as something other than "DP-0" (e.g. "DisplayPort-1")
 #   - We use xrandr (X11), not Wayland
 
 # Give the display driver time to finish detecting connected monitors.
@@ -29,11 +29,11 @@ sleep 2
 #
 # awk breakdown:
 #   / connected /    — match lines that say " connected " (active outputs)
-#   !/^eDP/          — exclude the internal display (starts with "eDP")
+#   !/^(eDP|DP-0)/   — exclude the internal display (starts with "eDP" or "DP-0")
 #   {print $1}       — print the output name (first field, e.g. "DisplayPort-1")
 #
 # head -1 takes only the first match in case multiple externals are connected.
-ext=$(xrandr | awk '/ connected / && !/^eDP/ {print $1}' | head -1)
+ext=$(xrandr | awk '/ connected / && !/^(eDP|DP-0)/ {print $1}' | head -1)
 
 # If no external display is found, do nothing and exit silently.
 # This is the common case when the laptop is undocked.
@@ -44,8 +44,8 @@ fi
 # Switch to external-only layout:
 #   --output "$ext"  --auto   — enable the external at its preferred resolution
 #   --primary                 — set it as the primary output (i3 bar, etc.)
-#   --output eDP     --off    — disable the internal laptop panel
-xrandr --output "$ext" --auto --primary --output eDP --off
+#   --output DP-0    --off    — disable the internal laptop panel
+xrandr --output "$ext" --auto --primary --output DP-0 --off
 
 # Send a desktop notification so the user knows what happened.
 # The notification appears briefly in the corner and can be clicked away.

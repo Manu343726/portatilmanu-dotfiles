@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
-int="eDP"
-ext=$(xrandr | awk '/ connected / && !/^eDP/ {print $1}' | head -1)
+int="DP-0"
+ext=$(xrandr | awk '/ connected / && !/^(eDP|DP-0)/ {print $1}' | head -1)
 
 if [[ -z "$ext" ]]; then
   notify-send "Screen Layout" "No external display detected"
