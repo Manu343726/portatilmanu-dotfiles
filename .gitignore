@@ -72,3 +72,15 @@
 !/.config/nchat/usercolor.conf
 !/.config/nchat/key.conf
 !/.config/nchat/ui.conf
+
+# autorandr display profiles
+!/.config/autorandr/
+/.config/autorandr/*
+!/.config/autorandr/external-docked/
+/.config/autorandr/external-docked/*
+!/.config/autorandr/external-docked/config
+!/.config/autorandr/external-docked/setup
+!/.config/autorandr/laptop-only/
+/.config/autorandr/laptop-only/*
+!/.config/autorandr/laptop-only/config
+!/.config/autorandr/laptop-only/setup
