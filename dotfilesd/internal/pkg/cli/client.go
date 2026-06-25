@@ -32,6 +32,17 @@ func detectCapabilities() map[string]string {
 		caps["_cap_elicitation"] = "true"
 	}
 
+	// Advertise MCP client identity so the daemon can adapt behaviour
+	// (e.g. prefer pkexec over elicitation for VS Code which doesn't
+	// support password fields in its elicitation forms).
+	if clientCaps.clientName != "" {
+		caps["_cap_client_name"] = clientCaps.clientName
+		caps["_cap_client_version"] = clientCaps.clientVersion
+	}
+	if clientCaps.hasMcpApps {
+		caps["_cap_mcp_apps"] = "true"
+	}
+
 	// Terminal capability: can we interact with the user via /dev/tty?
 	if f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
 		f.Close()

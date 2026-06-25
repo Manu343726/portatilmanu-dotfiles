@@ -3,6 +3,8 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
@@ -36,9 +39,10 @@ type mcpError struct {
 }
 
 type toolDef struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	InputSchema toolSchema `json:"inputSchema"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema toolSchema      `json:"inputSchema"`
+	Meta        json.RawMessage `json:"_meta,omitempty"`
 }
 
 type toolSchema struct {
@@ -97,9 +101,10 @@ var mcpTools = []toolDef{
 		Description: "Execute a shell command",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
 			"command":    {Type: "string"},
-			"sudo":       {Type: "boolean", Description: "run with sudo (prompts for password securely via feedback)"},
+			"sudo":       {Type: "boolean", Description: "run with sudo (prompts for password securely via feedback or MCP Apps webview)"},
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"command"}},
+		Meta: json.RawMessage(`{"ui":{"resourceUri":"ui://dotfilesd/sudo-prompt"}}`),
 	},
 	{
 		Name:        "config_reload",
@@ -140,15 +145,58 @@ var mcpTools = []toolDef{
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}},
 	},
+
+	{
+		Name:        "_sudo_submit_password",
+		Description: "Internal: Submit sudo password from the MCP Apps webview. Only callable from within the UI view (visibility: app).",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"request_id": {Type: "string", Description: "request ID returned by exec_run(sudo=true)"},
+			"password":   {Type: "string", Description: "sudo password"},
+		}, Required: []string{"request_id", "password"}},
+		Meta: json.RawMessage(`{"ui":{"visibility":["app"]}}`),
+	},
 }
+
+// pendingSudoRequest represents a sudo execution waiting for the user to
+// enter their password via the MCP Apps webview.
+type pendingSudoRequest struct {
+	command   string
+	createdAt time.Time
+}
+
+// pendingRequests holds all active sudo requests awaiting password submission,
+// keyed by request ID (hex string). Entries are cleaned up after 10 minutes.
+var pendingRequests sync.Map
 
 var stdoutMu sync.Mutex
 
-// clientCaps tracks which MCP protocol capabilities the connected client declared
-// during initialization. Used to determine whether standard features like
-// elicitation are available.
-var clientCaps struct {
+// mcpClientCaps tracks which MCP protocol capabilities the connected client
+// declared during initialization. Used to determine whether standard features
+// like elicitation and MCP Apps (_meta/ui) are available.
+type mcpClientCaps struct {
 	hasElicitation bool
+	clientName     string
+	clientVersion  string
+	hasMcpApps     bool
+}
+
+var clientCaps mcpClientCaps
+
+func init() {
+	// Periodically sweep expired pending sudo requests.
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			pendingRequests.Range(func(key, value any) bool {
+				req := value.(*pendingSudoRequest)
+				if time.Since(req.createdAt) > 10*time.Minute {
+					pendingRequests.Delete(key)
+					slog.Debug("cleaned up expired sudo request", "request_id", key)
+				}
+				return true
+			})
+		}
+	}()
 }
 
 func writeJSONLine(w io.Writer, v any) {
@@ -208,18 +256,33 @@ func RunMCP(clients *Clients) {
 			continue
 		}
 
-		// Tool calls run in a background goroutine so the main loop keeps
-		// reading stdin. This is critical for the MCP bridge: when a tool
-		// call triggers feedback, the bridge sends a request to the client
-		// via stdout and blocks waiting for a response on stdin. The main
-		// goroutine reads that response and routes it to the bridge.
+		// Tool calls that can trigger elicitation feedback (exec_run with sudo,
+		// script_run with @input/@confirm) need to run in a background goroutine
+		// so the main loop keeps reading stdin to route the elicitation response
+		// back to the bridge. When MCP Apps is available, exec_run(sudo=true)
+		// returns immediately (two-phase pending flow) so the goroutine is
+		// harmless; when MCP Apps is absent, the goroutine is required for
+		// elicitation. Other tool calls run synchronously for simplicity.
 		if req.Method == "tools/call" {
-			go func() {
+			// Peek at the tool name to decide execution strategy.
+			var toolInfo struct {
+				Name string `json:"name"`
+			}
+			json.Unmarshal(req.Params, &toolInfo)
+
+			if toolInfo.Name == "exec_run" || toolInfo.Name == "script_run" {
+				go func() {
+					resp := dispatchMCP(clients, req)
+					if resp != nil {
+						writeJSONLine(os.Stdout, resp)
+					}
+				}()
+			} else {
 				resp := dispatchMCP(clients, req)
 				if resp != nil {
 					writeJSONLine(os.Stdout, resp)
 				}
-			}()
+			}
 		} else {
 			resp := dispatchMCP(clients, req)
 			if resp != nil {
@@ -232,16 +295,44 @@ func RunMCP(clients *Clients) {
 func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 	switch req.Method {
 	case "initialize":
-		// Capture client capabilities from the initialize request.
+		// Capture client identity and capabilities from the initialize request.
 		var initParams struct {
+			ClientInfo *struct {
+				Name    string `json:"name"`
+				Version string `json:"version"`
+			} `json:"clientInfo"`
 			Capabilities *struct {
 				Elicitation json.RawMessage `json:"elicitation"`
+				Extensions  *struct {
+					IoMcpUi json.RawMessage `json:"io.modelcontextprotocol/ui"`
+				} `json:"extensions"`
+				Experimental *struct {
+					Meta json.RawMessage `json:"_meta"`
+				} `json:"_experimental"`
 			} `json:"capabilities"`
 		}
 		if err := json.Unmarshal(req.Params, &initParams); err == nil {
+			if initParams.ClientInfo != nil {
+				clientCaps.clientName = initParams.ClientInfo.Name
+				clientCaps.clientVersion = initParams.ClientInfo.Version
+				slog.Debug("MCP client", "name", clientCaps.clientName, "version", clientCaps.clientVersion)
+			}
 			clientCaps.hasElicitation = initParams.Capabilities != nil && initParams.Capabilities.Elicitation != nil
 			if clientCaps.hasElicitation {
 				slog.Debug("client supports elicitation")
+			}
+			// Detect MCP Apps support: check both the spec-compliant
+			// extensions.io.modelcontextprotocol/ui field and the legacy
+			// _experimental._meta field (pre-spec VS Code).
+			if initParams.Capabilities != nil {
+				if initParams.Capabilities.Extensions != nil && initParams.Capabilities.Extensions.IoMcpUi != nil {
+					clientCaps.hasMcpApps = true
+					slog.Debug("client supports MCP Apps (extensions.io.modelcontextprotocol/ui)")
+				}
+				if initParams.Capabilities.Experimental != nil && initParams.Capabilities.Experimental.Meta != nil {
+					clientCaps.hasMcpApps = true
+					slog.Debug("client supports MCP Apps (_experimental._meta)")
+				}
 			}
 		}
 		return mcpResp(req.ID, map[string]any{
@@ -267,6 +358,39 @@ func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 			return mcpErr(req.ID, -32602, "invalid params")
 		}
 		return callTool(clients, req.ID, params.Name, params.Arguments)
+
+	case "resources/list":
+		return mcpResp(req.ID, map[string]any{
+			"resources": []map[string]any{
+				{
+					"uri":         "ui://dotfilesd/sudo-prompt",
+					"name":        "Sudo Password Prompt",
+					"description": "Password input form for sudo command authentication. The form receives the command and request_id from the tool call result.",
+					"mimeType":    "text/html;profile=mcp-app",
+				},
+			},
+		})
+
+	case "resources/read":
+		var params struct {
+			URI string `json:"uri"`
+		}
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return mcpErr(req.ID, -32602, "invalid params")
+		}
+		if params.URI == "ui://dotfilesd/sudo-prompt" {
+			htmlContent := generateSudoPromptHTML()
+			return mcpResp(req.ID, map[string]any{
+				"contents": []map[string]any{
+					{
+						"uri":      params.URI,
+						"mimeType": "text/html;profile=mcp-app",
+						"text":     htmlContent,
+					},
+				},
+			})
+		}
+		return mcpErr(req.ID, -32602, fmt.Sprintf("unknown resource: %s", params.URI))
 
 	default:
 		return mcpErr(req.ID, -32601, fmt.Sprintf("unknown method: %s", req.Method))
@@ -371,10 +495,35 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		}
 		json.Unmarshal(args, &p)
 
-		// Both sudo and non-sudo paths use Exec RPC.
-		// For sudo, the daemon will use the session callback URL to
-		// prompt for the password securely via the feedback server,
-		// never exposing it to the agent.
+		// When sudo=true and the client supports MCP Apps, use the
+		// two-phase flow: return immediately with a pending request_id,
+		// the host renders a password form webview, and the user submits
+		// their password through that view.
+		if p.Sudo && clientCaps.hasMcpApps {
+			requestID := generateRequestID()
+			pending := &pendingSudoRequest{
+				command:   p.Command,
+				createdAt: time.Now(),
+			}
+			pendingRequests.Store(requestID, pending)
+			slog.Debug("created pending sudo request via exec_run", "request_id", requestID, "command", p.Command)
+
+			return mcpResp(id, map[string]any{
+				"content": []map[string]any{{
+					"type": "text",
+					"text": fmt.Sprintf("🔑 Sudo password required for command: `%s`.\n\nA password form has been opened in the chat UI — enter your sudo password there to authenticate.", p.Command),
+				}},
+				"structuredContent": map[string]any{
+					"requestId": requestID,
+					"command":   p.Command,
+					"status":    "awaiting_password",
+				},
+			})
+		}
+
+		// Non-sudo or no MCP Apps: use normal Exec RPC.
+		// For sudo without MCP Apps, the daemon will use the session
+		// callback URL to prompt for the password via elicitation feedback.
 		req := connect.NewRequest(&dotfilesdv1.ExecRequest{
 			Command: p.Command,
 			Sudo:    p.Sudo,
@@ -542,9 +691,279 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		}
 		return mcpToolResult(id, strings.Join(lines, "\n"))
 
+	case "_sudo_submit_password":
+		var p struct {
+			RequestID string `json:"request_id"`
+			Password  string `json:"password"`
+		}
+		json.Unmarshal(args, &p)
+		if p.RequestID == "" || p.Password == "" {
+			return mcpErr(id, -32602, "request_id and password are required")
+		}
+
+		val, ok := pendingRequests.Load(p.RequestID)
+		if !ok {
+			return mcpErr(id, -32602, "invalid or expired request_id")
+		}
+		pending := val.(*pendingSudoRequest)
+		pendingRequests.Delete(p.RequestID)
+
+		// Execute sudo via daemon's SudoExec RPC with the password.
+		resp, err := clients.Exec.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
+			Command:  pending.command,
+			Password: p.Password,
+		}))
+		if err != nil {
+			return mcpErr(id, -32603, fmt.Sprintf("sudo exec failed: %v", err))
+		}
+
+		result := resp.Msg.GetResult()
+		if result == nil {
+			return mcpErr(id, -32603, "unexpected response from daemon")
+		}
+
+		text := result.Stdout
+		if result.Stderr != "" {
+			text += "\nstderr:\n" + result.Stderr
+		}
+
+		return mcpResp(id, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": text}},
+			"isError": result.ExitCode != 0,
+		})
+
 	default:
 		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
 	}
+}
+
+func generateRequestID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func generateSudoPromptHTML() string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1e1f1c; color: #f8f8f2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; font-size: 14px; }
+  .header { color: #a6e22e; font-weight: 600; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .command { background: #272822; border: 1px solid #3e3d32; border-radius: 6px; padding: 10px; margin: 12px 0; font-family: 'SF Mono', 'Fira Code', monospace; color: #f8f8f2; word-break: break-all; font-size: 13px; }
+  label { display: block; margin-bottom: 4px; color: #f8f8f2; font-size: 13px; }
+  input[type="password"] { width: 100%; background: #272822; border: 1px solid #75715e; border-radius: 6px; padding: 10px 12px; color: #f8f8f2; font-size: 14px; font-family: inherit; outline: none; }
+  input[type="password"]:focus { border-color: #a6e22e; }
+  button { margin-top: 12px; background: #a6e22e; color: #272822; border: none; border-radius: 6px; padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #b6f23e; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { margin-top: 10px; color: #75715e; font-size: 12px; }
+  .hidden { display: none; }
+  .success { color: #a6e22e; }
+  .error { color: #f92672; }
+  #result { margin-top: 12px; white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+</style>
+</head>
+<body>
+  <div id="loading">
+    <div class="header">Sudo Password Required</div>
+    <div class="status">Waiting for command...</div>
+  </div>
+
+  <div id="form" class="hidden">
+    <div class="header">Sudo Password Required</div>
+    <div class="command" id="commandDisplay">$ </div>
+    <label for="password">Password:</label>
+    <input type="password" id="password" placeholder="Enter sudo password" autofocus>
+    <button id="submitBtn">Authenticate</button>
+    <div class="status" id="status">Enter your password to authorize this command.</div>
+  </div>
+
+  <div id="result" class="hidden"></div>
+
+<script>
+(function() {
+  let requestId = null;
+  let pendingCommand = '';
+  const loading = document.getElementById('loading');
+  const form = document.getElementById('form');
+  const result = document.getElementById('result');
+  const cmdDisplay = document.getElementById('commandDisplay');
+  const passwordInput = document.getElementById('password');
+  const submitBtn = document.getElementById('submitBtn');
+  const statusEl = document.getElementById('status');
+  let initSent = false;
+
+  // MCP Apps: send ui/initialize when the page loads
+  function sendInitialize() {
+    if (initSent) return;
+    initSent = true;
+    window.parent.postMessage({
+      jsonrpc: '2.0',
+      id: 'init-1',
+      method: 'ui/initialize',
+      params: {
+        appCapabilities: {},
+        appInfo: { name: 'dotfilesd-sudo-prompt', version: '0.1.0' },
+        protocolVersion: '2024-11-05'
+      }
+    }, '*');
+  }
+
+  // Call a tool via MCP JSON-RPC over postMessage
+  let toolCallId = 100;
+  function callTool(name, args) {
+    const id = toolCallId++;
+    window.parent.postMessage({
+      jsonrpc: '2.0',
+      id: id,
+      method: 'tools/call',
+      params: { name: name, arguments: args }
+    }, '*');
+    return id;
+  }
+
+  // Handle messages from the host
+  window.addEventListener('message', function(event) {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    // Handle ui/initialize result
+    if (data.id === 'init-1' && data.result) {
+      // Initialized! Ready to receive notifications
+      loading.classList.add('hidden');
+      form.classList.remove('hidden');
+      statusEl.textContent = 'Waiting for command...';
+      return;
+    }
+
+    // Handle ui/notifications/tool-input (contains the command arguments)
+    if (data.method === 'ui/notifications/tool-input') {
+      const args = data.params.arguments || {};
+      pendingCommand = args.command || '';
+      cmdDisplay.textContent = '$ ' + pendingCommand;
+      return;
+    }
+
+  // Handle ui/notifications/tool-result (contains structuredContent with requestId)
+    if (data.method === 'ui/notifications/tool-result') {
+      const params = data.params || {};
+      const sc = params.structuredContent || {};
+      const meta = params._meta || {};
+
+      // Prefer structuredContent (MCP Apps standard), fallback to _meta
+      if (sc.status === 'awaiting_password' && sc.requestId) {
+        requestId = sc.requestId;
+        pendingCommand = sc.command || '';
+        showForm();
+      } else if (meta.waitingforsudo && meta.sudorequestid) {
+        requestId = meta.sudorequestid;
+        showForm();
+      } else {
+        // Normal tool result (non-sudo) – just display it
+        const text = (params.content || [])
+          .map(function(c) { return c.text || ''; })
+          .filter(Boolean)
+          .join('\n');
+        loading.classList.add('hidden');
+        form.classList.add('hidden');
+        result.classList.remove('hidden');
+        result.textContent = text || '[empty result]';
+      }
+      return;
+    }
+
+    function showForm() {
+      cmdDisplay.textContent = '$ ' + pendingCommand;
+      loading.classList.add('hidden');
+      form.classList.remove('hidden');
+      result.classList.add('hidden');
+      statusEl.textContent = 'Enter your password to authorize this command.';
+      passwordInput.disabled = false;
+      passwordInput.focus();
+    }
+
+    // Handle response to _sudo_submit_password call
+    if (typeof data.id === 'number' && data.id >= 100) {
+      if (data.result) {
+        // Get the command output from the result
+        const output = (data.result.content || [])
+          .map(function(c) { return c.text || ''; })
+          .filter(Boolean)
+          .join('\n');
+        statusEl.textContent = '✅ Password accepted, command executed.';
+        result.textContent = output || '(no output)';
+        result.classList.remove('hidden');
+
+        // Send the result back to the agent via ui/message
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id: 'msg-' + Date.now(),
+          method: 'ui/message',
+          params: {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: 'Sudo command executed:\n\n' + (output || '(no output)')
+            }
+          }
+        }, '*');
+      } else if (data.error) {
+        var errMsg = data.error.message || 'unknown error';
+        statusEl.textContent = '❌ Error: ' + errMsg;
+        result.textContent = 'Error: ' + errMsg;
+        result.classList.remove('hidden');
+
+        // Send error via ui/message
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id: 'msg-' + Date.now(),
+          method: 'ui/message',
+          params: {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: 'Sudo command failed: ' + errMsg
+            }
+          }
+        }, '*');
+      }
+      return;
+    }
+  });
+
+  // Submit button handler
+  submitBtn.addEventListener('click', function() {
+    const pwd = passwordInput.value;
+    if (!pwd || !requestId) return;
+
+    submitBtn.disabled = true;
+    passwordInput.disabled = true;
+    statusEl.textContent = 'Authenticating...';
+
+    // Call _sudo_submit_password via MCP tools/call
+    callTool('_sudo_submit_password', {
+      request_id: requestId,
+      password: pwd
+    });
+
+    passwordInput.value = '';
+  });
+
+  // Allow Enter to submit
+  passwordInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitBtn.click();
+  });
+
+  // Send initialize after a short delay to ensure DOM is ready
+  setTimeout(sendInitialize, 100);
+})();
+</script>
+</body>
+</html>`
 }
 
 func mcpToolResult(id json.RawMessage, text string) *mcpResponse {
