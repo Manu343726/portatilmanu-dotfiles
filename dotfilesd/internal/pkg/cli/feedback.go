@@ -7,13 +7,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
-	"golang.org/x/term"
 )
 
 type FeedbackServer struct {
@@ -91,34 +89,20 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 	slog.Debug("input requested", "prompt", req.Msg.Prompt, "default", req.Msg.Default)
 
 	if mcpBridge != nil {
-		if req.Msg.Sensitive {
-			// Read sensitive input (e.g. sudo password) directly from
-			// the user's terminal via /dev/tty, bypassing the MCP transport
-			// so the agent never sees the value.
-			f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal,
-					fmt.Errorf("open /dev/tty: %w", err))
-			}
-			defer f.Close()
-
-			fmt.Fprint(f, req.Msg.Prompt, " ")
-			raw, err := term.ReadPassword(int(f.Fd()))
-			fmt.Fprintln(f)
-			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal,
-					fmt.Errorf("read password from /dev/tty: %w", err))
-			}
-			val := string(raw)
-			zeroBytes(raw)
-			if val == "" {
-				val = req.Msg.Default
-			}
-			return connect.NewResponse(&dotfilesdv1.InputResponse{Value: val}), nil
-		}
 		if !clientCaps.hasElicitation {
 			return nil, connect.NewError(connect.CodeUnavailable,
 				fmt.Errorf("MCP client does not support elicitation"))
+		}
+
+		inputSchema := map[string]any{
+			"type":        "string",
+			"description": req.Msg.Prompt,
+			"default":     req.Msg.Default,
+		}
+		if req.Msg.Sensitive {
+			// Hint to the client to render a masked password field.
+			inputSchema["format"] = "password"
+			inputSchema["writeOnly"] = true
 		}
 
 		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
@@ -127,11 +111,7 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 			"requestedSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"input": map[string]any{
-						"type":        "string",
-						"description": req.Msg.Prompt,
-						"default":     req.Msg.Default,
-					},
+					"input": inputSchema,
 				},
 				"required": []string{"input"},
 			},

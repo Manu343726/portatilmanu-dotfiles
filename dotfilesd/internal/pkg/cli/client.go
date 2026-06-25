@@ -89,9 +89,10 @@ func (c *Clients) Connect(ctx context.Context) error {
 			resp, err := c.Session.GetSession(ctx, req)
 			stale := err != nil || resp.Msg.GetSession().GetId() != c.SessionID
 			if stale {
-				slog.Debug("session stale, reconnecting", "session_id", c.SessionID)
+				slog.Debug("session stale, clearing for reconnect", "session_id", c.SessionID)
 				c.mu.Lock()
 				c.connected = false
+				c.SessionID = "" // clear so Connect creates a fresh one
 				if c.Feedback != nil {
 					c.Feedback.Close()
 					c.Feedback = nil

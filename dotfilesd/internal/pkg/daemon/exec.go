@@ -26,16 +26,17 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	if req.Msg.Sudo {
 		vars := session.Variables()
 
-		// Terminal capability: the client has interactive terminal access
-		// via /dev/tty. Use the secure feedback callback to prompt for the
-		// password — the agent never sees it.
-		if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
-			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
-		}
-
-		// Graphical capability: use pkexec for a desktop password dialog.
+		// Prefer graphical auth (pkexec) when available — it shows a
+		// desktop password dialog that doesn't interfere with the MCP
+		// client's terminal UI.
 		if vars["_cap_graphical"] == "true" && hasPkexec() {
 			return s.ExecRaw(ctx, req.Msg.Command, true)
+		}
+
+		// Terminal capability: use the secure feedback callback to prompt
+		// for the password via the MCP transport — the agent never sees it.
+		if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
+			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
 		}
 
 		// No viable auth method — return a clear error.
@@ -192,8 +193,16 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	// No password provided — try available methods based on session capabilities.
 	vars := session.Variables()
 
-	// If the session has terminal capability and a callback URL, use the
-	// secure feedback path so the agent never sees the password.
+	// Prefer graphical auth (pkexec) when available — clean desktop dialog.
+	if vars["_cap_graphical"] == "true" && hasPkexec() {
+		return s.SudoExec(ctx, connect.NewRequest(&dotfilesdv1.SudoExecRequest{
+			Command:         r.Command,
+			Session:         req.Msg.Session,
+			PreferredMethod: dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL,
+		}))
+	}
+
+	// Terminal capability: use the secure feedback callback.
 	if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
 		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path")
 		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
