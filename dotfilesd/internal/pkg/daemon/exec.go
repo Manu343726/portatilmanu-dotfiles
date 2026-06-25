@@ -26,15 +26,19 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	if req.Msg.Sudo {
 		vars := session.Variables()
 
-		// Prefer graphical auth (pkexec) when available — it shows a
-		// desktop password dialog that doesn't interfere with the MCP
-		// client's terminal UI.
+		// 1. Elicitation — password prompt inside the MCP client's own UI
+		//    (e.g. opencode form). The agent never sees the value.
+		if vars["_cap_elicitation"] == "true" && session.HasCallbackURL() {
+			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
+		}
+
+		// 2. Graphical auth (pkexec) — desktop password dialog, no
+		//    terminal UI interference.
 		if vars["_cap_graphical"] == "true" && hasPkexec() {
 			return s.ExecRaw(ctx, req.Msg.Command, true)
 		}
 
-		// Terminal capability: use the secure feedback callback to prompt
-		// for the password via the MCP transport — the agent never sees it.
+		// 3. Terminal callback — fallback for headless terminal sessions.
 		if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
 			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
 		}
@@ -193,7 +197,23 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	// No password provided — try available methods based on session capabilities.
 	vars := session.Variables()
 
-	// Prefer graphical auth (pkexec) when available — clean desktop dialog.
+	// 1. Elicitation — MCP client UI prompt.
+	if vars["_cap_elicitation"] == "true" && session.HasCallbackURL() {
+		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (elicitation)")
+		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+			Result: &dotfilesdv1.SudoResult{
+				ExitCode: execResp.Msg.ExitCode,
+				Stdout:   execResp.Msg.Stdout,
+				Stderr:   execResp.Msg.Stderr,
+			},
+		}}), nil
+	}
+
+	// 2. Graphical auth (pkexec).
 	if vars["_cap_graphical"] == "true" && hasPkexec() {
 		return s.SudoExec(ctx, connect.NewRequest(&dotfilesdv1.SudoExecRequest{
 			Command:         r.Command,
@@ -202,9 +222,9 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		}))
 	}
 
-	// Terminal capability: use the secure feedback callback.
+	// 3. Terminal callback fallback.
 	if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
-		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path")
+		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (terminal)")
 		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
 		if err != nil {
 			return nil, err

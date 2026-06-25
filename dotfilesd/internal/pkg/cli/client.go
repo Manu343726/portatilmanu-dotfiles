@@ -24,6 +24,12 @@ import (
 func detectCapabilities() map[string]string {
 	caps := make(map[string]string)
 
+	// Elicitation capability: the MCP client supports elicitation/create
+	// for prompting the user within the client's own UI.
+	if clientCaps.hasElicitation {
+		caps["_cap_elicitation"] = "true"
+	}
+
 	// Terminal capability: can we interact with the user via /dev/tty?
 	if f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
 		f.Close()
