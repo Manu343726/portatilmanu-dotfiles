@@ -144,7 +144,12 @@ var mcpTools = []toolDef{
 
 var stdoutMu sync.Mutex
 
-var clientCaps struct{}
+// clientCaps tracks which MCP protocol capabilities the connected client declared
+// during initialization. Used to determine whether standard features like
+// elicitation are available.
+var clientCaps struct {
+	hasElicitation bool
+}
 
 func writeJSONLine(w io.Writer, v any) {
 	data, _ := json.Marshal(v)
@@ -227,6 +232,18 @@ func RunMCP(clients *Clients) {
 func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 	switch req.Method {
 	case "initialize":
+		// Capture client capabilities from the initialize request.
+		var initParams struct {
+			Capabilities *struct {
+				Elicitation json.RawMessage `json:"elicitation"`
+			} `json:"capabilities"`
+		}
+		if err := json.Unmarshal(req.Params, &initParams); err == nil {
+			clientCaps.hasElicitation = initParams.Capabilities != nil && initParams.Capabilities.Elicitation != nil
+			if clientCaps.hasElicitation {
+				slog.Debug("client supports elicitation")
+			}
+		}
 		return mcpResp(req.ID, map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities": map[string]any{
