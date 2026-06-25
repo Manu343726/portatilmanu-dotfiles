@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 

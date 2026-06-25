@@ -140,5 +140,3 @@ var _ = Describe("MockShell exec flow", func() {
 		})
 	})
 })
-
-

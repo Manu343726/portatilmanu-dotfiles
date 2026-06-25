@@ -84,8 +84,8 @@ var _ = Describe("buildShellEnv", func() {
 
 	It("appends session variables on top", func() {
 		env := buildShellEnv("ses_test", map[string]string{
-			"MY_VAR":   "my_value",
-			"ANOTHER":  "123",
+			"MY_VAR":  "my_value",
+			"ANOTHER": "123",
 		}, &dotfilesdv1.Shell{
 			Env: map[string]string{
 				"PATH": "/usr/bin",

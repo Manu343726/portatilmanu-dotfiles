@@ -15,10 +15,10 @@ import (
 
 var _ = Describe("configServer", func() {
 	var (
-		sessions   *SessionStore
-		server     *configServer
-		mux        *http.ServeMux
-		handler    http.Handler
+		sessions     *SessionStore
+		server       *configServer
+		mux          *http.ServeMux
+		handler      http.Handler
 		savedRestart func(time.Duration)
 	)
 

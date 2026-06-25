@@ -155,7 +155,7 @@ func mustNewMockShell(cfg MockShellConfig) *MockShell {
 // E2E integration: full session flow with MockShell
 var _ = Describe("MockShell Integration", func() {
 	var (
-		shell *MockShell
+		shell  *MockShell
 		tmpDir string
 	)
 
