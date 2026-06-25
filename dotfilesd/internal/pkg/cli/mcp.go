@@ -97,8 +97,7 @@ var mcpTools = []toolDef{
 		Description: "Execute a shell command",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
 			"command":    {Type: "string"},
-			"sudo":       {Type: "boolean"},
-			"password":   {Type: "string", Description: "sudo password (omit to try passwordless first)"},
+			"sudo":       {Type: "boolean", Description: "run with sudo (prompts for password securely via feedback)"},
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"command"}},
 	},
@@ -367,57 +366,18 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 
 	case "exec_run":
 		var p struct {
-			Command  string `json:"command"`
-			Sudo     bool   `json:"sudo"`
-			Password string `json:"password"`
+			Command string `json:"command"`
+			Sudo    bool   `json:"sudo"`
 		}
 		json.Unmarshal(args, &p)
 
-		if p.Sudo {
-			sudoReq := connect.NewRequest(&dotfilesdv1.SudoExecRequest{
-				Command: p.Command,
-				Session: sessionFromArgs(args, clients.SessionID),
-			})
-			if p.Password != "" {
-				sudoReq.Msg.Password = p.Password
-			} else {
-				sudoReq.Msg.PreferredMethod = dotfilesdv1.SudoMethod_SUDO_METHOD_NOPASS
-			}
-			resp, err := clients.Exec.SudoExec(context.Background(), sudoReq)
-			if err != nil {
-				return mcpErr(id, -32603, err.Error())
-			}
-
-			switch outcome := resp.Msg.Outcome.(type) {
-			case *dotfilesdv1.SudoExecResponse_AuthChallenge:
-				ch := outcome.AuthChallenge
-				text := fmt.Sprintf("sudo requires authentication\nprompt: %s\navailable methods: %s\n\nTo retry, call exec_run with the sudo password set.",
-					ch.Prompt, strings.Join(ch.Methods, ", "))
-				return mcpResp(id, map[string]any{
-					"content": []map[string]any{{"type": "text", "text": text}},
-					"isError": true,
-				})
-
-			case *dotfilesdv1.SudoExecResponse_Result:
-				r := outcome.Result
-				text := r.Stdout
-				if r.Stderr != "" {
-					text += "\nstderr:\n" + r.Stderr
-				}
-				if r.AuthCancelled {
-					text = "sudo authentication cancelled"
-				}
-				return mcpResp(id, map[string]any{
-					"content": []map[string]any{{"type": "text", "text": text}},
-					"isError": r.ExitCode != 0,
-				})
-			}
-		}
-
-		// Non-sudo path: use Exec RPC directly.
+		// Both sudo and non-sudo paths use Exec RPC.
+		// For sudo, the daemon will use the session callback URL to
+		// prompt for the password securely via the feedback server,
+		// never exposing it to the agent.
 		req := connect.NewRequest(&dotfilesdv1.ExecRequest{
 			Command: p.Command,
-			Sudo:    false,
+			Sudo:    p.Sudo,
 			Session: sessionFromArgs(args, clients.SessionID),
 		})
 		resp, err := clients.Exec.Exec(context.Background(), req)

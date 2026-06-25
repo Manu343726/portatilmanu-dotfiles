@@ -17,6 +17,27 @@ import (
 	"golang.org/x/term"
 )
 
+// detectCapabilities returns a set of capability flags describing what
+// interactive authentication methods the client environment supports.
+// These are sent to the daemon as session variables so it can choose the
+// right sudo strategy (terminal prompt vs graphical pkexec vs error).
+func detectCapabilities() map[string]string {
+	caps := make(map[string]string)
+
+	// Terminal capability: can we interact with the user via /dev/tty?
+	if f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		f.Close()
+		caps["_cap_terminal"] = "true"
+	}
+
+	// Graphical capability: is a desktop session available?
+	if os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "" {
+		caps["_cap_graphical"] = "true"
+	}
+
+	return caps
+}
+
 type Clients struct {
 	Sys       dotfilesdv1connect.SystemServiceClient
 	Dot       dotfilesdv1connect.DotfilesServiceClient
@@ -43,6 +64,47 @@ func NewClients(port string) *Clients {
 }
 
 func (c *Clients) Connect(ctx context.Context) error {
+	c.mu.Lock()
+	already := c.connected
+	c.mu.Unlock()
+
+	if already {
+		// Health check: verify the daemon is reachable AND our session is
+		// still valid (survived a restart).
+		if _, err := c.Sys.Ping(ctx, connect.NewRequest(&dotfilesdv1.PingRequest{})); err != nil {
+			slog.Debug("daemon unreachable, reconnecting", "error", err)
+			c.mu.Lock()
+			c.connected = false
+			if c.Feedback != nil {
+				c.Feedback.Close()
+				c.Feedback = nil
+			}
+			c.mu.Unlock()
+		} else if c.SessionID != "" {
+			// Daemon is up — check if our session still exists
+			// (GetSession returns empty session if not found, no error).
+			req := connect.NewRequest(&dotfilesdv1.GetSessionRequest{
+				Session: &dotfilesdv1.Session{Id: c.SessionID},
+			})
+			resp, err := c.Session.GetSession(ctx, req)
+			stale := err != nil || resp.Msg.GetSession().GetId() != c.SessionID
+			if stale {
+				slog.Debug("session stale, reconnecting", "session_id", c.SessionID)
+				c.mu.Lock()
+				c.connected = false
+				if c.Feedback != nil {
+					c.Feedback.Close()
+					c.Feedback = nil
+				}
+				c.mu.Unlock()
+			} else {
+				return nil
+			}
+		} else {
+			return nil
+		}
+	}
+
 	c.mu.Lock()
 	if c.connected {
 		c.mu.Unlock()
@@ -149,9 +211,18 @@ func (c *Clients) Connect(ctx context.Context) error {
 	})
 	c.Feedback = fb
 
+	// Detect client capabilities and pass them as session variables so the
+	// daemon can choose the best sudo authentication strategy.
+	session := &dotfilesdv1.Session{Id: c.SessionID}
+	caps := detectCapabilities()
+	if len(caps) > 0 {
+		session.Variables = caps
+		slog.Debug("client capabilities", "caps", caps)
+	}
+
 	req := connect.NewRequest(&dotfilesdv1.ConnectRequest{
 		CallbackUrl: fb.URL(),
-		Session:     &dotfilesdv1.Session{Id: c.SessionID},
+		Session:     session,
 	})
 
 	resp, err := c.Session.Connect(ctx, req)

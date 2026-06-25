@@ -24,10 +24,26 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	session := s.sessions.ResolveSession(req.Msg.GetSession())
 
 	if req.Msg.Sudo {
-		if session.HasCallbackURL() {
+		vars := session.Variables()
+
+		// Terminal capability: the client has interactive terminal access
+		// via /dev/tty. Use the secure feedback callback to prompt for the
+		// password — the agent never sees it.
+		if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
 			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
 		}
-		return s.ExecRaw(ctx, req.Msg.Command, true)
+
+		// Graphical capability: use pkexec for a desktop password dialog.
+		if vars["_cap_graphical"] == "true" && hasPkexec() {
+			return s.ExecRaw(ctx, req.Msg.Command, true)
+		}
+
+		// No viable auth method — return a clear error.
+		slog.Warn("Exec sudo requested but no auth method available", "caps", vars)
+		return connect.NewResponse(&dotfilesdv1.ExecResponse{
+			ExitCode: -1,
+			Stderr:   "sudo requires authentication but no interactive method is available (no terminal or desktop detected)",
+		}), nil
 	}
 
 	if session.id == "" {
@@ -135,7 +151,7 @@ func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*c
 
 func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
 	r := req.Msg
-	s.sessions.ResolveSession(req.Msg.GetSession())
+	session := s.sessions.ResolveSession(req.Msg.GetSession())
 	password := r.Password
 	method := r.PreferredMethod
 
@@ -171,6 +187,26 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		}})
 		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", exitCode)
 		return resp, nil
+	}
+
+	// No password provided — try available methods based on session capabilities.
+	vars := session.Variables()
+
+	// If the session has terminal capability and a callback URL, use the
+	// secure feedback path so the agent never sees the password.
+	if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
+		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path")
+		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+			Result: &dotfilesdv1.SudoResult{
+				ExitCode: execResp.Msg.ExitCode,
+				Stdout:   execResp.Msg.Stdout,
+				Stderr:   execResp.Msg.Stderr,
+			},
+		}}), nil
 	}
 
 	switch method {

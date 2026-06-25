@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
+	"golang.org/x/term"
 )
 
 type FeedbackServer struct {
@@ -90,8 +92,29 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 
 	if mcpBridge != nil {
 		if req.Msg.Sensitive {
-			return nil, connect.NewError(connect.CodeUnimplemented,
-				fmt.Errorf("sensitive input not available via MCP elicitation form mode; use exec_run with password field instead"))
+			// Read sensitive input (e.g. sudo password) directly from
+			// the user's terminal via /dev/tty, bypassing the MCP transport
+			// so the agent never sees the value.
+			f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInternal,
+					fmt.Errorf("open /dev/tty: %w", err))
+			}
+			defer f.Close()
+
+			fmt.Fprint(f, req.Msg.Prompt, " ")
+			raw, err := term.ReadPassword(int(f.Fd()))
+			fmt.Fprintln(f)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInternal,
+					fmt.Errorf("read password from /dev/tty: %w", err))
+			}
+			val := string(raw)
+			zeroBytes(raw)
+			if val == "" {
+				val = req.Msg.Default
+			}
+			return connect.NewResponse(&dotfilesdv1.InputResponse{Value: val}), nil
 		}
 		if !clientCaps.hasElicitation {
 			return nil, connect.NewError(connect.CodeUnavailable,

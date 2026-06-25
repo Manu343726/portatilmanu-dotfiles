@@ -118,8 +118,11 @@ func buildShellEnv(sessionID string, variables map[string]string, shellInfo *dot
 		}
 	}
 
-	// Add session variables on top.
+	// Add session variables on top (skipping internal/private ones prefixed with _).
 	for k, v := range variables {
+		if strings.HasPrefix(k, "_") {
+			continue
+		}
 		cmdEnv = append(cmdEnv, fmt.Sprintf("%s=%s", k, v))
 	}
 
