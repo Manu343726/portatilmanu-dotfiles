@@ -89,11 +89,6 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 	slog.Debug("input requested", "prompt", req.Msg.Prompt, "default", req.Msg.Default)
 
 	if mcpBridge != nil {
-		if !clientCaps.hasElicitation {
-			return nil, connect.NewError(connect.CodeUnavailable,
-				fmt.Errorf("MCP client does not support elicitation"))
-		}
-
 		inputSchema := map[string]any{
 			"type":        "string",
 			"description": req.Msg.Prompt,
@@ -203,11 +198,6 @@ func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Reques
 	slog.Debug("confirm requested", "message", req.Msg.Message, "default", req.Msg.DefaultConfirm)
 
 	if mcpBridge != nil {
-		if !clientCaps.hasElicitation {
-			return nil, connect.NewError(connect.CodeUnavailable,
-				fmt.Errorf("MCP client does not support elicitation"))
-		}
-
 		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
 			"message": req.Msg.Message,
 			"mode":    "form",
@@ -305,11 +295,6 @@ func (h *chooseHandler) RequestChoose(ctx context.Context, req *connect.Request[
 	slog.Debug("choose requested", "prompt", req.Msg.Prompt, "options", req.Msg.Options, "default", req.Msg.DefaultIndex)
 
 	if mcpBridge != nil {
-		if !clientCaps.hasElicitation {
-			return nil, connect.NewError(connect.CodeUnavailable,
-				fmt.Errorf("MCP client does not support elicitation"))
-		}
-
 		// Build enum items with titles for richer display.
 		oneOf := make([]map[string]any, len(req.Msg.Options))
 		for i, opt := range req.Msg.Options {

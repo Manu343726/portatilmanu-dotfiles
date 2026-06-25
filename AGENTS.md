@@ -26,3 +26,5 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
    - Use `exec_run` with `sudo: true` for privileged commands — the daemon asks the user for the password securely via the feedback system.
    - After modifying daemon/client code, run `make install` and restart the daemon if needed.
    - See `~/dotfilesd/docs/` for full daemon documentation.
+
+9. **After a sudo session times out, the user will be prompted for their password again the next time `exec_run(sudo=true)` is called.** This is expected behavior — the agent does NOT need to call `sudo -k` or any reset command. The daemon re-requests auth via elicitation (or pkexec/terminal) each time sudo is needed and `sudo -S` fails. If `pkexec` is used instead of elicitation, `pkexec` caches credentials in its own session (15-minute PAM timestamp), so repeated sudo calls within that window won't prompt again. The agent should just silently retry the same `exec_run(sudo=true)` call — the user will be prompted through the appropriate feedback channel (MCP elicitation form, pkexec dialog, or terminal).
