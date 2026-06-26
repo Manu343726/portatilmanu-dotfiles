@@ -19,7 +19,9 @@ service SystemService {
   // plugin descriptors at leaf nodes.
   rpc ListPluginTree(ListPluginTreeRequest) returns (ListPluginTreeResponse);
   // CallPluginTool invokes a tool on a loaded plugin.
-  rpc CallPluginTool(CallPluginToolRequest) returns (CallPluginToolResponse);
+  // Returns a stream of output chunks (stdout/stderr) followed by a
+  // final done message indicating completion or error.
+  rpc CallPluginTool(CallPluginToolRequest) returns (stream CallPluginToolResponse);
 }
 
 message ListPluginsRequest {
@@ -36,9 +38,14 @@ message CallPluginToolRequest {
   map<string, string> arguments = 3;
 }
 message CallPluginToolResponse {
-  string text = 1;
-  bool is_error = 2;
-  string structured_data = 3;
+  // A chunk of stdout output from the tool.
+  bytes stdout_chunk = 1;
+  // A chunk of stderr output from the tool.
+  bytes stderr_chunk = 2;
+  // If true, this is the final message — the tool has finished.
+  bool done = 3;
+  // If done is true, the tool's error message (empty means success).
+  string error_message = 4;
 }
 
 message PingRequest {

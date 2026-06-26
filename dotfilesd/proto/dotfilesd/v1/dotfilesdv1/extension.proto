@@ -13,8 +13,9 @@ service ExtensionService {
   rpc GetDescriptor(GetDescriptorRequest) returns (GetDescriptorResponse);
 
   // CallTool invokes a named tool on the plugin with the given arguments.
-  // The daemon proxies MCP tools/call and CLI commands to this RPC.
-  rpc CallTool(CallToolRequest) returns (CallToolResponse);
+  // Returns a stream of output chunks (stdout/stderr) followed by a
+  // final done message indicating completion or error.
+  rpc CallTool(CallToolRequest) returns (stream CallToolResponse);
 }
 
 message GetDescriptorRequest {}
@@ -118,12 +119,14 @@ message CallToolRequest {
 
 // CallToolResponse returns the result of a tool invocation.
 message CallToolResponse {
-  // Human-readable text output (stdout-style).
-  string text = 1;
-
-  // Whether the tool returned an error.
-  bool is_error = 2;
-
-  // Structured result data as JSON (optional, for rich clients).
-  string structured_data = 3;
+  // A chunk of stdout output from the tool.
+  bytes stdout_chunk = 1;
+  // A chunk of stderr output from the tool.
+  bytes stderr_chunk = 2;
+  // If true, this is the final message — the tool has finished. No more
+  // data chunks will follow. The error_message field indicates success
+  // (empty) or failure (non-empty).
+  bool done = 3;
+  // If done is true, the tool's error message (empty means success).
+  string error_message = 4;
 }

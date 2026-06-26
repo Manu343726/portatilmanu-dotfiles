@@ -20,6 +20,7 @@ func main() {
 	registerDynamicCommands(root, port)
 
 	if err := root.Execute(); err != nil {
+		os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)
 	}
 }

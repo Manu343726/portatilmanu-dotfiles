@@ -66,7 +66,8 @@ func RunListPlugins(clients *Clients, sessionID string, verbose bool) error {
 	return nil
 }
 
-// RunCallPluginTool invokes a tool on a plugin.
+// RunCallPluginTool invokes a tool on a plugin and streams the output
+// to stdout/stderr in real time.
 func RunCallPluginTool(clients *Clients, sessionID, pluginName, toolName string, args map[string]string) error {
 	slog.Debug("call plugin tool", "plugin", pluginName, "tool", toolName, "session_id", sessionID)
 	req := connect.NewRequest(&dotfilesdv1.CallPluginToolRequest{
@@ -75,21 +76,30 @@ func RunCallPluginTool(clients *Clients, sessionID, pluginName, toolName string,
 		ToolName:   toolName,
 		Arguments:  args,
 	})
-	resp, err := clients.Sys.CallPluginTool(context.Background(), req)
+	stream, err := clients.Sys.CallPluginTool(context.Background(), req)
 	if err != nil {
 		slog.Error("call plugin tool failed", "error", err)
 		fmt.Fprintf(os.Stderr, "error: call plugin tool: %v\n", err)
 		return fmt.Errorf("call plugin tool: %w", err)
 	}
 
-	if resp.Msg.IsError {
-		fmt.Fprintln(os.Stderr, resp.Msg.Text)
-		return fmt.Errorf(resp.Msg.Text)
+	for stream.Receive() {
+		chunk := stream.Msg()
+		if len(chunk.StdoutChunk) > 0 {
+			os.Stdout.Write(chunk.StdoutChunk)
+		}
+		if len(chunk.StderrChunk) > 0 {
+			os.Stderr.Write(chunk.StderrChunk)
+		}
+		if chunk.Done {
+			if chunk.ErrorMessage != "" {
+				return fmt.Errorf("%s", chunk.ErrorMessage)
+			}
+			return nil
+		}
 	}
-	fmt.Println(resp.Msg.Text)
-	if resp.Msg.StructuredData != "" {
-		fmt.Println("---")
-		fmt.Println(resp.Msg.StructuredData)
+	if err := stream.Err(); err != nil {
+		return fmt.Errorf("plugin tool stream: %w", err)
 	}
 	return nil
 }
@@ -144,13 +154,13 @@ func ListPluginTools(clients *Clients, sessionID string) ([]toolDef, error) {
 
 // CallPluginToolViaMCP dispatches an MCP tool call to a plugin tool.
 // The tool name is expected to be in the format "<plugin>_<tool>".
-// Returns (text, isError, structuredData, error).
-func CallPluginToolViaMCP(clients *Clients, sessionID, qualifiedName string, args map[string]string) (string, bool, string, error) {
+// Buffers all output and returns it as a string.
+func CallPluginToolViaMCP(clients *Clients, sessionID, qualifiedName string, args map[string]string) (string, error) {
 	// Parse plugin name and tool name from qualified name.
 	// Format: "<plugin>_<tool>"
 	parts := splitQualifiedName(qualifiedName)
 	if len(parts) < 2 {
-		return "", false, "", fmt.Errorf("invalid qualified tool name %q (expected <plugin>_<tool>)", qualifiedName)
+		return "", fmt.Errorf("invalid qualified tool name %q (expected <plugin>_<tool>)", qualifiedName)
 	}
 	pluginName := parts[0]
 	toolName := parts[1]
@@ -161,12 +171,34 @@ func CallPluginToolViaMCP(clients *Clients, sessionID, qualifiedName string, arg
 		ToolName:   toolName,
 		Arguments:  args,
 	})
-	resp, err := clients.Sys.CallPluginTool(context.Background(), req)
+	stream, err := clients.Sys.CallPluginTool(context.Background(), req)
 	if err != nil {
-		return "", false, "", err
+		return "", err
 	}
 
-	return resp.Msg.Text, resp.Msg.IsError, resp.Msg.StructuredData, nil
+	var buf strings.Builder
+	for stream.Receive() {
+		chunk := stream.Msg()
+		if len(chunk.StdoutChunk) > 0 {
+			buf.Write(chunk.StdoutChunk)
+		}
+		if len(chunk.StderrChunk) > 0 {
+			if buf.Len() > 0 {
+				buf.WriteString("\n")
+			}
+			buf.Write(chunk.StderrChunk)
+		}
+		if chunk.Done {
+			if chunk.ErrorMessage != "" {
+				return "", fmt.Errorf("%s", chunk.ErrorMessage)
+			}
+			return buf.String(), nil
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // splitQualifiedName splits "foo_bar_baz" into ["foo", "bar_baz"].

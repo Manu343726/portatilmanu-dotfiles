@@ -17,8 +17,9 @@
 //	                Required: []string{"name"},
 //	            },
 //	            plugin.CLIHints{CommandPath: "greet"},
-//	            func(ctx plugin.Context, args map[string]string) (string, bool, string) {
-//	                return "Hello, " + args["name"] + "!", false, ""
+//	            func(ctx plugin.Context, args map[string]string) error {
+//	                fmt.Fprintf(ctx.Stdout(), "Hello, %s!", args["name"])
+//	                return nil
 //	            },
 //	        ),
 //	    )
@@ -151,16 +152,51 @@ func (s *extensionSvcServer) GetDescriptor(
 func (s *extensionSvcServer) CallTool(
 	ctx context.Context,
 	req *connect.Request[dotfilesdv1.CallToolRequest],
-) (*connect.Response[dotfilesdv1.CallToolResponse], error) {
+	stream *connect.ServerStream[dotfilesdv1.CallToolResponse],
+) error {
 	for _, t := range s.tools {
 		if t.Name() == req.Msg.ToolName {
-			text, isErr, structured := t.Run(s.ctxClient, req.Msg.Arguments)
-			return connect.NewResponse(&dotfilesdv1.CallToolResponse{
-				Text:           text,
-				IsError:        isErr,
-				StructuredData: structured,
-			}), nil
+			// Create stdout/stderr writers that tunnel output via the RPC stream.
+			stdout := &streamWriter{stream: stream}
+			stderr := &streamWriter{stream: stream, isStderr: true}
+
+			// Wrap context with streaming writers so tool output is sent
+			// back to the caller in real time.
+			toolCtx := &streamingContext{
+				Context: s.ctxClient,
+				stdout:  stdout,
+				stderr:  stderr,
+			}
+
+			// Run the tool. It writes to ctx.Stdout()/Stderr() and may
+			// return an error.
+			err := t.Run(toolCtx, req.Msg.Arguments)
+			doneMsg := &dotfilesdv1.CallToolResponse{Done: true}
+			if err != nil {
+				doneMsg.ErrorMessage = err.Error()
+			}
+			return stream.Send(doneMsg)
 		}
 	}
-	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tool %q not found", req.Msg.ToolName))
+	return connect.NewError(connect.CodeNotFound, fmt.Errorf("tool %q not found", req.Msg.ToolName))
+}
+
+// streamWriter implements io.Writer by sending each Write call as a chunk
+// on the Connect server stream.
+type streamWriter struct {
+	stream   *connect.ServerStream[dotfilesdv1.CallToolResponse]
+	isStderr bool
+}
+
+func (w *streamWriter) Write(p []byte) (int, error) {
+	msg := &dotfilesdv1.CallToolResponse{}
+	if w.isStderr {
+		msg.StderrChunk = p
+	} else {
+		msg.StdoutChunk = p
+	}
+	if err := w.stream.Send(msg); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

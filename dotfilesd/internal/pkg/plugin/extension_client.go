@@ -82,21 +82,23 @@ func (c *Client) GetDescriptor(ctx context.Context) (*ExtensionDescriptor, error
 }
 
 // CallTool invokes a named tool on the plugin with the given arguments.
-func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]string) (text string, isError bool, structuredData string, err error) {
+// Returns a server stream that the caller can iterate over to receive
+// stdout/stderr chunks, followed by a final done message.
+func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]string) (*connect.ServerStreamForClient[dotfilesdv1.CallToolResponse], error) {
 	slog.Debug("client CallTool", "tool", toolName, "args", args)
 	req := connect.NewRequest(&dotfilesdv1.CallToolRequest{
 		ToolName:  toolName,
 		Arguments: args,
 	})
 
-	resp, err := c.client.CallTool(ctx, req)
+	stream, err := c.client.CallTool(ctx, req)
 	if err != nil {
 		slog.Debug("client CallTool failed", "tool", toolName, "error", err)
-		return "", false, "", fmt.Errorf("call tool %q: %w", toolName, err)
+		return nil, fmt.Errorf("call tool %q: %w", toolName, err)
 	}
 
-	slog.Debug("client CallTool succeeded", "tool", toolName, "is_error", resp.Msg.IsError, "text_len", len(resp.Msg.Text))
-	return resp.Msg.Text, resp.Msg.IsError, resp.Msg.StructuredData, nil
+	slog.Debug("client CallTool stream opened", "tool", toolName)
+	return stream, nil
 }
 
 // fromProtoDescriptor converts a proto ExtensionDescriptor to the internal Go type.

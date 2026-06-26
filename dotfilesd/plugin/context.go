@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -13,11 +14,25 @@ import (
 
 // Context provides a plugin tool with controlled access to the daemon's
 // capabilities: shell execution (with or without sudo), user input prompts,
-// confirmations, and choice selection.
+// confirmations, and choice selection. It also provides stdout and stderr
+// writers that tunnel output back to the caller in real time via RPC
+// streaming.
 //
 // This is the ONLY way a plugin tool should interact with the host system.
 // Plugins never call the daemon's core RPCs directly.
+//
+// Tools write their output to Stdout() and Stderr() writers (for human-
+// readable progress and results). The Run() method returns a Go error:
+// nil means success, non-nil means the tool failed.
 type Context interface {
+	// Stdout returns a writer that tunnels stdout output back to the
+	// CLI/MCP caller in real time via RPC streaming.
+	Stdout() io.Writer
+
+	// Stderr returns a writer that tunnels stderr output back to the
+	// CLI/MCP caller in real time via RPC streaming.
+	Stderr() io.Writer
+
 	// Exec runs a shell command without privilege escalation.
 	Exec(cmd string) (ExecResult, error)
 
@@ -158,3 +173,28 @@ func (c *contextClient) RequestChoose(prompt string, options []string, defaultIn
 
 	return int(resp.Msg.SelectedIndex), resp.Msg.SelectedOption, nil
 }
+
+// Stdout returns a no-op writer (no streaming outside a tool call context).
+// During tool execution, the plugin server wraps context with a
+// streamingContext that provides real stdout/stderr writers.
+func (c *contextClient) Stdout() io.Writer { return &nopWriter{} }
+
+// Stderr returns a no-op writer (no streaming outside a tool call context).
+func (c *contextClient) Stderr() io.Writer { return &nopWriter{} }
+
+// nopWriter is an io.Writer that discards all data.
+type nopWriter struct{}
+
+func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+// streamingContext wraps a Context with real stdout/stderr writers that
+// tunnel output via the RPC stream. Used by the plugin server during tool
+// execution.
+type streamingContext struct {
+	Context
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (c *streamingContext) Stdout() io.Writer { return c.stdout }
+func (c *streamingContext) Stderr() io.Writer { return c.stderr }

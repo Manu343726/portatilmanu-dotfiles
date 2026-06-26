@@ -14,6 +14,7 @@ import (
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
+	"connectrpc.com/connect"
 	"gopkg.in/yaml.v3"
 )
 
@@ -322,14 +323,15 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 	return nil
 }
 
-// CallTool invokes a tool on a loaded plugin.
-func (m *Manager) CallTool(ctx context.Context, pluginName, toolName string, args map[string]string) (string, bool, string, error) {
+// CallTool invokes a tool on a loaded plugin and returns a streaming
+// response that the caller can iterate over for stdout/stderr chunks.
+func (m *Manager) CallTool(ctx context.Context, pluginName, toolName string, args map[string]string) (*connect.ServerStreamForClient[dotfilesdv1.CallToolResponse], error) {
 	slog.Debug("manager CallTool", "plugin", pluginName, "tool", toolName, "args", args)
 	info, ok := m.registry.Get(pluginName)
 	if !ok {
-		return "", false, "", fmt.Errorf("plugin %q not loaded", pluginName)
+		return nil, fmt.Errorf("plugin %q not loaded", pluginName)
 	}
-	slog.Debug("found plugin in registry, forwarding call", "plugin", pluginName, "url", info.Process.URL)
+	slog.Debug("found plugin in registry, opening stream", "plugin", pluginName, "url", info.Process.URL)
 	return info.Client.CallTool(ctx, toolName, args)
 }
 

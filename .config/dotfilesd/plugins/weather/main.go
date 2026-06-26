@@ -6,7 +6,7 @@
 // This plugin showcases all major SDK features:
 //   - Tool definition with input schema
 //   - Shell command execution via Context.Exec()
-//   - Structured JSON output
+//   - Real-time streaming output via ctx.Stdout() / ctx.Stderr()
 //   - Error handling
 package main
 
@@ -45,10 +45,10 @@ func main() {
 }
 
 // forecastFn is the tool implementation for the "forecast" tool.
-func forecastFn(ctx plugin.Context, args map[string]string) (string, bool, string) {
+func forecastFn(ctx plugin.Context, args map[string]string) error {
 	location := args["location"]
 	if location == "" {
-		return "", true, "location is required"
+		return fmt.Errorf("location is required")
 	}
 
 	format := args["format"]
@@ -73,7 +73,7 @@ func forecastFn(ctx plugin.Context, args map[string]string) (string, bool, strin
 	// Fetch weather data via curl using the daemon's exec context.
 	result, err := ctx.Exec(fmt.Sprintf("curl -s --max-time 10 '%s'", url))
 	if err != nil {
-		return "", true, fmt.Sprintf("failed to fetch weather: %v", err)
+		return fmt.Errorf("failed to fetch weather: %w", err)
 	}
 
 	if result.ExitCode != 0 {
@@ -81,24 +81,24 @@ func forecastFn(ctx plugin.Context, args map[string]string) (string, bool, strin
 		if stderr == "" {
 			stderr = fmt.Sprintf("curl exited with code %d", result.ExitCode)
 		}
-		return "", true, fmt.Sprintf("failed to fetch weather: %s", stderr)
+		return fmt.Errorf("failed to fetch weather: %s", stderr)
 	}
 
 	output := strings.TrimSpace(result.Stdout)
 	if output == "" {
-		return "", true, "no weather data returned"
+		return fmt.Errorf("no weather data returned")
 	}
 
-	// For JSON format, return both the raw text and structured data.
+	// For JSON format, pretty-print and also write structured data.
 	if format == "json" {
-		// Pretty-print for the text output.
 		var data any
 		if err := json.Unmarshal([]byte(output), &data); err == nil {
 			pretty, _ := json.MarshalIndent(data, "", "  ")
-			return string(pretty), false, output
+			fmt.Fprintln(ctx.Stdout(), string(pretty))
+			return nil
 		}
-		return output, false, output
 	}
 
-	return output, false, ""
+	fmt.Fprintln(ctx.Stdout(), output)
+	return nil
 }

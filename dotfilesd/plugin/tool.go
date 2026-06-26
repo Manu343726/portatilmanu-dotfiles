@@ -6,6 +6,10 @@ package plugin
 // uses the metadata to auto-generate CLI commands and MCP tool definitions.
 // When a user or agent invokes a tool, the daemon calls CallTool with the
 // tool name and arguments.
+//
+// Tools write their output to ctx.Stdout() and ctx.Stderr() during Run()
+// (streamed back in real time via RPC). Run returns a Go error: nil for
+// success, non-nil for failure.
 type Tool interface {
 	// Name returns the tool name (e.g. "forecast"). Must be unique within
 	// the plugin.
@@ -25,11 +29,10 @@ type Tool interface {
 	// Arguments are a map of parameter names to their JSON-encoded string
 	// values. The tool is responsible for deserializing them as needed.
 	//
-	// Returns:
-	//   - text: human-readable text output (stdout-style)
-	//   - isError: whether the tool encountered an error
-	//   - structuredData: optional JSON string with structured result data
-	Run(ctx Context, args map[string]string) (text string, isError bool, structuredData string)
+	// Write output to ctx.Stdout() / ctx.Stderr() as the tool executes — it
+	// is streamed back to the caller in real time via RPC streaming.
+	// Return nil for success, or an error describing the failure.
+	Run(ctx Context, args map[string]string) error
 }
 
 // SimpleFuncTool is a Tool implementation backed by a simple function.
@@ -39,7 +42,7 @@ type SimpleFuncTool struct {
 	description string
 	input       ToolInputSchema
 	cli         CLIHints
-	fn          func(ctx Context, args map[string]string) (string, bool, string)
+	fn          func(ctx Context, args map[string]string) error
 }
 
 var _ Tool = (*SimpleFuncTool)(nil)
@@ -57,7 +60,7 @@ func (t *SimpleFuncTool) Input() ToolInputSchema { return t.input }
 func (t *SimpleFuncTool) CLI() CLIHints { return t.cli }
 
 // Run executes the tool function.
-func (t *SimpleFuncTool) Run(ctx Context, args map[string]string) (string, bool, string) {
+func (t *SimpleFuncTool) Run(ctx Context, args map[string]string) error {
 	return t.fn(ctx, args)
 }
 
@@ -73,15 +76,16 @@ func (t *SimpleFuncTool) Run(ctx Context, args map[string]string) (string, bool,
 //	        Required: []string{"name"},
 //	    },
 //	    plugin.CLIHints{CommandPath: "greet"},
-//	    func(ctx plugin.Context, args map[string]string) (string, bool, string) {
+//	    func(ctx plugin.Context, args map[string]string) error {
 //	        name := args["name"]
 //	        if name == "" {
 //	            name = "World"
 //	        }
-//	        return fmt.Sprintf("Hello, %s!", name), false, ""
+//	        fmt.Fprintf(ctx.Stdout(), "Hello, %s!", name)
+//	        return nil
 //	    },
 //	)
-func NewTool(name, description string, input ToolInputSchema, cli CLIHints, fn func(ctx Context, args map[string]string) (string, bool, string)) Tool {
+func NewTool(name, description string, input ToolInputSchema, cli CLIHints, fn func(ctx Context, args map[string]string) error) Tool {
 	return &SimpleFuncTool{
 		name:        name,
 		description: description,

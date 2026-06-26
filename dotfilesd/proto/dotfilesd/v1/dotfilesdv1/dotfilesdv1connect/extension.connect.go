@@ -48,8 +48,9 @@ type ExtensionServiceClient interface {
 	// daemon's plugin registry.
 	GetDescriptor(context.Context, *connect.Request[dotfilesdv1.GetDescriptorRequest]) (*connect.Response[dotfilesdv1.GetDescriptorResponse], error)
 	// CallTool invokes a named tool on the plugin with the given arguments.
-	// The daemon proxies MCP tools/call and CLI commands to this RPC.
-	CallTool(context.Context, *connect.Request[dotfilesdv1.CallToolRequest]) (*connect.Response[dotfilesdv1.CallToolResponse], error)
+	// Returns a stream of output chunks (stdout/stderr) followed by a
+	// final done message indicating completion or error.
+	CallTool(context.Context, *connect.Request[dotfilesdv1.CallToolRequest]) (*connect.ServerStreamForClient[dotfilesdv1.CallToolResponse], error)
 }
 
 // NewExtensionServiceClient constructs a client for the dotfilesd.v1.ExtensionService service. By
@@ -90,8 +91,8 @@ func (c *extensionServiceClient) GetDescriptor(ctx context.Context, req *connect
 }
 
 // CallTool calls dotfilesd.v1.ExtensionService.CallTool.
-func (c *extensionServiceClient) CallTool(ctx context.Context, req *connect.Request[dotfilesdv1.CallToolRequest]) (*connect.Response[dotfilesdv1.CallToolResponse], error) {
-	return c.callTool.CallUnary(ctx, req)
+func (c *extensionServiceClient) CallTool(ctx context.Context, req *connect.Request[dotfilesdv1.CallToolRequest]) (*connect.ServerStreamForClient[dotfilesdv1.CallToolResponse], error) {
+	return c.callTool.CallServerStream(ctx, req)
 }
 
 // ExtensionServiceHandler is an implementation of the dotfilesd.v1.ExtensionService service.
@@ -101,8 +102,9 @@ type ExtensionServiceHandler interface {
 	// daemon's plugin registry.
 	GetDescriptor(context.Context, *connect.Request[dotfilesdv1.GetDescriptorRequest]) (*connect.Response[dotfilesdv1.GetDescriptorResponse], error)
 	// CallTool invokes a named tool on the plugin with the given arguments.
-	// The daemon proxies MCP tools/call and CLI commands to this RPC.
-	CallTool(context.Context, *connect.Request[dotfilesdv1.CallToolRequest]) (*connect.Response[dotfilesdv1.CallToolResponse], error)
+	// Returns a stream of output chunks (stdout/stderr) followed by a
+	// final done message indicating completion or error.
+	CallTool(context.Context, *connect.Request[dotfilesdv1.CallToolRequest], *connect.ServerStream[dotfilesdv1.CallToolResponse]) error
 }
 
 // NewExtensionServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -118,7 +120,7 @@ func NewExtensionServiceHandler(svc ExtensionServiceHandler, opts ...connect.Han
 		connect.WithSchema(extensionServiceMethods.ByName("GetDescriptor")),
 		connect.WithHandlerOptions(opts...),
 	)
-	extensionServiceCallToolHandler := connect.NewUnaryHandler(
+	extensionServiceCallToolHandler := connect.NewServerStreamHandler(
 		ExtensionServiceCallToolProcedure,
 		svc.CallTool,
 		connect.WithSchema(extensionServiceMethods.ByName("CallTool")),
@@ -143,6 +145,6 @@ func (UnimplementedExtensionServiceHandler) GetDescriptor(context.Context, *conn
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExtensionService.GetDescriptor is not implemented"))
 }
 
-func (UnimplementedExtensionServiceHandler) CallTool(context.Context, *connect.Request[dotfilesdv1.CallToolRequest]) (*connect.Response[dotfilesdv1.CallToolResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExtensionService.CallTool is not implemented"))
+func (UnimplementedExtensionServiceHandler) CallTool(context.Context, *connect.Request[dotfilesdv1.CallToolRequest], *connect.ServerStream[dotfilesdv1.CallToolResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExtensionService.CallTool is not implemented"))
 }

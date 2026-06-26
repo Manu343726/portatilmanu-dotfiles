@@ -533,14 +533,18 @@ func (x *CallToolRequest) GetArguments() map[string]string {
 // CallToolResponse returns the result of a tool invocation.
 type CallToolResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Human-readable text output (stdout-style).
-	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	// Whether the tool returned an error.
-	IsError bool `protobuf:"varint,2,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
-	// Structured result data as JSON (optional, for rich clients).
-	StructuredData string `protobuf:"bytes,3,opt,name=structured_data,json=structuredData,proto3" json:"structured_data,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// A chunk of stdout output from the tool.
+	StdoutChunk []byte `protobuf:"bytes,1,opt,name=stdout_chunk,json=stdoutChunk,proto3" json:"stdout_chunk,omitempty"`
+	// A chunk of stderr output from the tool.
+	StderrChunk []byte `protobuf:"bytes,2,opt,name=stderr_chunk,json=stderrChunk,proto3" json:"stderr_chunk,omitempty"`
+	// If true, this is the final message — the tool has finished. No more
+	// data chunks will follow. The error_message field indicates success
+	// (empty) or failure (non-empty).
+	Done bool `protobuf:"varint,3,opt,name=done,proto3" json:"done,omitempty"`
+	// If done is true, the tool's error message (empty means success).
+	ErrorMessage  string `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallToolResponse) Reset() {
@@ -573,23 +577,30 @@ func (*CallToolResponse) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_extension_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *CallToolResponse) GetText() string {
+func (x *CallToolResponse) GetStdoutChunk() []byte {
 	if x != nil {
-		return x.Text
+		return x.StdoutChunk
 	}
-	return ""
+	return nil
 }
 
-func (x *CallToolResponse) GetIsError() bool {
+func (x *CallToolResponse) GetStderrChunk() []byte {
 	if x != nil {
-		return x.IsError
+		return x.StderrChunk
+	}
+	return nil
+}
+
+func (x *CallToolResponse) GetDone() bool {
+	if x != nil {
+		return x.Done
 	}
 	return false
 }
 
-func (x *CallToolResponse) GetStructuredData() string {
+func (x *CallToolResponse) GetErrorMessage() string {
 	if x != nil {
-		return x.StructuredData
+		return x.ErrorMessage
 	}
 	return ""
 }
@@ -645,14 +656,15 @@ const file_proto_dotfilesd_v1_dotfilesdv1_extension_proto_rawDesc = "" +
 	"\targuments\x18\x02 \x03(\v2,.dotfilesd.v1.CallToolRequest.ArgumentsEntryR\targuments\x1a<\n" +
 	"\x0eArgumentsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"j\n" +
-	"\x10CallToolResponse\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text\x12\x19\n" +
-	"\bis_error\x18\x02 \x01(\bR\aisError\x12'\n" +
-	"\x0fstructured_data\x18\x03 \x01(\tR\x0estructuredData2\xb7\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x91\x01\n" +
+	"\x10CallToolResponse\x12!\n" +
+	"\fstdout_chunk\x18\x01 \x01(\fR\vstdoutChunk\x12!\n" +
+	"\fstderr_chunk\x18\x02 \x01(\fR\vstderrChunk\x12\x12\n" +
+	"\x04done\x18\x03 \x01(\bR\x04done\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage2\xb9\x01\n" +
 	"\x10ExtensionService\x12X\n" +
-	"\rGetDescriptor\x12\".dotfilesd.v1.GetDescriptorRequest\x1a#.dotfilesd.v1.GetDescriptorResponse\x12I\n" +
-	"\bCallTool\x12\x1d.dotfilesd.v1.CallToolRequest\x1a\x1e.dotfilesd.v1.CallToolResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\rGetDescriptor\x12\".dotfilesd.v1.GetDescriptorRequest\x1a#.dotfilesd.v1.GetDescriptorResponse\x12K\n" +
+	"\bCallTool\x12\x1d.dotfilesd.v1.CallToolRequest\x1a\x1e.dotfilesd.v1.CallToolResponse0\x01B*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_extension_proto_rawDescOnce sync.Once

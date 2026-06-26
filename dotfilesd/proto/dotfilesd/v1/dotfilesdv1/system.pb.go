@@ -178,12 +178,17 @@ func (x *CallPluginToolRequest) GetArguments() map[string]string {
 }
 
 type CallPluginToolResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Text           string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	IsError        bool                   `protobuf:"varint,2,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
-	StructuredData string                 `protobuf:"bytes,3,opt,name=structured_data,json=structuredData,proto3" json:"structured_data,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A chunk of stdout output from the tool.
+	StdoutChunk []byte `protobuf:"bytes,1,opt,name=stdout_chunk,json=stdoutChunk,proto3" json:"stdout_chunk,omitempty"`
+	// A chunk of stderr output from the tool.
+	StderrChunk []byte `protobuf:"bytes,2,opt,name=stderr_chunk,json=stderrChunk,proto3" json:"stderr_chunk,omitempty"`
+	// If true, this is the final message — the tool has finished.
+	Done bool `protobuf:"varint,3,opt,name=done,proto3" json:"done,omitempty"`
+	// If done is true, the tool's error message (empty means success).
+	ErrorMessage  string `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallPluginToolResponse) Reset() {
@@ -216,23 +221,30 @@ func (*CallPluginToolResponse) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *CallPluginToolResponse) GetText() string {
+func (x *CallPluginToolResponse) GetStdoutChunk() []byte {
 	if x != nil {
-		return x.Text
+		return x.StdoutChunk
 	}
-	return ""
+	return nil
 }
 
-func (x *CallPluginToolResponse) GetIsError() bool {
+func (x *CallPluginToolResponse) GetStderrChunk() []byte {
 	if x != nil {
-		return x.IsError
+		return x.StderrChunk
+	}
+	return nil
+}
+
+func (x *CallPluginToolResponse) GetDone() bool {
+	if x != nil {
+		return x.Done
 	}
 	return false
 }
 
-func (x *CallPluginToolResponse) GetStructuredData() string {
+func (x *CallPluginToolResponse) GetErrorMessage() string {
 	if x != nil {
-		return x.StructuredData
+		return x.ErrorMessage
 	}
 	return ""
 }
@@ -622,11 +634,12 @@ const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\targuments\x18\x03 \x03(\v22.dotfilesd.v1.CallPluginToolRequest.ArgumentsEntryR\targuments\x1a<\n" +
 	"\x0eArgumentsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
-	"\x16CallPluginToolResponse\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text\x12\x19\n" +
-	"\bis_error\x18\x02 \x01(\bR\aisError\x12'\n" +
-	"\x0fstructured_data\x18\x03 \x01(\tR\x0estructuredData\">\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x01\n" +
+	"\x16CallPluginToolResponse\x12!\n" +
+	"\fstdout_chunk\x18\x01 \x01(\fR\vstdoutChunk\x12!\n" +
+	"\fstderr_chunk\x18\x02 \x01(\fR\vstderrChunk\x12\x12\n" +
+	"\x04done\x18\x03 \x01(\bR\x04done\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\">\n" +
 	"\vPingRequest\x12/\n" +
 	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"[\n" +
 	"\fPingResponse\x12\x18\n" +
@@ -654,15 +667,15 @@ const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
-	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\x81\x04\n" +
+	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\x83\x04\n" +
 	"\rSystemService\x12=\n" +
 	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
 	"\n" +
 	"SystemInfo\x12\x1f.dotfilesd.v1.SystemInfoRequest\x1a .dotfilesd.v1.SystemInfoResponse\x12R\n" +
 	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponse\x12R\n" +
 	"\vListPlugins\x12 .dotfilesd.v1.ListPluginsRequest\x1a!.dotfilesd.v1.ListPluginsResponse\x12[\n" +
-	"\x0eListPluginTree\x12#.dotfilesd.v1.ListPluginTreeRequest\x1a$.dotfilesd.v1.ListPluginTreeResponse\x12[\n" +
-	"\x0eCallPluginTool\x12#.dotfilesd.v1.CallPluginToolRequest\x1a$.dotfilesd.v1.CallPluginToolResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\x0eListPluginTree\x12#.dotfilesd.v1.ListPluginTreeRequest\x1a$.dotfilesd.v1.ListPluginTreeResponse\x12]\n" +
+	"\x0eCallPluginTool\x12#.dotfilesd.v1.CallPluginToolRequest\x1a$.dotfilesd.v1.CallPluginToolResponse0\x01B*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescOnce sync.Once

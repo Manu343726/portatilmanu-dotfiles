@@ -153,24 +153,47 @@ func (s *systemServer) ListPluginTree(
 func (s *systemServer) CallPluginTool(
 	ctx context.Context,
 	req *connect.Request[dotfilesdv1.CallPluginToolRequest],
-) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {
+	stream *connect.ServerStream[dotfilesdv1.CallPluginToolResponse],
+) error {
 	slog.Log(ctx, levelTrace, "CallPluginTool", "request", req.Msg)
 	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	if s.daemon == nil || s.daemon.pluginMgr == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("plugin system not initialized"))
+		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("plugin system not initialized"))
 	}
 
-	text, isErr, structured, err := s.daemon.pluginMgr.CallTool(ctx, req.Msg.PluginName, req.Msg.ToolName, req.Msg.Arguments)
+	// Open a streaming connection to the plugin's tool.
+	pluginStream, err := s.daemon.pluginMgr.CallTool(ctx, req.Msg.PluginName, req.Msg.ToolName, req.Msg.Arguments)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("call plugin tool: %w", err))
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("call plugin tool: %w", err))
 	}
 
-	resp := connect.NewResponse(&dotfilesdv1.CallPluginToolResponse{
-		Text:           text,
-		IsError:        isErr,
-		StructuredData: structured,
-	})
+	// Relay chunks from the plugin stream to the CLI stream.
+	for pluginStream.Receive() {
+		chunk := pluginStream.Msg()
+
+		relay := &dotfilesdv1.CallPluginToolResponse{
+			StdoutChunk: chunk.StdoutChunk,
+			StderrChunk: chunk.StderrChunk,
+		}
+		if chunk.Done {
+			relay.Done = true
+			relay.ErrorMessage = chunk.ErrorMessage
+			if err := stream.Send(relay); err != nil {
+				return err
+			}
+			break
+		}
+		if err := stream.Send(relay); err != nil {
+			return err
+		}
+	}
+
+	if err := pluginStream.Err(); err != nil {
+		slog.Log(ctx, levelTrace, "CallPluginTool stream error", "plugin", req.Msg.PluginName, "tool", req.Msg.ToolName, "error", err)
+		return err
+	}
+
 	slog.Log(ctx, levelTrace, "CallPluginTool done", "plugin", req.Msg.PluginName, "tool", req.Msg.ToolName)
-	return resp, nil
+	return nil
 }

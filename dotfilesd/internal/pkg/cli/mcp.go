@@ -833,22 +833,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			}
 		}
 
-		text, isError, structuredData, err := CallPluginToolViaMCP(clients, sessionID, name, strArgs)
+		text, err := CallPluginToolViaMCP(clients, sessionID, name, strArgs)
 		if err != nil {
 			return mcpErr(id, -32603, fmt.Sprintf("plugin tool call failed: %v", err))
-		}
-		if isError {
-			return mcpResp(id, map[string]any{
-				"content": []map[string]any{{"type": "text", "text": text}},
-				"isError": true,
-			})
-		}
-		if structuredData != "" {
-			if text != "" {
-				text += "\n---\n" + structuredData
-			} else {
-				text = structuredData
-			}
 		}
 		return mcpToolResult(id, text)
 	}

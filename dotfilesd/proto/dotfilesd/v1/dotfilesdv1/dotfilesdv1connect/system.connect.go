@@ -63,7 +63,9 @@ type SystemServiceClient interface {
 	// plugin descriptors at leaf nodes.
 	ListPluginTree(context.Context, *connect.Request[dotfilesdv1.ListPluginTreeRequest]) (*connect.Response[dotfilesdv1.ListPluginTreeResponse], error)
 	// CallPluginTool invokes a tool on a loaded plugin.
-	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error)
+	// Returns a stream of output chunks (stdout/stderr) followed by a
+	// final done message indicating completion or error.
+	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.ServerStreamForClient[dotfilesdv1.CallPluginToolResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the dotfilesd.v1.SystemService service. By
@@ -152,8 +154,8 @@ func (c *systemServiceClient) ListPluginTree(ctx context.Context, req *connect.R
 }
 
 // CallPluginTool calls dotfilesd.v1.SystemService.CallPluginTool.
-func (c *systemServiceClient) CallPluginTool(ctx context.Context, req *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {
-	return c.callPluginTool.CallUnary(ctx, req)
+func (c *systemServiceClient) CallPluginTool(ctx context.Context, req *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.ServerStreamForClient[dotfilesdv1.CallPluginToolResponse], error) {
+	return c.callPluginTool.CallServerStream(ctx, req)
 }
 
 // SystemServiceHandler is an implementation of the dotfilesd.v1.SystemService service.
@@ -167,7 +169,9 @@ type SystemServiceHandler interface {
 	// plugin descriptors at leaf nodes.
 	ListPluginTree(context.Context, *connect.Request[dotfilesdv1.ListPluginTreeRequest]) (*connect.Response[dotfilesdv1.ListPluginTreeResponse], error)
 	// CallPluginTool invokes a tool on a loaded plugin.
-	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error)
+	// Returns a stream of output chunks (stdout/stderr) followed by a
+	// final done message indicating completion or error.
+	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest], *connect.ServerStream[dotfilesdv1.CallPluginToolResponse]) error
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -207,7 +211,7 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("ListPluginTree")),
 		connect.WithHandlerOptions(opts...),
 	)
-	systemServiceCallPluginToolHandler := connect.NewUnaryHandler(
+	systemServiceCallPluginToolHandler := connect.NewServerStreamHandler(
 		SystemServiceCallPluginToolProcedure,
 		svc.CallPluginTool,
 		connect.WithSchema(systemServiceMethods.ByName("CallPluginTool")),
@@ -256,6 +260,6 @@ func (UnimplementedSystemServiceHandler) ListPluginTree(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.ListPluginTree is not implemented"))
 }
 
-func (UnimplementedSystemServiceHandler) CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.CallPluginTool is not implemented"))
+func (UnimplementedSystemServiceHandler) CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest], *connect.ServerStream[dotfilesdv1.CallPluginToolResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.CallPluginTool is not implemented"))
 }
