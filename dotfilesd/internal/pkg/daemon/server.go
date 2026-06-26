@@ -10,17 +10,20 @@ import (
 	"syscall"
 	"time"
 
+	"dotfilesd/internal/pkg/plugin"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 )
 
 type Config struct {
-	Port       string
-	LogDir     string
-	LogLevel   string
-	LogMaxMB   int
-	LogBackup  int
-	LogAge     int
-	ScriptsDir string
+	Port           string
+	LogDir         string
+	LogLevel       string
+	LogMaxMB       int
+	LogBackup      int
+	LogAge         int
+	ScriptsDir     string
+	PluginsDir     string `yaml:"plugins_dir"`
+	PluginCacheDir string `yaml:"plugin_cache_dir"`
 }
 
 type Daemon struct {
@@ -28,6 +31,12 @@ type Daemon struct {
 	server   *http.Server
 	sessions *SessionStore
 	scripts  *ScriptRegistry
+
+	// Plugin system.
+	pluginMgr        *plugin.Manager
+	pluginToken      string
+	pluginCtxPath    string
+	pluginCtxHandler http.Handler
 }
 
 func New(cfg Config) *Daemon {
@@ -44,6 +53,11 @@ func New(cfg Config) *Daemon {
 	}
 }
 
+// PluginManager returns the daemon's plugin manager.
+func (d *Daemon) PluginManager() *plugin.Manager {
+	return d.pluginMgr
+}
+
 // ScriptsRegistry returns the daemon's script registry.
 func (d *Daemon) ScriptsRegistry() *ScriptRegistry {
 	return d.scripts
@@ -52,12 +66,17 @@ func (d *Daemon) ScriptsRegistry() *ScriptRegistry {
 func (d *Daemon) Start() error {
 	setupLogging(d.config.LogDir, d.config.LogLevel, d.config.LogMaxMB, d.config.LogBackup, d.config.LogAge)
 
-	sysSvc := &systemServer{startedAt: time.Now(), sessions: d.sessions}
+	sysSvc := &systemServer{startedAt: time.Now(), sessions: d.sessions, daemon: d}
 	dotSvc := &dotfilesServer{sessions: d.sessions}
 	execSvc := &execServer{sessions: d.sessions}
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)
+
+	// Initialize plugin system.
+	if err := d.InitPlugins(execSvc); err != nil {
+		slog.Warn("plugin init (continuing)", "error", err)
+	}
 
 	mux := http.NewServeMux()
 	{
@@ -84,6 +103,10 @@ func (d *Daemon) Start() error {
 		p, h := dotfilesdv1connect.NewScriptServiceHandler(scriptSvc)
 		mux.Handle(p, h)
 	}
+	// Mount the plugin execution context server.
+	if d.pluginCtxPath != "" && d.pluginCtxHandler != nil {
+		mux.Handle(d.pluginCtxPath, d.pluginCtxHandler)
+	}
 
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)
 	d.server = &http.Server{
@@ -105,6 +128,9 @@ func (d *Daemon) Start() error {
 	select {
 	case <-sig:
 		slog.Info("shutting down")
+		if d.pluginMgr != nil {
+			d.pluginMgr.Shutdown()
+		}
 		return d.server.Close()
 	case err := <-errCh:
 		return err

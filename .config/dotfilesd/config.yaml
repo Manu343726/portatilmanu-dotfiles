@@ -6,3 +6,7 @@ log:
   max_size_mb: 10
   max_backups: 5
   max_age_days: 30
+
+# Plugin system
+plugins_dir: ~/.config/dotfilesd/plugins
+plugin_cache_dir: ~/.cache/dotfilesd/plugins

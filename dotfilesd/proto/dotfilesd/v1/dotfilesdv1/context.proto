@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/exec.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/feedback.proto";
+
+// ExecutionContext — plugin-to-daemon API. Plugins call back into the daemon
+// through this service to execute shell commands, request user input, etc.
+// This is the ONLY way a plugin interacts with the host system — plugins
+// never access core RPCs directly.
+//
+// Each plugin gets a dedicated Execution Context that:
+//   - Limits access to a subset of daemon capabilities
+//   - Authenticates the plugin via a shared secret token (passed as env var
+//     EXECUTION_CONTEXT_TOKEN at plugin launch)
+//   - Routes requests through the plugin's session for state management
+//
+// The context reuses message types from exec.proto (ExecRequest, ExecResponse)
+// and feedback.proto (InputRequest, InputResponse, etc.) to keep the wire
+// format consistent. For SudoExec we use a simplified protocol without the
+// challenge-response flow — the daemon handles password elicitation internally.
+service ExecutionContext {
+  // Exec runs a shell command without privilege escalation.
+  rpc Exec(ExecRequest) returns (ExecResponse);
+
+  // SudoExec runs a shell command with sudo. The daemon handles password
+  // elicitation internally via its existing sudo flow.
+  rpc SudoExec(ContextSudoExecRequest) returns (ContextSudoExecResponse);
+
+  // RequestInput prompts the user for text input.
+  rpc RequestInput(InputRequest) returns (InputResponse);
+
+  // RequestConfirm prompts the user for a yes/no confirmation.
+  rpc RequestConfirm(ConfirmRequest) returns (ConfirmResponse);
+
+  // RequestChoose prompts the user to pick from a list of options.
+  rpc RequestChoose(ChooseRequest) returns (ChooseResponse);
+}
+
+// ContextSudoExecRequest — simplified sudo exec for plugins. The daemon
+// handles password elicitation; the plugin just specifies the command.
+message ContextSudoExecRequest {
+  Session session = 100;
+  string command = 1;
+}
+
+// ContextSudoExecResponse — result of a sudo exec from a plugin call.
+message ContextSudoExecResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}

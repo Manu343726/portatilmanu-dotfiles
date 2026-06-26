@@ -21,6 +21,21 @@ dotfilesctl info              # system info
 dotfilesctl exec --sudo pacman -Syu  # run command
 dotfilesctl reload tmux       # reload config
 dotfilesctl git status        # git operations
+dotfilesctl plugin list       # list loaded plugins
+```
+
+## Plugins
+
+dotfilesd supports dynamic extensions called **plugins** — standalone Go programs
+that register tools which get automatically exposed as both CLI subcommands and
+MCP tools. See `docs/plugins.md` for documentation.
+
+Example: a weather plugin that fetches forecasts via wttr.in:
+
+```sh
+dotfilesctl plugin call weather forecast location=Madrid
+# → Weather for Madrid, Spain
+#    ⛅  +22°C
 ```
 
 ## Documentation
@@ -32,17 +47,20 @@ dotfilesctl git status        # git operations
 | Deploy & Install | `docs/deploy.md` |
 | Debugging | `docs/debugging.md` |
 | Features | `docs/features.md` |
+| Plugin System | `docs/plugins.md` |
 
 ## Project layout
 
 ```
 cmd/dotfilesd/     # Daemon (Connect RPC server only)
 cmd/dotfilesctl/   # CLI client
+plugin/            # Public plugin SDK
+plugins/           # Example plugins
 proto/             # Protobuf definitions and generated code
+internal/pkg/plugin/  # Plugin manager, builder, runtime, registry
 service/           # Systemd user service template
 docs/              # Documentation
 Makefile           # Build, install, service management
-```
 
 ## Tech stack
 

@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// ExtensionService — daemon-to-plugin API. The daemon calls these RPCs
+// to discover plugin capabilities and invoke plugin tools.
+service ExtensionService {
+  // GetDescriptor returns the plugin's capabilities (tools, metadata, CLI
+  // hints). Called once at plugin load time; results are cached in the
+  // daemon's plugin registry.
+  rpc GetDescriptor(GetDescriptorRequest) returns (GetDescriptorResponse);
+
+  // CallTool invokes a named tool on the plugin with the given arguments.
+  // The daemon proxies MCP tools/call and CLI commands to this RPC.
+  rpc CallTool(CallToolRequest) returns (CallToolResponse);
+}
+
+message GetDescriptorRequest {}
+
+message GetDescriptorResponse {
+  ExtensionDescriptor descriptor = 1;
+}
+
+// ExtensionDescriptor describes a plugin's capabilities. The daemon uses
+// this metadata to auto-generate CLI commands and MCP tool definitions.
+message ExtensionDescriptor {
+  // Unique plugin name (e.g. "weather", "backup"). Used as the CLI command
+  // namespace and the MCP tool name prefix.
+  string name = 1;
+
+  // Human-readable display name (e.g. "Weather Service").
+  string display_name = 2;
+
+  // Plugin version (semver).
+  string version = 3;
+
+  // Short description shown in help text and tool listings.
+  string description = 4;
+
+  // Tools exposed by this plugin.
+  repeated ToolDescriptor tools = 10;
+}
+
+// ToolDescriptor describes a single tool/command exposed by a plugin.
+message ToolDescriptor {
+  // Tool name (e.g. "forecast"). Scoped within the plugin: the daemon
+  // qualifies it as "<plugin>_<tool>" for MCP and "<plugin> <tool>" for CLI.
+  string name = 1;
+
+  // Human-readable description of what this tool does.
+  string description = 2;
+
+  // Input schema describing the tool's parameters (JSON Schema-like).
+  ToolInputSchema input = 3;
+
+  // CLI-specific hints for command generation.
+  CLIHints cli = 10;
+}
+
+// ToolInputSchema describes the expected input for a tool.
+message ToolInputSchema {
+  // Always "object" for now.
+  string type = 1;
+
+  // Map of parameter name to its schema.
+  map<string, PropertySchema> properties = 2;
+
+  // List of parameter names that are required.
+  repeated string required = 3;
+}
+
+// PropertySchema describes a single parameter.
+message PropertySchema {
+  // Type: "string", "integer", "boolean", "number", "enum".
+  string type = 1;
+
+  // Human-readable description of the parameter.
+  string description = 2;
+
+  // Allowed values for enum type.
+  repeated string enum = 3;
+
+  // Default value (string representation).
+  string default = 4;
+
+  // Whether the default value is set.
+  bool has_default = 5;
+}
+
+// CLIHints provides the daemon with information to generate the CLI command
+// tree and help text for this tool.
+message CLIHints {
+  // Subcommand path relative to the plugin root, space-separated.
+  // Example: "forecast" becomes "dotfilesctl <plugin> forecast".
+  // Nested: "weather forecast" becomes "dotfilesctl <plugin> weather forecast".
+  string command_path = 1;
+
+  // Category name for grouping in help output (e.g. "Weather", "System").
+  string category = 2;
+
+  // Maps argument names to CLI flag names for positional arguments.
+  // Example: {"location": "--location"} makes the argument a flag instead
+  // of a positional arg.
+  map<string, string> flag_mapping = 3;
+}
+
+// CallToolRequest invokes a tool with the given named arguments.
+message CallToolRequest {
+  // Name of the tool to invoke (matches ToolDescriptor.name).
+  string tool_name = 1;
+
+  // Arguments as key-value pairs. Values are JSON-encoded strings.
+  // The plugin deserializes them as needed.
+  map<string, string> arguments = 2;
+}
+
+// CallToolResponse returns the result of a tool invocation.
+message CallToolResponse {
+  // Human-readable text output (stdout-style).
+  string text = 1;
+
+  // Whether the tool returned an error.
+  bool is_error = 2;
+
+  // Structured result data as JSON (optional, for rich clients).
+  string structured_data = 3;
+}

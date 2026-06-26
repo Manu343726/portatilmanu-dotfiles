@@ -21,6 +21,222 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ListPluginsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPluginsRequest) Reset() {
+	*x = ListPluginsRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPluginsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPluginsRequest) ProtoMessage() {}
+
+func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
+func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ListPluginsRequest) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+type ListPluginsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Plugins       []*ExtensionDescriptor `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPluginsResponse) Reset() {
+	*x = ListPluginsResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPluginsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPluginsResponse) ProtoMessage() {}
+
+func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPluginsResponse.ProtoReflect.Descriptor instead.
+func (*ListPluginsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ListPluginsResponse) GetPlugins() []*ExtensionDescriptor {
+	if x != nil {
+		return x.Plugins
+	}
+	return nil
+}
+
+type CallPluginToolRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
+	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	ToolName      string                 `protobuf:"bytes,2,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	Arguments     map[string]string      `protobuf:"bytes,3,rep,name=arguments,proto3" json:"arguments,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallPluginToolRequest) Reset() {
+	*x = CallPluginToolRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallPluginToolRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallPluginToolRequest) ProtoMessage() {}
+
+func (x *CallPluginToolRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallPluginToolRequest.ProtoReflect.Descriptor instead.
+func (*CallPluginToolRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CallPluginToolRequest) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *CallPluginToolRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *CallPluginToolRequest) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
+func (x *CallPluginToolRequest) GetArguments() map[string]string {
+	if x != nil {
+		return x.Arguments
+	}
+	return nil
+}
+
+type CallPluginToolResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Text           string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	IsError        bool                   `protobuf:"varint,2,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	StructuredData string                 `protobuf:"bytes,3,opt,name=structured_data,json=structuredData,proto3" json:"structured_data,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CallPluginToolResponse) Reset() {
+	*x = CallPluginToolResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallPluginToolResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallPluginToolResponse) ProtoMessage() {}
+
+func (x *CallPluginToolResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallPluginToolResponse.ProtoReflect.Descriptor instead.
+func (*CallPluginToolResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CallPluginToolResponse) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *CallPluginToolResponse) GetIsError() bool {
+	if x != nil {
+		return x.IsError
+	}
+	return false
+}
+
+func (x *CallPluginToolResponse) GetStructuredData() string {
+	if x != nil {
+		return x.StructuredData
+	}
+	return ""
+}
+
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
@@ -30,7 +246,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[0]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +258,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[0]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,7 +271,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{0}
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PingRequest) GetSession() *Session {
@@ -76,7 +292,7 @@ type PingResponse struct {
 
 func (x *PingResponse) Reset() {
 	*x = PingResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[1]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -88,7 +304,7 @@ func (x *PingResponse) String() string {
 func (*PingResponse) ProtoMessage() {}
 
 func (x *PingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[1]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -101,7 +317,7 @@ func (x *PingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{1}
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *PingResponse) GetVersion() string {
@@ -134,7 +350,7 @@ type SystemInfoRequest struct {
 
 func (x *SystemInfoRequest) Reset() {
 	*x = SystemInfoRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -146,7 +362,7 @@ func (x *SystemInfoRequest) String() string {
 func (*SystemInfoRequest) ProtoMessage() {}
 
 func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -159,7 +375,7 @@ func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemInfoRequest.ProtoReflect.Descriptor instead.
 func (*SystemInfoRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{2}
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SystemInfoRequest) GetSession() *Session {
@@ -187,7 +403,7 @@ type SystemInfoResponse struct {
 
 func (x *SystemInfoResponse) Reset() {
 	*x = SystemInfoResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -199,7 +415,7 @@ func (x *SystemInfoResponse) String() string {
 func (*SystemInfoResponse) ProtoMessage() {}
 
 func (x *SystemInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -212,7 +428,7 @@ func (x *SystemInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemInfoResponse.ProtoReflect.Descriptor instead.
 func (*SystemInfoResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{3}
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SystemInfoResponse) GetOs() string {
@@ -294,7 +510,7 @@ type SudoMethodsRequest struct {
 
 func (x *SudoMethodsRequest) Reset() {
 	*x = SudoMethodsRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -306,7 +522,7 @@ func (x *SudoMethodsRequest) String() string {
 func (*SudoMethodsRequest) ProtoMessage() {}
 
 func (x *SudoMethodsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -319,7 +535,7 @@ func (x *SudoMethodsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SudoMethodsRequest.ProtoReflect.Descriptor instead.
 func (*SudoMethodsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{4}
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SudoMethodsRequest) GetSession() *Session {
@@ -340,7 +556,7 @@ type SudoMethodsResponse struct {
 
 func (x *SudoMethodsResponse) Reset() {
 	*x = SudoMethodsResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +568,7 @@ func (x *SudoMethodsResponse) String() string {
 func (*SudoMethodsResponse) ProtoMessage() {}
 
 func (x *SudoMethodsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +581,7 @@ func (x *SudoMethodsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SudoMethodsResponse.ProtoReflect.Descriptor instead.
 func (*SudoMethodsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{5}
+	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SudoMethodsResponse) GetAvailableMethods() []string {
@@ -393,7 +609,24 @@ var File_proto_dotfilesd_v1_dotfilesdv1_system_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\">\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\x1a.proto/dotfilesd/v1/dotfilesdv1/extension.proto\"E\n" +
+	"\x12ListPluginsRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"R\n" +
+	"\x13ListPluginsResponse\x12;\n" +
+	"\aplugins\x18\x01 \x03(\v2!.dotfilesd.v1.ExtensionDescriptorR\aplugins\"\x96\x02\n" +
+	"\x15CallPluginToolRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x1f\n" +
+	"\vplugin_name\x18\x01 \x01(\tR\n" +
+	"pluginName\x12\x1b\n" +
+	"\ttool_name\x18\x02 \x01(\tR\btoolName\x12P\n" +
+	"\targuments\x18\x03 \x03(\v22.dotfilesd.v1.CallPluginToolRequest.ArgumentsEntryR\targuments\x1a<\n" +
+	"\x0eArgumentsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
+	"\x16CallPluginToolResponse\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12\x19\n" +
+	"\bis_error\x18\x02 \x01(\bR\aisError\x12'\n" +
+	"\x0fstructured_data\x18\x03 \x01(\tR\x0estructuredData\">\n" +
 	"\vPingRequest\x12/\n" +
 	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"[\n" +
 	"\fPingResponse\x12\x18\n" +
@@ -421,12 +654,14 @@ const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
-	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xf3\x01\n" +
+	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xa4\x03\n" +
 	"\rSystemService\x12=\n" +
 	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
 	"\n" +
 	"SystemInfo\x12\x1f.dotfilesd.v1.SystemInfoRequest\x1a .dotfilesd.v1.SystemInfoResponse\x12R\n" +
-	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponse\x12R\n" +
+	"\vListPlugins\x12 .dotfilesd.v1.ListPluginsRequest\x1a!.dotfilesd.v1.ListPluginsResponse\x12[\n" +
+	"\x0eCallPluginTool\x12#.dotfilesd.v1.CallPluginToolRequest\x1a$.dotfilesd.v1.CallPluginToolResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescOnce sync.Once
@@ -440,31 +675,45 @@ func file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_goTypes = []any{
-	(*PingRequest)(nil),         // 0: dotfilesd.v1.PingRequest
-	(*PingResponse)(nil),        // 1: dotfilesd.v1.PingResponse
-	(*SystemInfoRequest)(nil),   // 2: dotfilesd.v1.SystemInfoRequest
-	(*SystemInfoResponse)(nil),  // 3: dotfilesd.v1.SystemInfoResponse
-	(*SudoMethodsRequest)(nil),  // 4: dotfilesd.v1.SudoMethodsRequest
-	(*SudoMethodsResponse)(nil), // 5: dotfilesd.v1.SudoMethodsResponse
-	(*Session)(nil),             // 6: dotfilesd.v1.Session
+	(*ListPluginsRequest)(nil),     // 0: dotfilesd.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),    // 1: dotfilesd.v1.ListPluginsResponse
+	(*CallPluginToolRequest)(nil),  // 2: dotfilesd.v1.CallPluginToolRequest
+	(*CallPluginToolResponse)(nil), // 3: dotfilesd.v1.CallPluginToolResponse
+	(*PingRequest)(nil),            // 4: dotfilesd.v1.PingRequest
+	(*PingResponse)(nil),           // 5: dotfilesd.v1.PingResponse
+	(*SystemInfoRequest)(nil),      // 6: dotfilesd.v1.SystemInfoRequest
+	(*SystemInfoResponse)(nil),     // 7: dotfilesd.v1.SystemInfoResponse
+	(*SudoMethodsRequest)(nil),     // 8: dotfilesd.v1.SudoMethodsRequest
+	(*SudoMethodsResponse)(nil),    // 9: dotfilesd.v1.SudoMethodsResponse
+	nil,                            // 10: dotfilesd.v1.CallPluginToolRequest.ArgumentsEntry
+	(*Session)(nil),                // 11: dotfilesd.v1.Session
+	(*ExtensionDescriptor)(nil),    // 12: dotfilesd.v1.ExtensionDescriptor
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_depIdxs = []int32{
-	6, // 0: dotfilesd.v1.PingRequest.session:type_name -> dotfilesd.v1.Session
-	6, // 1: dotfilesd.v1.SystemInfoRequest.session:type_name -> dotfilesd.v1.Session
-	6, // 2: dotfilesd.v1.SudoMethodsRequest.session:type_name -> dotfilesd.v1.Session
-	0, // 3: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
-	2, // 4: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
-	4, // 5: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
-	1, // 6: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
-	3, // 7: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
-	5, // 8: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	11, // 0: dotfilesd.v1.ListPluginsRequest.session:type_name -> dotfilesd.v1.Session
+	12, // 1: dotfilesd.v1.ListPluginsResponse.plugins:type_name -> dotfilesd.v1.ExtensionDescriptor
+	11, // 2: dotfilesd.v1.CallPluginToolRequest.session:type_name -> dotfilesd.v1.Session
+	10, // 3: dotfilesd.v1.CallPluginToolRequest.arguments:type_name -> dotfilesd.v1.CallPluginToolRequest.ArgumentsEntry
+	11, // 4: dotfilesd.v1.PingRequest.session:type_name -> dotfilesd.v1.Session
+	11, // 5: dotfilesd.v1.SystemInfoRequest.session:type_name -> dotfilesd.v1.Session
+	11, // 6: dotfilesd.v1.SudoMethodsRequest.session:type_name -> dotfilesd.v1.Session
+	4,  // 7: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
+	6,  // 8: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
+	8,  // 9: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
+	0,  // 10: dotfilesd.v1.SystemService.ListPlugins:input_type -> dotfilesd.v1.ListPluginsRequest
+	2,  // 11: dotfilesd.v1.SystemService.CallPluginTool:input_type -> dotfilesd.v1.CallPluginToolRequest
+	5,  // 12: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
+	7,  // 13: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	9,  // 14: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	1,  // 15: dotfilesd.v1.SystemService.ListPlugins:output_type -> dotfilesd.v1.ListPluginsResponse
+	3,  // 16: dotfilesd.v1.SystemService.CallPluginTool:output_type -> dotfilesd.v1.CallPluginToolResponse
+	12, // [12:17] is the sub-list for method output_type
+	7,  // [7:12] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_system_proto_init() }
@@ -473,13 +722,14 @@ func file_proto_dotfilesd_v1_dotfilesdv1_system_proto_init() {
 		return
 	}
 	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
+	file_proto_dotfilesd_v1_dotfilesdv1_extension_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

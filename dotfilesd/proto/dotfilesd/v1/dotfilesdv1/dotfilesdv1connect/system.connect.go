@@ -41,6 +41,12 @@ const (
 	// SystemServiceSudoMethodsProcedure is the fully-qualified name of the SystemService's SudoMethods
 	// RPC.
 	SystemServiceSudoMethodsProcedure = "/dotfilesd.v1.SystemService/SudoMethods"
+	// SystemServiceListPluginsProcedure is the fully-qualified name of the SystemService's ListPlugins
+	// RPC.
+	SystemServiceListPluginsProcedure = "/dotfilesd.v1.SystemService/ListPlugins"
+	// SystemServiceCallPluginToolProcedure is the fully-qualified name of the SystemService's
+	// CallPluginTool RPC.
+	SystemServiceCallPluginToolProcedure = "/dotfilesd.v1.SystemService/CallPluginTool"
 )
 
 // SystemServiceClient is a client for the dotfilesd.v1.SystemService service.
@@ -48,6 +54,10 @@ type SystemServiceClient interface {
 	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
 	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
 	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
+	// ListPlugins returns descriptors for all loaded plugins.
+	ListPlugins(context.Context, *connect.Request[dotfilesdv1.ListPluginsRequest]) (*connect.Response[dotfilesdv1.ListPluginsResponse], error)
+	// CallPluginTool invokes a tool on a loaded plugin.
+	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the dotfilesd.v1.SystemService service. By
@@ -79,14 +89,28 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("SudoMethods")),
 			connect.WithClientOptions(opts...),
 		),
+		listPlugins: connect.NewClient[dotfilesdv1.ListPluginsRequest, dotfilesdv1.ListPluginsResponse](
+			httpClient,
+			baseURL+SystemServiceListPluginsProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("ListPlugins")),
+			connect.WithClientOptions(opts...),
+		),
+		callPluginTool: connect.NewClient[dotfilesdv1.CallPluginToolRequest, dotfilesdv1.CallPluginToolResponse](
+			httpClient,
+			baseURL+SystemServiceCallPluginToolProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("CallPluginTool")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
-	ping        *connect.Client[dotfilesdv1.PingRequest, dotfilesdv1.PingResponse]
-	systemInfo  *connect.Client[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse]
-	sudoMethods *connect.Client[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse]
+	ping           *connect.Client[dotfilesdv1.PingRequest, dotfilesdv1.PingResponse]
+	systemInfo     *connect.Client[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse]
+	sudoMethods    *connect.Client[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse]
+	listPlugins    *connect.Client[dotfilesdv1.ListPluginsRequest, dotfilesdv1.ListPluginsResponse]
+	callPluginTool *connect.Client[dotfilesdv1.CallPluginToolRequest, dotfilesdv1.CallPluginToolResponse]
 }
 
 // Ping calls dotfilesd.v1.SystemService.Ping.
@@ -104,11 +128,25 @@ func (c *systemServiceClient) SudoMethods(ctx context.Context, req *connect.Requ
 	return c.sudoMethods.CallUnary(ctx, req)
 }
 
+// ListPlugins calls dotfilesd.v1.SystemService.ListPlugins.
+func (c *systemServiceClient) ListPlugins(ctx context.Context, req *connect.Request[dotfilesdv1.ListPluginsRequest]) (*connect.Response[dotfilesdv1.ListPluginsResponse], error) {
+	return c.listPlugins.CallUnary(ctx, req)
+}
+
+// CallPluginTool calls dotfilesd.v1.SystemService.CallPluginTool.
+func (c *systemServiceClient) CallPluginTool(ctx context.Context, req *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {
+	return c.callPluginTool.CallUnary(ctx, req)
+}
+
 // SystemServiceHandler is an implementation of the dotfilesd.v1.SystemService service.
 type SystemServiceHandler interface {
 	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
 	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
 	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
+	// ListPlugins returns descriptors for all loaded plugins.
+	ListPlugins(context.Context, *connect.Request[dotfilesdv1.ListPluginsRequest]) (*connect.Response[dotfilesdv1.ListPluginsResponse], error)
+	// CallPluginTool invokes a tool on a loaded plugin.
+	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -136,6 +174,18 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("SudoMethods")),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceListPluginsHandler := connect.NewUnaryHandler(
+		SystemServiceListPluginsProcedure,
+		svc.ListPlugins,
+		connect.WithSchema(systemServiceMethods.ByName("ListPlugins")),
+		connect.WithHandlerOptions(opts...),
+	)
+	systemServiceCallPluginToolHandler := connect.NewUnaryHandler(
+		SystemServiceCallPluginToolProcedure,
+		svc.CallPluginTool,
+		connect.WithSchema(systemServiceMethods.ByName("CallPluginTool")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dotfilesd.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SystemServicePingProcedure:
@@ -144,6 +194,10 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 			systemServiceSystemInfoHandler.ServeHTTP(w, r)
 		case SystemServiceSudoMethodsProcedure:
 			systemServiceSudoMethodsHandler.ServeHTTP(w, r)
+		case SystemServiceListPluginsProcedure:
+			systemServiceListPluginsHandler.ServeHTTP(w, r)
+		case SystemServiceCallPluginToolProcedure:
+			systemServiceCallPluginToolHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -163,4 +217,12 @@ func (UnimplementedSystemServiceHandler) SystemInfo(context.Context, *connect.Re
 
 func (UnimplementedSystemServiceHandler) SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.SudoMethods is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) ListPlugins(context.Context, *connect.Request[dotfilesdv1.ListPluginsRequest]) (*connect.Response[dotfilesdv1.ListPluginsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.ListPlugins is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.CallPluginTool is not implemented"))
 }

@@ -93,8 +93,11 @@ make deps           # go mod tidy + go mod download
 | `cmd/dotfilesd/main.go` | `main` | Daemon entry, logging setup, server start |
 | `cmd/dotfilesctl/main.go` | `main` | CLI client, subcommands |
 | `cmd/dotfilesctl/root.go` | `main` | Root command, persistent flags, MCP entry |
-| `internal/pkg/daemon/` | `daemon` | Daemon business logic (servers, session, exec) |
-| `internal/pkg/cli/` | `cli` | CLI business logic (clients, MCP dispatch, feedback) |
+| `internal/pkg/daemon/` | `daemon` | Daemon business logic (servers, session, exec, plugin) |
+| `internal/pkg/cli/` | `cli` | CLI business logic (clients, MCP dispatch, feedback, plugin) |
+| `internal/pkg/plugin/` | `plugin` | Plugin manager, builder, runtime, registry |
+| `plugin/` | `plugin` | Public plugin SDK (Serve, Tool, Context) |
+| `plugins/` | - | Example plugins |
 | `proto/dotfilesd/v1/dotfilesdv1/*.proto` | `dotfilesdv1` | Protobuf service definitions (split by domain) |
 | `proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/` | `dotfilesdv1connect` | Generated Connect-RPC clients |
 
@@ -107,6 +110,24 @@ make deps           # go mod tidy + go mod download
 3. Implement the handler in `internal/pkg/daemon/`
 4. Wire the handler in `internal/pkg/daemon/server.go`
 5. Add a CLI subcommand or MCP tool call in `cmd/dotfilesctl/` or `internal/pkg/cli/`
+
+## Adding a new plugin
+
+1. Create a directory under `plugins/<name>/` with a `main.go` and `go.mod`
+2. Use the SDK in `dotfilesd/plugin/`:
+   ```go
+   import "dotfilesd/plugin"
+   func main() { plugin.Serve(...) }
+   ```
+3. Define tools with `plugin.NewTool()` specifying input schemas and handler functions
+4. Use `ctx.Exec()`, `ctx.SudoExec()`, etc. to interact with the host through the daemon
+5. Add a `replace dotfilesd => /home/manu343726/dotfilesd` directive in the plugin's `go.mod`
+6. Run `go mod tidy` in the plugin directory
+7. Verify with `go build .`
+8. Restart the daemon to load the plugin: `systemctl --user restart dotfilesd`
+9. Verify with `dotfilesctl plugin list`
+
+For detailed plugin documentation, see `docs/plugins.md`.
 
 ## Logging
 

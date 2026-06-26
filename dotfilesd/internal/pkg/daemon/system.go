@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
 
+	"dotfilesd/internal/pkg/plugin"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
@@ -17,6 +19,7 @@ type systemServer struct {
 	mu        sync.Mutex
 	startedAt time.Time
 	sessions  *SessionStore
+	daemon    *Daemon // for plugin access
 }
 
 func (s *systemServer) Ping(ctx context.Context, req *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error) {
@@ -96,5 +99,54 @@ func (s *systemServer) SudoMethods(ctx context.Context, req *connect.Request[dot
 	})
 
 	slog.Log(ctx, levelTrace, "SudoMethods done", "response", resp.Msg)
+	return resp, nil
+}
+
+func (s *systemServer) ListPlugins(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.ListPluginsRequest],
+) (*connect.Response[dotfilesdv1.ListPluginsResponse], error) {
+	slog.Log(ctx, levelTrace, "ListPlugins", "request", req.Msg)
+	s.sessions.ResolveSession(req.Msg.GetSession())
+
+	if s.daemon == nil || s.daemon.pluginMgr == nil {
+		return connect.NewResponse(&dotfilesdv1.ListPluginsResponse{}), nil
+	}
+
+	plugins := s.daemon.pluginMgr.ListPlugins()
+	protoPlugins := make([]*dotfilesdv1.ExtensionDescriptor, len(plugins))
+	for i, p := range plugins {
+		protoPlugins[i] = plugin.ToProtoDescriptor(&p)
+	}
+
+	resp := connect.NewResponse(&dotfilesdv1.ListPluginsResponse{
+		Plugins: protoPlugins,
+	})
+	slog.Log(ctx, levelTrace, "ListPlugins done", "count", len(protoPlugins))
+	return resp, nil
+}
+
+func (s *systemServer) CallPluginTool(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.CallPluginToolRequest],
+) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {
+	slog.Log(ctx, levelTrace, "CallPluginTool", "request", req.Msg)
+	s.sessions.ResolveSession(req.Msg.GetSession())
+
+	if s.daemon == nil || s.daemon.pluginMgr == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("plugin system not initialized"))
+	}
+
+	text, isErr, structured, err := s.daemon.pluginMgr.CallTool(ctx, req.Msg.PluginName, req.Msg.ToolName, req.Msg.Arguments)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("call plugin tool: %w", err))
+	}
+
+	resp := connect.NewResponse(&dotfilesdv1.CallPluginToolResponse{
+		Text:           text,
+		IsError:        isErr,
+		StructuredData: structured,
+	})
+	slog.Log(ctx, levelTrace, "CallPluginTool done", "plugin", req.Msg.PluginName, "tool", req.Msg.ToolName)
 	return resp, nil
 }

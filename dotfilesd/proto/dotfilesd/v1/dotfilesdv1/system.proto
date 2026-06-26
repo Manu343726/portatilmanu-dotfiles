@@ -5,12 +5,36 @@ package dotfilesd.v1;
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/extension.proto";
 
-// SystemService - daemon health and system information.
+// SystemService - daemon health, system information, and plugin management.
 service SystemService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc SystemInfo(SystemInfoRequest) returns (SystemInfoResponse);
   rpc SudoMethods(SudoMethodsRequest) returns (SudoMethodsResponse);
+  // ListPlugins returns descriptors for all loaded plugins.
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
+  // CallPluginTool invokes a tool on a loaded plugin.
+  rpc CallPluginTool(CallPluginToolRequest) returns (CallPluginToolResponse);
+}
+
+message ListPluginsRequest {
+  Session session = 100;
+}
+message ListPluginsResponse {
+  repeated ExtensionDescriptor plugins = 1;
+}
+
+message CallPluginToolRequest {
+  Session session = 100;
+  string plugin_name = 1;
+  string tool_name = 2;
+  map<string, string> arguments = 3;
+}
+message CallPluginToolResponse {
+  string text = 1;
+  bool is_error = 2;
+  string structured_data = 3;
 }
 
 message PingRequest {

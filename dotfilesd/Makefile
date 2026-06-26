@@ -11,6 +11,10 @@
 #   service-stop     Stop and disable the daemon
 #   service-logs     View daemon logs
 #   clean          Remove build artifacts
+#   plugin-build   Build a plugin (usage: make plugin-build PLUGIN=weather)
+#   plugin-build-all Build all plugins from the plugins directory
+#   plugin-clean   Clear the plugin binary cache
+#   clean-all      Remove build artifacts + proto + plugin cache
 #
 
 BINARY_DIR  := $(HOME)/.local/bin
@@ -137,9 +141,38 @@ clean:
 	rm -f $(DAEMON_BIN) $(CLI_BIN) $(HASH_FILE)
 	@echo "binaries removed."
 
-clean-all: clean
+plugin-clean:
+	rm -rf $(HOME)/.cache/dotfilesd/plugins/
+	@echo "plugin cache cleared."
+
+clean-all: clean plugin-clean
 	rm -rf -- $(PROTO_OUT) $(CONNECT_OUT)
 	@echo "proto generated files removed."
+
+# -- Plugins ----------------------------------------------------------------
+
+PLUGIN_DIR ?= $(HOME)/.config/dotfilesd/plugins
+PLUGIN_CACHE_DIR ?= $(HOME)/.cache/dotfilesd/plugins
+
+# Build a specific plugin: make plugin-build PLUGIN=weather
+plugin-build:
+	@if [ -z "$(PLUGIN)" ]; then \
+		echo "Usage: make plugin-build PLUGIN=<name>"; \
+		exit 1; \
+	fi
+	@mkdir -p $(PLUGIN_CACHE_DIR)/$(PLUGIN)
+	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/plugin .
+	@echo "plugin '$(PLUGIN)' built."
+
+# Build all plugins found in the plugins directory
+plugin-build-all:
+	@for dir in $(PLUGIN_DIR)/*/; do \
+		name=$$(basename $$dir); \
+		echo "building plugin: $$name..."; \
+		mkdir -p $(PLUGIN_CACHE_DIR)/$$name; \
+		cd $$dir && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/plugin .; \
+	done
+	@echo "all plugins built."
 
 # -- Help -------------------------------------------------------------------
 

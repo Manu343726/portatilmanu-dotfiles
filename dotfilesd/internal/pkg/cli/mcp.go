@@ -157,6 +157,31 @@ var mcpTools = []toolDef{
 	},
 }
 
+// Plugin tool cache for MCP dynamic registration.
+var (
+	pluginTools   []toolDef
+	pluginToolsMu sync.Mutex
+)
+
+// getPluginTools returns cached plugin tool definitions, fetching from daemon if needed.
+func getPluginTools(clients *Clients) []toolDef {
+	pluginToolsMu.Lock()
+	defer pluginToolsMu.Unlock()
+	if pluginTools != nil {
+		return pluginTools
+	}
+	if err := clients.Connect(context.Background()); err != nil {
+		return nil
+	}
+	tools, err := ListPluginTools(clients, "")
+	if err != nil {
+		slog.Debug("failed to fetch plugin tools", "error", err)
+		return nil
+	}
+	pluginTools = tools
+	return pluginTools
+}
+
 // pendingSudoRequest represents a sudo execution waiting for the user to
 // enter their password via the MCP Apps webview. The exec_run goroutine
 // blocks on passwordCh until _sudo_submit_password sends the password.
@@ -349,7 +374,9 @@ func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 		})
 
 	case "tools/list":
-		return mcpResp(req.ID, map[string]any{"tools": mcpTools})
+		allTools := append([]toolDef{}, mcpTools...)
+		allTools = append(allTools, getPluginTools(clients)...)
+		return mcpResp(req.ID, map[string]any{"tools": allTools})
 
 	case "tools/call":
 		var params struct {
@@ -777,7 +804,53 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		}
 
 	default:
-		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
+		// Try plugin tool dispatch for qualified names (format: "<plugin>_<tool>").
+		if !strings.Contains(name, "_") {
+			return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
+		}
+		parts := splitQualifiedName(name)
+		if len(parts) < 2 {
+			return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
+		}
+
+		// Parse arguments into flat string map.
+		var rawArgs map[string]json.RawMessage
+		strArgs := make(map[string]string)
+		sessionID := ""
+		if err := json.Unmarshal(args, &rawArgs); err == nil {
+			for k, v := range rawArgs {
+				if k == "session_id" {
+					json.Unmarshal(v, &sessionID)
+					continue
+				}
+				var s string
+				if err := json.Unmarshal(v, &s); err == nil {
+					strArgs[k] = s
+				} else {
+					// Non-string value: pass as JSON.
+					strArgs[k] = string(v)
+				}
+			}
+		}
+
+		text, isError, structuredData, err := CallPluginToolViaMCP(clients, sessionID, name, strArgs)
+		if err != nil {
+			return mcpErr(id, -32603, fmt.Sprintf("plugin tool call failed: %v", err))
+		}
+		if isError {
+			return mcpResp(id, map[string]any{
+				"content": []map[string]any{{"type": "text", "text": text}},
+				"isError": true,
+			})
+		}
+		if structuredData != "" {
+			if text != "" {
+				text += "\n---\n" + structuredData
+			} else {
+				text = structuredData
+			}
+		}
+		return mcpToolResult(id, text)
 	}
 }
 

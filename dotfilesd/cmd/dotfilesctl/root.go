@@ -106,6 +106,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newMCPCmd())
 	cmd.AddCommand(newSessionCmd())
 	cmd.AddCommand(newScriptCmd())
+	cmd.AddCommand(newPluginCmd())
 
 	return cmd
 }

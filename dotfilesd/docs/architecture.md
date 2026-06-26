@@ -3,17 +3,24 @@
 dotfilesd has two components: a daemon and a CLI client that also serves as the MCP gateway.
 
 ```
-┌─────────────┐     Connect RPC (gRPC/HTTP)     ┌──────────────┐
-│ dotfilesctl ├───── port 9105 ─────────────────▶│  dotfilesd   │
-│ (CLI)       │                                  │  (daemon)    │
-└──────┬──────┘                                  └──────────────┘
-       │                                                    │
-       │ MCP (stdio)                              ┌─────────┴─────────┐
-┌──────┴──────┐                                   │  System calls     │
-│ opencode    │                                   │  (shell, git,     │
-│ (AI agent)  │                                   │   i3, tmux,       │
-└─────────────┘                                   │   pkexec)         │
-                                                    └───────────────────┘
+┌─────────────┐     Connect RPC (gRPC/HTTP)     ┌──────────────────┐
+│ dotfilesctl ├───── port 9105 ─────────────────▶│   dotfilesd      │
+│ (CLI)       │                                  │   (daemon)       │
+└──────┬──────┘                                  └────────┬─────────┘
+       │                                                  │
+       │ MCP (stdio)                           ┌──────────┴──────────┐
+┌──────┴──────┐                                │   Plugin Manager    │
+│ opencode    │                                │  ┌────┐ ┌────┐     │
+│ (AI agent)  │                                │  │Wthr│ │... │     │
+└─────────────┘                                │  └──┬─┘ └────┘     │
+                                               │     │ Extension    │
+                                               │     │ API          │
+                                               └─────┼──────────────┘
+                                                     │
+                                          ┌──────────▼──────────┐
+                                          │  Execution Context   │
+                                          │  (system calls)      │
+                                          └─────────────────────┘
 ```
 
 ## Port
@@ -140,12 +147,43 @@ dotfilesctl session finalize <id>             # mark session complete
 dotfilesctl session list                      # show active sessions
 ```
 
+## Plugin system
+
+Plugins are standalone Go programs that register tools (commands) which get
+automatically exposed as both CLI subcommands and MCP tools. See `docs/plugins.md`
+for the full documentation.
+
+### Two RPC services
+
+| Service | Direction | Purpose |
+|---------|-----------|---------|
+| **Extension API** | Daemon → Plugin | Daemon discovers tools and invokes them |
+| **Execution Context** | Plugin → Daemon | Plugin interacts with the host (exec, sudo, user prompts) |
+
+### Plugin lifecycle
+
+1. **Discovery** — Daemon scans `plugins_dir` for directories with `go.mod` or `main.go`
+2. **Build** — Daemon compiles sources and caches the binary by SHA-256 hash
+3. **Launch** — Daemon starts the plugin subprocess, reads handshake JSON from stdout
+4. **Registration** — Daemon calls `GetDescriptor` to discover tools and their schemas
+5. **Service** — Plugin tools are available via CLI (`dotfilesctl plugin call`) and MCP
+6. **Shutdown** — Daemon sends SIGTERM to all plugins on graceful shutdown
+
+### Key packages
+
+| Path | Purpose |
+|------|---------|
+| `dotfilesd/plugin/` | Public SDK for writing plugins |
+| `internal/pkg/plugin/` | Plugin manager, builder, runtime, registry |
+| `internal/pkg/daemon/plugin.go` | Daemon-side context backend + plugin init |
+| `plugins/` | Example plugins (e.g., `plugins/weather/`) |
+
 ## Data flow
 
 ```
 dotfilesctl        ──Connect RPC──▶  dotfilesd  ──exec.Command()──▶  git/i3/tmux/kitty/shell
 opencode ──stdio──▶  dotfilesctl mcp  ──Connect RPC──▶  dotfilesd
-```
+                                  plugin call ──Extension API──▶  plugin subprocess
 
 ## Directory layout
 
@@ -158,9 +196,19 @@ opencode ──stdio──▶  dotfilesctl mcp  ──Connect RPC──▶  dotf
 │   └── pkg/
 │       ├── daemon/          # Connect RPC server implementations
 │       │   └── session.go   # Session store + session service server
+│       │   └── plugin.go    # Context backend + plugin init
 │       ├── cli/             # CLI action logic + MCP server
-│       │   └── session.go   # CLI session actions (create, finalize, list)
+│       │   └── session.go   # CLI session actions
+│       │   └── plugin.go    # CLI plugin actions (list, call, MCP)
+│       ├── plugin/          # Plugin manager, builder, runtime, registry
 │       └── shared/          # Shared utilities
+├── plugin/                  # Public plugin SDK
+│   ├── serve.go             # Serve() entry point
+│   ├── tool.go              # Tool interface + SimpleFuncTool
+│   ├── context.go           # Context interface + client
+│   └── convert.go           # SDK ↔ proto type conversions
+├── plugins/                 # Example plugins
+│   └── weather/             # Weather forecast plugin
 ├── docs/                    # Documentation
 ├── proto/                   # Protobuf definitions + generated code
 │   └── dotfilesd/v1/dotfilesdv1/

@@ -197,9 +197,68 @@ exclude:
 ---
 ```
 
+### `plugin`
+
+Manage dynamic plugin extensions. See `docs/plugins.md` for full documentation.
+
+```sh
+# List loaded plugins and their tools
+dotfilesctl plugin list
+dotfilesctl plugin list -v    # verbose: show input schemas
+
+# Invoke a tool on a plugin
+dotfilesctl plugin call <plugin> <tool> key=value...
+```
+
+Example:
+
+```sh
+dotfilesctl plugin call weather forecast location=Madrid
+# → Weather for Madrid, Spain
+#    ⛅  +22°C
+
+dotfilesctl plugin list
+# → Name:        weather
+#    Display:     Weather
+#    Version:     1.0.0
+#    Description: Weather forecast plugin using wttr.in
+#    Tools:       forecast
+#
+#    1 plugin(s) loaded.
+```
+
 ## MCP tools (for AI agents)
 
 Available when opencode launches `dotfilesctl mcp` as a stdio subprocess.
+
+### Static tools
+
+| Tool | Service | Description |
+|------|---------|-------------|
+| `system_ping` | SystemService | Daemon health check |
+| `system_info` | SystemService | Detailed system information |
+| `system_sudo` | SystemService | Available sudo methods |
+| `dotfiles_status` | DotfilesService | Dotfiles repo status |
+| `dotfiles_git` | DotfilesService | Git operations |
+| `exec_run` | ExecService | Execute shell commands |
+| `config_reload` | ConfigService | Reload dotfiles configs |
+| `config_reconfigure` | ConfigService | Change daemon runtime config |
+| `config_restart` | ConfigService | Gracefully restart the daemon |
+| `script_run` | ScriptService | Run multi-step scripts |
+| `script_list` | ScriptService | List registered scripts |
+
+### Plugin tools (dynamic)
+
+When plugins are loaded, their tools are automatically available as MCP tools
+qualified with the plugin name: `<plugin>_<tool>`.
+
+Example with the weather plugin loaded:
+
+| Tool | Description |
+|------|-------------|
+| `weather_forecast` | Get weather forecast for a location |
+
+### Detailed reference
 
 ### `system_ping`
 
