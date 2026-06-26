@@ -4,9 +4,9 @@
 // by using the daemon's exec context to call out to wttr.in via curl.
 //
 // This plugin showcases all major SDK features:
-//   - Tool definition with input schema
-//   - Shell command execution via Context.Exec()
+//   - Tool definition with input schema (proto-generated types)
 //   - Real-time streaming output via ctx.Stdout() / ctx.Stderr()
+//   - Shell command execution via Context.Exec()
 //   - Error handling
 package main
 
@@ -16,13 +16,14 @@ import (
 	"strings"
 
 	"dotfilesd/plugin"
+	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
 func main() {
 	plugin.Serve("weather", "Weather", "1.0.0", "Weather forecast plugin using wttr.in",
 		plugin.NewTool("forecast", "Get weather forecast for a location",
-			plugin.ToolInputSchema{
-				Properties: map[string]plugin.PropertySchema{
+			&dotfilesdv1.ToolInputSchema{
+				Properties: map[string]*dotfilesdv1.PropertySchema{
 					"location": {
 						Type:        "string",
 						Description: "Location to get weather for (city name, ZIP code, IP address, etc.)",
@@ -35,7 +36,7 @@ func main() {
 				},
 				Required: []string{"location"},
 			},
-			plugin.CLIHints{
+			&dotfilesdv1.CLIHints{
 				CommandPath: "weather forecast",
 				Category:    "utilities",
 			},

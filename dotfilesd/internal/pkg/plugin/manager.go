@@ -45,7 +45,7 @@ type PluginTreeEntry struct {
 	Description string
 	Enabled     bool
 	Children    []PluginTreeEntry
-	Plugin      *ExtensionDescriptor // set only for loaded leaf plugins
+	Plugin      *dotfilesdv1.ExtensionDescriptor // set only for loaded leaf plugins
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ func (m *Manager) CallTool(ctx context.Context, pluginName, toolName string, arg
 }
 
 // GetDescriptor returns the cached descriptor for a plugin.
-func (m *Manager) GetDescriptor(pluginName string) (*ExtensionDescriptor, bool) {
+func (m *Manager) GetDescriptor(pluginName string) (*dotfilesdv1.ExtensionDescriptor, bool) {
 	slog.Debug("manager GetDescriptor", "plugin", pluginName)
 	info, ok := m.registry.Get(pluginName)
 	if !ok {
@@ -347,11 +347,11 @@ func (m *Manager) GetDescriptor(pluginName string) (*ExtensionDescriptor, bool) 
 }
 
 // ListPlugins returns all loaded plugin descriptors (flat list).
-func (m *Manager) ListPlugins() []ExtensionDescriptor {
+func (m *Manager) ListPlugins() []dotfilesdv1.ExtensionDescriptor {
 	slog.Debug("manager ListPlugins")
 	infos := m.registry.List()
 	slog.Debug("registry returned plugins", "count", len(infos))
-	result := make([]ExtensionDescriptor, len(infos))
+	result := make([]dotfilesdv1.ExtensionDescriptor, len(infos))
 	for i, info := range infos {
 		if info.Descriptor != nil {
 			result[i] = *info.Descriptor
@@ -378,7 +378,7 @@ func ToProtoPluginTree(entry *PluginTreeEntry) *dotfilesdv1.PluginTreeEntry {
 		Enabled:     entry.Enabled,
 	}
 	if entry.Plugin != nil {
-		pe.Plugin = ToProtoDescriptor(entry.Plugin)
+		pe.Plugin = entry.Plugin
 	}
 	for i := range entry.Children {
 		pe.Children = append(pe.Children, ToProtoPluginTree(&entry.Children[i]))

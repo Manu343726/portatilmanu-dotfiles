@@ -10,13 +10,13 @@
 //	func main() {
 //	    plugin.Serve("hello", "Hello World", "1.0.0", "A sample plugin",
 //	        plugin.NewTool("greet", "Greet someone",
-//	            plugin.ToolInputSchema{
-//	                Properties: map[string]plugin.PropertySchema{
+//	            &dotfilesdv1.ToolInputSchema{
+//	                Properties: map[string]*dotfilesdv1.PropertySchema{
 //	                    "name": {Type: "string", Description: "Name to greet"},
 //	                },
 //	                Required: []string{"name"},
 //	            },
-//	            plugin.CLIHints{CommandPath: "greet"},
+//	            &dotfilesdv1.CLIHints{CommandPath: "greet"},
 //	            func(ctx plugin.Context, args map[string]string) error {
 //	                fmt.Fprintf(ctx.Stdout(), "Hello, %s!", args["name"])
 //	                return nil
@@ -133,8 +133,8 @@ func (s *extensionSvcServer) GetDescriptor(
 		toolsPB[i] = &dotfilesdv1.ToolDescriptor{
 			Name:        t.Name(),
 			Description: t.Description(),
-			Input:       toProtoInput(t.Input()),
-			Cli:         toProtoCLI(t.CLI()),
+			Input:       t.Input(),
+			Cli:         t.CLI(),
 		}
 	}
 

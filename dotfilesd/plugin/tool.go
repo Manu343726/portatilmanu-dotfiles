@@ -1,5 +1,7 @@
 package plugin
 
+import dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
 // Tool is the interface that every plugin tool must implement.
 //
 // The daemon calls GetDescriptor to enumerate all tools from a plugin, then
@@ -19,10 +21,10 @@ type Tool interface {
 	Description() string
 
 	// Input returns the schema describing expected input parameters.
-	Input() ToolInputSchema
+	Input() *dotfilesdv1.ToolInputSchema
 
 	// CLI returns CLI generation hints for this tool.
-	CLI() CLIHints
+	CLI() *dotfilesdv1.CLIHints
 
 	// Run executes the tool with the given arguments.
 	//
@@ -40,8 +42,8 @@ type Tool interface {
 type SimpleFuncTool struct {
 	name        string
 	description string
-	input       ToolInputSchema
-	cli         CLIHints
+	input       *dotfilesdv1.ToolInputSchema
+	cli         *dotfilesdv1.CLIHints
 	fn          func(ctx Context, args map[string]string) error
 }
 
@@ -54,10 +56,10 @@ func (t *SimpleFuncTool) Name() string { return t.name }
 func (t *SimpleFuncTool) Description() string { return t.description }
 
 // Input returns the tool's input schema.
-func (t *SimpleFuncTool) Input() ToolInputSchema { return t.input }
+func (t *SimpleFuncTool) Input() *dotfilesdv1.ToolInputSchema { return t.input }
 
 // CLI returns the tool's CLI hints.
-func (t *SimpleFuncTool) CLI() CLIHints { return t.cli }
+func (t *SimpleFuncTool) CLI() *dotfilesdv1.CLIHints { return t.cli }
 
 // Run executes the tool function.
 func (t *SimpleFuncTool) Run(ctx Context, args map[string]string) error {
@@ -69,13 +71,13 @@ func (t *SimpleFuncTool) Run(ctx Context, args map[string]string) error {
 // Example:
 //
 //	plugin.NewTool("greet", "Greet someone",
-//	    plugin.ToolInputSchema{
-//	        Properties: map[string]plugin.PropertySchema{
+//	    &dotfilesdv1.ToolInputSchema{
+//	        Properties: map[string]*dotfilesdv1.PropertySchema{
 //	            "name": {Type: "string", Description: "Name to greet"},
 //	        },
 //	        Required: []string{"name"},
 //	    },
-//	    plugin.CLIHints{CommandPath: "greet"},
+//	    &dotfilesdv1.CLIHints{CommandPath: "greet"},
 //	    func(ctx plugin.Context, args map[string]string) error {
 //	        name := args["name"]
 //	        if name == "" {
@@ -85,7 +87,7 @@ func (t *SimpleFuncTool) Run(ctx Context, args map[string]string) error {
 //	        return nil
 //	    },
 //	)
-func NewTool(name, description string, input ToolInputSchema, cli CLIHints, fn func(ctx Context, args map[string]string) error) Tool {
+func NewTool(name, description string, input *dotfilesdv1.ToolInputSchema, cli *dotfilesdv1.CLIHints, fn func(ctx Context, args map[string]string) error) Tool {
 	return &SimpleFuncTool{
 		name:        name,
 		description: description,

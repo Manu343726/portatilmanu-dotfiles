@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+
+	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
 // PluginInfo holds the metadata and client for a loaded plugin.
 type PluginInfo struct {
-	Descriptor *ExtensionDescriptor // plugin capabilities
-	Client     *Client              // RPC client for calling the plugin
-	Process    *Process             // running plugin subprocess
+	Descriptor *dotfilesdv1.ExtensionDescriptor // plugin capabilities
+	Client     *Client                         // RPC client for calling the plugin
+	Process    *Process                        // running plugin subprocess
 }
 
 // Registry maintains a thread-safe map of loaded plugins.

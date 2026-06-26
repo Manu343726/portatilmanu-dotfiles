@@ -115,8 +115,8 @@ func (s *systemServer) ListPlugins(
 
 	plugins := s.daemon.pluginMgr.ListPlugins()
 	protoPlugins := make([]*dotfilesdv1.ExtensionDescriptor, len(plugins))
-	for i, p := range plugins {
-		protoPlugins[i] = plugin.ToProtoDescriptor(&p)
+	for i := range plugins {
+		protoPlugins[i] = &plugins[i]
 	}
 
 	resp := connect.NewResponse(&dotfilesdv1.ListPluginsResponse{
