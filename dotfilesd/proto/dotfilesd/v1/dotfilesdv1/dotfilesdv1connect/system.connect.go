@@ -44,6 +44,9 @@ const (
 	// SystemServiceListPluginsProcedure is the fully-qualified name of the SystemService's ListPlugins
 	// RPC.
 	SystemServiceListPluginsProcedure = "/dotfilesd.v1.SystemService/ListPlugins"
+	// SystemServiceListPluginTreeProcedure is the fully-qualified name of the SystemService's
+	// ListPluginTree RPC.
+	SystemServiceListPluginTreeProcedure = "/dotfilesd.v1.SystemService/ListPluginTree"
 	// SystemServiceCallPluginToolProcedure is the fully-qualified name of the SystemService's
 	// CallPluginTool RPC.
 	SystemServiceCallPluginToolProcedure = "/dotfilesd.v1.SystemService/CallPluginTool"
@@ -54,8 +57,11 @@ type SystemServiceClient interface {
 	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
 	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
 	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
-	// ListPlugins returns descriptors for all loaded plugins.
+	// ListPlugins returns descriptors for all loaded plugins (flat list).
 	ListPlugins(context.Context, *connect.Request[dotfilesdv1.ListPluginsRequest]) (*connect.Response[dotfilesdv1.ListPluginsResponse], error)
+	// ListPluginTree returns the plugin directory hierarchy with loaded
+	// plugin descriptors at leaf nodes.
+	ListPluginTree(context.Context, *connect.Request[dotfilesdv1.ListPluginTreeRequest]) (*connect.Response[dotfilesdv1.ListPluginTreeResponse], error)
 	// CallPluginTool invokes a tool on a loaded plugin.
 	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error)
 }
@@ -95,6 +101,12 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("ListPlugins")),
 			connect.WithClientOptions(opts...),
 		),
+		listPluginTree: connect.NewClient[dotfilesdv1.ListPluginTreeRequest, dotfilesdv1.ListPluginTreeResponse](
+			httpClient,
+			baseURL+SystemServiceListPluginTreeProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("ListPluginTree")),
+			connect.WithClientOptions(opts...),
+		),
 		callPluginTool: connect.NewClient[dotfilesdv1.CallPluginToolRequest, dotfilesdv1.CallPluginToolResponse](
 			httpClient,
 			baseURL+SystemServiceCallPluginToolProcedure,
@@ -110,6 +122,7 @@ type systemServiceClient struct {
 	systemInfo     *connect.Client[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse]
 	sudoMethods    *connect.Client[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse]
 	listPlugins    *connect.Client[dotfilesdv1.ListPluginsRequest, dotfilesdv1.ListPluginsResponse]
+	listPluginTree *connect.Client[dotfilesdv1.ListPluginTreeRequest, dotfilesdv1.ListPluginTreeResponse]
 	callPluginTool *connect.Client[dotfilesdv1.CallPluginToolRequest, dotfilesdv1.CallPluginToolResponse]
 }
 
@@ -133,6 +146,11 @@ func (c *systemServiceClient) ListPlugins(ctx context.Context, req *connect.Requ
 	return c.listPlugins.CallUnary(ctx, req)
 }
 
+// ListPluginTree calls dotfilesd.v1.SystemService.ListPluginTree.
+func (c *systemServiceClient) ListPluginTree(ctx context.Context, req *connect.Request[dotfilesdv1.ListPluginTreeRequest]) (*connect.Response[dotfilesdv1.ListPluginTreeResponse], error) {
+	return c.listPluginTree.CallUnary(ctx, req)
+}
+
 // CallPluginTool calls dotfilesd.v1.SystemService.CallPluginTool.
 func (c *systemServiceClient) CallPluginTool(ctx context.Context, req *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {
 	return c.callPluginTool.CallUnary(ctx, req)
@@ -143,8 +161,11 @@ type SystemServiceHandler interface {
 	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
 	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
 	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
-	// ListPlugins returns descriptors for all loaded plugins.
+	// ListPlugins returns descriptors for all loaded plugins (flat list).
 	ListPlugins(context.Context, *connect.Request[dotfilesdv1.ListPluginsRequest]) (*connect.Response[dotfilesdv1.ListPluginsResponse], error)
+	// ListPluginTree returns the plugin directory hierarchy with loaded
+	// plugin descriptors at leaf nodes.
+	ListPluginTree(context.Context, *connect.Request[dotfilesdv1.ListPluginTreeRequest]) (*connect.Response[dotfilesdv1.ListPluginTreeResponse], error)
 	// CallPluginTool invokes a tool on a loaded plugin.
 	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error)
 }
@@ -180,6 +201,12 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("ListPlugins")),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceListPluginTreeHandler := connect.NewUnaryHandler(
+		SystemServiceListPluginTreeProcedure,
+		svc.ListPluginTree,
+		connect.WithSchema(systemServiceMethods.ByName("ListPluginTree")),
+		connect.WithHandlerOptions(opts...),
+	)
 	systemServiceCallPluginToolHandler := connect.NewUnaryHandler(
 		SystemServiceCallPluginToolProcedure,
 		svc.CallPluginTool,
@@ -196,6 +223,8 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 			systemServiceSudoMethodsHandler.ServeHTTP(w, r)
 		case SystemServiceListPluginsProcedure:
 			systemServiceListPluginsHandler.ServeHTTP(w, r)
+		case SystemServiceListPluginTreeProcedure:
+			systemServiceListPluginTreeHandler.ServeHTTP(w, r)
 		case SystemServiceCallPluginToolProcedure:
 			systemServiceCallPluginToolHandler.ServeHTTP(w, r)
 		default:
@@ -221,6 +250,10 @@ func (UnimplementedSystemServiceHandler) SudoMethods(context.Context, *connect.R
 
 func (UnimplementedSystemServiceHandler) ListPlugins(context.Context, *connect.Request[dotfilesdv1.ListPluginsRequest]) (*connect.Response[dotfilesdv1.ListPluginsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.ListPlugins is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) ListPluginTree(context.Context, *connect.Request[dotfilesdv1.ListPluginTreeRequest]) (*connect.Response[dotfilesdv1.ListPluginTreeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.ListPluginTree is not implemented"))
 }
 
 func (UnimplementedSystemServiceHandler) CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.Response[dotfilesdv1.CallPluginToolResponse], error) {

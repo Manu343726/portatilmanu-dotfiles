@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+import "proto/dotfilesd/v1/dotfilesdv1/extension.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
+// PluginTreeEntry represents a node in the plugin directory hierarchy.
+// Directories are category groups; leaf entries are loaded Go plugins
+// with their ExtensionDescriptor.
+message PluginTreeEntry {
+  // Basename (e.g. "weather", "tools").
+  string name = 1;
+  // Relative path from the plugins root (e.g. "tools/weather").
+  string path = 2;
+  // True if this is a directory with children (not a plugin itself).
+  bool is_directory = 3;
+  // Description from README.md front matter or plugin descriptor.
+  string description = 4;
+  // Whether the entry is enabled (controlled via README.md front matter).
+  bool enabled = 5;
+  // Child entries (only for directories).
+  repeated PluginTreeEntry children = 6;
+  // The plugin descriptor, set only for leaf (loaded) entries.
+  ExtensionDescriptor plugin = 7;
+}
+
+message ListPluginTreeRequest {
+  Session session = 100;
+}
+
+message ListPluginTreeResponse {
+  repeated PluginTreeEntry entries = 1;
+}

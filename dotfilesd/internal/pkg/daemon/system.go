@@ -126,6 +126,30 @@ func (s *systemServer) ListPlugins(
 	return resp, nil
 }
 
+func (s *systemServer) ListPluginTree(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.ListPluginTreeRequest],
+) (*connect.Response[dotfilesdv1.ListPluginTreeResponse], error) {
+	slog.Log(ctx, levelTrace, "ListPluginTree", "request", req.Msg)
+	s.sessions.ResolveSession(req.Msg.GetSession())
+
+	if s.daemon == nil || s.daemon.pluginMgr == nil {
+		return connect.NewResponse(&dotfilesdv1.ListPluginTreeResponse{}), nil
+	}
+
+	tree := s.daemon.pluginMgr.ListPluginTree()
+	protoEntries := make([]*dotfilesdv1.PluginTreeEntry, len(tree))
+	for i := range tree {
+		protoEntries[i] = plugin.ToProtoPluginTree(&tree[i])
+	}
+
+	resp := connect.NewResponse(&dotfilesdv1.ListPluginTreeResponse{
+		Entries: protoEntries,
+	})
+	slog.Log(ctx, levelTrace, "ListPluginTree done", "count", len(protoEntries))
+	return resp, nil
+}
+
 func (s *systemServer) CallPluginTool(
 	ctx context.Context,
 	req *connect.Request[dotfilesdv1.CallPluginToolRequest],

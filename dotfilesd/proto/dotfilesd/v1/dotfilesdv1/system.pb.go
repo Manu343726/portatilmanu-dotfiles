@@ -609,7 +609,7 @@ var File_proto_dotfilesd_v1_dotfilesdv1_system_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\x1a.proto/dotfilesd/v1/dotfilesdv1/extension.proto\"E\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/system.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\x1a.proto/dotfilesd/v1/dotfilesdv1/extension.proto\x1a+proto/dotfilesd/v1/dotfilesdv1/plugin.proto\"E\n" +
 	"\x12ListPluginsRequest\x12/\n" +
 	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"R\n" +
 	"\x13ListPluginsResponse\x12;\n" +
@@ -654,13 +654,14 @@ const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
-	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xa4\x03\n" +
+	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\x81\x04\n" +
 	"\rSystemService\x12=\n" +
 	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
 	"\n" +
 	"SystemInfo\x12\x1f.dotfilesd.v1.SystemInfoRequest\x1a .dotfilesd.v1.SystemInfoResponse\x12R\n" +
 	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponse\x12R\n" +
 	"\vListPlugins\x12 .dotfilesd.v1.ListPluginsRequest\x1a!.dotfilesd.v1.ListPluginsResponse\x12[\n" +
+	"\x0eListPluginTree\x12#.dotfilesd.v1.ListPluginTreeRequest\x1a$.dotfilesd.v1.ListPluginTreeResponse\x12[\n" +
 	"\x0eCallPluginTool\x12#.dotfilesd.v1.CallPluginToolRequest\x1a$.dotfilesd.v1.CallPluginToolResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
@@ -690,6 +691,8 @@ var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_goTypes = []any{
 	nil,                            // 10: dotfilesd.v1.CallPluginToolRequest.ArgumentsEntry
 	(*Session)(nil),                // 11: dotfilesd.v1.Session
 	(*ExtensionDescriptor)(nil),    // 12: dotfilesd.v1.ExtensionDescriptor
+	(*ListPluginTreeRequest)(nil),  // 13: dotfilesd.v1.ListPluginTreeRequest
+	(*ListPluginTreeResponse)(nil), // 14: dotfilesd.v1.ListPluginTreeResponse
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_depIdxs = []int32{
 	11, // 0: dotfilesd.v1.ListPluginsRequest.session:type_name -> dotfilesd.v1.Session
@@ -703,14 +706,16 @@ var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_depIdxs = []int32{
 	6,  // 8: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
 	8,  // 9: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
 	0,  // 10: dotfilesd.v1.SystemService.ListPlugins:input_type -> dotfilesd.v1.ListPluginsRequest
-	2,  // 11: dotfilesd.v1.SystemService.CallPluginTool:input_type -> dotfilesd.v1.CallPluginToolRequest
-	5,  // 12: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
-	7,  // 13: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
-	9,  // 14: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
-	1,  // 15: dotfilesd.v1.SystemService.ListPlugins:output_type -> dotfilesd.v1.ListPluginsResponse
-	3,  // 16: dotfilesd.v1.SystemService.CallPluginTool:output_type -> dotfilesd.v1.CallPluginToolResponse
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
+	13, // 11: dotfilesd.v1.SystemService.ListPluginTree:input_type -> dotfilesd.v1.ListPluginTreeRequest
+	2,  // 12: dotfilesd.v1.SystemService.CallPluginTool:input_type -> dotfilesd.v1.CallPluginToolRequest
+	5,  // 13: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
+	7,  // 14: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	9,  // 15: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
+	1,  // 16: dotfilesd.v1.SystemService.ListPlugins:output_type -> dotfilesd.v1.ListPluginsResponse
+	14, // 17: dotfilesd.v1.SystemService.ListPluginTree:output_type -> dotfilesd.v1.ListPluginTreeResponse
+	3,  // 18: dotfilesd.v1.SystemService.CallPluginTool:output_type -> dotfilesd.v1.CallPluginToolResponse
+	13, // [13:19] is the sub-list for method output_type
+	7,  // [7:13] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -723,6 +728,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_system_proto_init() {
 	}
 	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
 	file_proto_dotfilesd_v1_dotfilesdv1_extension_proto_init()
+	file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
