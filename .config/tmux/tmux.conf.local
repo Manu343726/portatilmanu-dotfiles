@@ -502,15 +502,19 @@ tmux_conf_uninstall_plugins_on_reload=true
 # }
 # # usage: #{gpu_profile}
 # gpu_profile() {
-#   local mode
-#   mode=$(supergfxctl -g 2>/dev/null)
-#   case "$mode" in
-#     AsusMuxDgpu) printf '#[fg=#E8871A]NVIDIA#[default] ' ;;   # monokai orange
-#     Hybrid)      printf '#[fg=#A6E22E]HYBRID#[default] ' ;;   # monokai green
-#     Integrated)  printf '#[fg=#66D9EF]IGPU#[default] ' ;;     # monokai blue
-#     AsusEgpu)    printf '#[fg=#AE81FF]EGPU#[default] ' ;;     # monokai purple
-#     *)           printf '? ' ;;
-#   esac
+#   local mux dgpu egpu
+#   mux=$(cat /sys/devices/platform/asus-nb-wmi/gpu_mux_mode 2>/dev/null)
+#   dgpu=$(cat /sys/devices/platform/asus-nb-wmi/dgpu_disable 2>/dev/null)
+#   egpu=$(cat /sys/devices/platform/asus-nb-wmi/egpu_connected 2>/dev/null)
+#   if [ "$egpu" = "1" ]; then
+#     printf '#[fg=#AE81FF]EGPU#[default] '      # monokai purple
+#   elif [ "$mux" = "1" ]; then
+#     printf '#[fg=#E8871A]NVIDIA#[default] '    # monokai orange
+#   elif [ "$dgpu" = "1" ]; then
+#     printf '#[fg=#66D9EF]IGPU#[default] '      # monokai blue
+#   else
+#     printf '#[fg=#A6E22E]HYBRID#[default] '   # monokai green
+#   fi
 #   sleep 5
 # }
 # 
