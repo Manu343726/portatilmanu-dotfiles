@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -77,10 +78,12 @@ func RunCallPluginTool(clients *Clients, sessionID, pluginName, toolName string,
 	resp, err := clients.Sys.CallPluginTool(context.Background(), req)
 	if err != nil {
 		slog.Error("call plugin tool failed", "error", err)
+		fmt.Fprintf(os.Stderr, "error: call plugin tool: %v\n", err)
 		return fmt.Errorf("call plugin tool: %w", err)
 	}
 
 	if resp.Msg.IsError {
+		fmt.Fprintln(os.Stderr, resp.Msg.Text)
 		return fmt.Errorf(resp.Msg.Text)
 	}
 	fmt.Println(resp.Msg.Text)
@@ -174,6 +177,55 @@ func splitQualifiedName(name string) []string {
 		return []string{name}
 	}
 	return []string{name[:idx], name[idx+1:]}
+}
+
+// RunListPluginTools shows tools for a single plugin.
+func RunListPluginTools(clients *Clients, sessionID, pluginName string) error {
+	slog.Debug("list plugin tools requested", "plugin", pluginName, "session_id", sessionID)
+	req := connect.NewRequest(&dotfilesdv1.ListPluginsRequest{Session: sessionProto(sessionID)})
+	resp, err := clients.Sys.ListPlugins(context.Background(), req)
+	if err != nil {
+		return fmt.Errorf("list plugins failed: %w", err)
+	}
+
+	for _, p := range resp.Msg.Plugins {
+		if p.Name != pluginName {
+			continue
+		}
+
+		fmt.Printf("Plugin: %s (%s v%s)\n", p.Name, p.DisplayName, p.Version)
+		if p.Description != "" {
+			fmt.Printf("  %s\n\n", p.Description)
+		}
+		if len(p.Tools) == 0 {
+			fmt.Println("  No tools exposed.")
+			return nil
+		}
+		fmt.Println("Tools:")
+		for _, t := range p.Tools {
+			fmt.Printf("  %s", t.Name)
+			if t.Description != "" {
+				fmt.Printf(" - %s", t.Description)
+			}
+			fmt.Println()
+			if t.Input != nil && len(t.Input.Properties) > 0 {
+				for name, prop := range t.Input.Properties {
+					reqTag := prop.Type
+					if containsString(t.Input.Required, name) {
+						reqTag += " (required)"
+					}
+					fmt.Printf("    %s: %s\n", name, reqTag)
+					if prop.Description != "" {
+						fmt.Printf("      %s\n", prop.Description)
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "error: plugin %q not found\n", pluginName)
+	return fmt.Errorf("plugin %q not found", pluginName)
 }
 
 // containsString checks if a string is in a slice.
