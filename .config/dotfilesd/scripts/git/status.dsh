@@ -1,0 +1,5 @@
+---
+description: Show working tree status
+---
+
+git status --short

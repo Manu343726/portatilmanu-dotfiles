@@ -37,9 +37,9 @@ type CLIHints struct {
 
 // ExtensionDescriptor describes a plugin's capabilities.
 type ExtensionDescriptor struct {
-	Name        string          `json:"name"`
-	DisplayName string          `json:"display_name"`
-	Version     string          `json:"version"`
-	Description string          `json:"description"`
+	Name        string           `json:"name"`
+	DisplayName string           `json:"display_name"`
+	Version     string           `json:"version"`
+	Description string           `json:"description"`
 	Tools       []ToolDescriptor `json:"tools"`
 }

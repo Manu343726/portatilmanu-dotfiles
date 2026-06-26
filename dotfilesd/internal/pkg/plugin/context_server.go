@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -71,12 +72,16 @@ func NewContextServerHandler(opts ContextServerOptions) http.Handler {
 
 func (s *contextServer) authenticate(req connect.AnyRequest) error {
 	if s.opts.Token == "" {
+		slog.Debug("context server auth: token validation disabled")
 		return nil // token validation disabled
 	}
 	token := req.Header().Get("X-Dotfiles-Context-Token")
+	slog.Debug("context server auth check", "token_present", token != "")
 	if token == "" || token != s.opts.Token {
+		slog.Debug("context server auth rejected", "token_provided", token != "")
 		return connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid or missing context token"))
 	}
+	slog.Debug("context server auth accepted")
 	return nil
 }
 
@@ -95,11 +100,14 @@ func (s *contextServer) Exec(
 		sessionID = req.Msg.Session.Id
 	}
 
+	slog.Debug("context server Exec", "session", sessionID, "command", req.Msg.Command)
 	exitCode, stdout, stderr, err := s.opts.Backend.Exec(ctx, sessionID, req.Msg.Command)
 	if err != nil {
+		slog.Debug("context server Exec failed", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("exec: %w", err))
 	}
 
+	slog.Debug("context server Exec completed", "exit_code", exitCode, "stdout_len", len(stdout), "stderr_len", len(stderr))
 	return connect.NewResponse(&dotfilesdv1.ExecResponse{
 		ExitCode: exitCode,
 		Stdout:   stdout,
@@ -122,11 +130,14 @@ func (s *contextServer) SudoExec(
 		sessionID = req.Msg.Session.Id
 	}
 
+	slog.Debug("context server SudoExec", "session", sessionID, "command", req.Msg.Command)
 	exitCode, stdout, stderr, err := s.opts.Backend.SudoExec(ctx, sessionID, req.Msg.Command)
 	if err != nil {
+		slog.Debug("context server SudoExec failed", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sudo exec: %w", err))
 	}
 
+	slog.Debug("context server SudoExec completed", "exit_code", exitCode, "stdout_len", len(stdout), "stderr_len", len(stderr))
 	return connect.NewResponse(&dotfilesdv1.ContextSudoExecResponse{
 		ExitCode: exitCode,
 		Stdout:   stdout,
@@ -149,11 +160,14 @@ func (s *contextServer) RequestInput(
 		sessionID = req.Msg.Session.Id
 	}
 
+	slog.Debug("context server RequestInput", "session", sessionID, "prompt", req.Msg.Prompt, "sensitive", req.Msg.Sensitive)
 	value, err := s.opts.Backend.RequestInput(ctx, sessionID, req.Msg.Prompt, req.Msg.Default, req.Msg.Sensitive)
 	if err != nil {
+		slog.Debug("context server RequestInput failed", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("request input: %w", err))
 	}
 
+	slog.Debug("context server RequestInput completed", "len", len(value))
 	return connect.NewResponse(&dotfilesdv1.InputResponse{
 		Value: value,
 	}), nil
@@ -174,11 +188,14 @@ func (s *contextServer) RequestConfirm(
 		sessionID = req.Msg.Session.Id
 	}
 
+	slog.Debug("context server RequestConfirm", "session", sessionID, "message", req.Msg.Message, "default", req.Msg.DefaultConfirm)
 	confirmed, err := s.opts.Backend.RequestConfirm(ctx, sessionID, req.Msg.Message, req.Msg.DefaultConfirm)
 	if err != nil {
+		slog.Debug("context server RequestConfirm failed", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("request confirm: %w", err))
 	}
 
+	slog.Debug("context server RequestConfirm completed", "confirmed", confirmed)
 	return connect.NewResponse(&dotfilesdv1.ConfirmResponse{
 		Confirmed: confirmed,
 	}), nil
@@ -199,11 +216,14 @@ func (s *contextServer) RequestChoose(
 		sessionID = req.Msg.Session.Id
 	}
 
+	slog.Debug("context server RequestChoose", "session", sessionID, "prompt", req.Msg.Prompt, "options", req.Msg.Options)
 	selectedIndex, selectedOption, err := s.opts.Backend.RequestChoose(ctx, sessionID, req.Msg.Prompt, req.Msg.Options, int(req.Msg.DefaultIndex))
 	if err != nil {
+		slog.Debug("context server RequestChoose failed", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("request choose: %w", err))
 	}
 
+	slog.Debug("context server RequestChoose completed", "selected_index", selectedIndex, "selected_option", selectedOption)
 	return connect.NewResponse(&dotfilesdv1.ChooseResponse{
 		SelectedIndex:  selectedIndex,
 		SelectedOption: selectedOption,

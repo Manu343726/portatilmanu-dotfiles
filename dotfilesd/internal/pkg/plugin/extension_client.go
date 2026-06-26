@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -70,16 +71,19 @@ func NewClient(pluginURL string) *Client {
 
 // GetDescriptor retrieves the plugin's capabilities.
 func (c *Client) GetDescriptor(ctx context.Context) (*ExtensionDescriptor, error) {
+	slog.Debug("client GetDescriptor: calling plugin extension API")
 	resp, err := c.client.GetDescriptor(ctx, connect.NewRequest(&dotfilesdv1.GetDescriptorRequest{}))
 	if err != nil {
+		slog.Debug("client GetDescriptor failed", "error", err)
 		return nil, fmt.Errorf("get descriptor: %w", err)
 	}
-
+	slog.Debug("client GetDescriptor response received", "name", resp.Msg.Descriptor_)
 	return fromProtoDescriptor(resp.Msg.Descriptor_), nil
 }
 
 // CallTool invokes a named tool on the plugin with the given arguments.
 func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]string) (text string, isError bool, structuredData string, err error) {
+	slog.Debug("client CallTool", "tool", toolName, "args", args)
 	req := connect.NewRequest(&dotfilesdv1.CallToolRequest{
 		ToolName:  toolName,
 		Arguments: args,
@@ -87,9 +91,11 @@ func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]
 
 	resp, err := c.client.CallTool(ctx, req)
 	if err != nil {
+		slog.Debug("client CallTool failed", "tool", toolName, "error", err)
 		return "", false, "", fmt.Errorf("call tool %q: %w", toolName, err)
 	}
 
+	slog.Debug("client CallTool succeeded", "tool", toolName, "is_error", resp.Msg.IsError, "text_len", len(resp.Msg.Text))
 	return resp.Msg.Text, resp.Msg.IsError, resp.Msg.StructuredData, nil
 }
 

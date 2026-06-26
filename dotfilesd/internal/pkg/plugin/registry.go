@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 )
 
@@ -31,9 +32,11 @@ func (r *Registry) Register(name string, info *PluginInfo) error {
 	defer r.mu.Unlock()
 
 	if _, exists := r.plugins[name]; exists {
+		slog.Debug("registry: plugin already registered", "name", name)
 		return fmt.Errorf("plugin %q already registered", name)
 	}
 	r.plugins[name] = info
+	slog.Debug("registry: plugin registered", "name", name, "tools", len(info.Descriptor.Tools))
 	return nil
 }
 
@@ -41,6 +44,7 @@ func (r *Registry) Register(name string, info *PluginInfo) error {
 func (r *Registry) Unregister(name string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	slog.Debug("registry: unregistering plugin", "name", name)
 	delete(r.plugins, name)
 }
 
@@ -49,6 +53,7 @@ func (r *Registry) Get(name string) (*PluginInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, ok := r.plugins[name]
+	slog.Debug("registry: Get", "name", name, "found", ok)
 	return info, ok
 }
 
@@ -56,8 +61,10 @@ func (r *Registry) Get(name string) (*PluginInfo, bool) {
 func (r *Registry) List() []PluginInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	slog.Debug("registry: List", "count", len(r.plugins))
 	result := make([]PluginInfo, 0, len(r.plugins))
-	for _, info := range r.plugins {
+	for name, info := range r.plugins {
+		slog.Debug("  registered plugin", "name", name, "tools", len(info.Descriptor.Tools))
 		result = append(result, *info)
 	}
 	return result
@@ -75,10 +82,13 @@ func (r *Registry) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	slog.Debug("registry: clearing all plugins", "count", len(r.plugins))
 	for name, info := range r.plugins {
+		slog.Debug("  killing plugin", "name", name)
 		if info.Process != nil {
 			info.Process.Kill()
 		}
 		delete(r.plugins, name)
 	}
+	slog.Debug("registry: clear complete")
 }

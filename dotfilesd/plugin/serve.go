@@ -119,8 +119,8 @@ func Serve(name, displayName, version, description string, tools ...Tool) {
 // extensionSvcServer implements the ExtensionService Connect RPC handlers.
 type extensionSvcServer struct {
 	name, displayName, version, description string
-	tools                                    []Tool
-	ctxClient                                Context
+	tools                                   []Tool
+	ctxClient                               Context
 }
 
 func (s *extensionSvcServer) GetDescriptor(

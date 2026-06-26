@@ -1,0 +1,8 @@
+---
+description: Stage all changes and create a commit interactively
+---
+
+@input "Enter commit message:" as MSG
+git add -A
+git commit -m "$MSG"
+echo "Committed!"

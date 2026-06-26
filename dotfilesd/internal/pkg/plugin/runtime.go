@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -32,6 +33,8 @@ type Process struct {
 // EXECUTION_CONTEXT_URL, EXECUTION_CONTEXT_TOKEN, and SESSION_ID which are
 // handled by Launch automatically).
 func Launch(binaryPath, ctxURL, ctxToken, sessionID string, envVars map[string]string) (*Process, error) {
+	slog.Debug("launching plugin process", "binary", binaryPath, "ctx_url", ctxURL, "session_id", sessionID)
+
 	cmd := exec.Command(binaryPath)
 
 	// Build environment.
@@ -43,6 +46,7 @@ func Launch(binaryPath, ctxURL, ctxToken, sessionID string, envVars map[string]s
 	for k, v := range envVars {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+	slog.Debug("plugin env set", "binary", binaryPath, "env_count", len(cmd.Env), "extra_vars", len(envVars))
 
 	// Capture stdout for handshake parsing.
 	stdout, err := cmd.StdoutPipe()
@@ -54,6 +58,7 @@ func Launch(binaryPath, ctxURL, ctxToken, sessionID string, envVars map[string]s
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start plugin: %w", err)
 	}
+	slog.Debug("plugin process started", "binary", binaryPath, "pid", cmd.Process.Pid)
 
 	// Read one JSON line for the handshake.
 	reader := bufio.NewReader(stdout)
@@ -63,6 +68,7 @@ func Launch(binaryPath, ctxURL, ctxToken, sessionID string, envVars map[string]s
 		cmd.Wait()
 		return nil, fmt.Errorf("read handshake: %w", err)
 	}
+	slog.Debug("plugin handshake line received", "binary", binaryPath, "line", line[:min(len(line), 200)])
 
 	var hs Handshake
 	if err := json.Unmarshal([]byte(line), &hs); err != nil {
@@ -76,6 +82,7 @@ func Launch(binaryPath, ctxURL, ctxToken, sessionID string, envVars map[string]s
 		cmd.Wait()
 		return nil, fmt.Errorf("unknown protocol %q", hs.Protocol)
 	}
+	slog.Debug("plugin handshake validated", "binary", binaryPath, "protocol", hs.Protocol, "url", hs.URL, "session_id", hs.SessionID)
 
 	if hs.URL == "" {
 		cmd.Process.Kill()
@@ -93,7 +100,8 @@ func Launch(binaryPath, ctxURL, ctxToken, sessionID string, envVars map[string]s
 
 	// Monitor process completion.
 	go func() {
-		cmd.Wait()
+		ps, _ := cmd.Process.Wait()
+		slog.Debug("plugin process exited", "binary", binaryPath, "pid", cmd.Process.Pid, "state", ps.String())
 		close(done)
 	}()
 

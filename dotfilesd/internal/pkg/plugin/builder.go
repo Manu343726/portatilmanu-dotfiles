@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +34,8 @@ type BuildResult struct {
 // Build compiles a plugin from sourceDir and caches the binary in the
 // builder's CacheDir/<name>/ directory.
 func (b *Builder) Build(pluginName, sourceDir string) (*BuildResult, error) {
+	slog.Debug("plugin build starting", "plugin", pluginName, "source_dir", sourceDir)
+
 	cacheDir := filepath.Join(b.CacheDir, pluginName)
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create cache dir: %w", err)
@@ -42,27 +45,38 @@ func (b *Builder) Build(pluginName, sourceDir string) (*BuildResult, error) {
 	hashPath := filepath.Join(cacheDir, ".hash")
 
 	// Compute current source hash.
+	slog.Debug("hashing plugin sources", "plugin", pluginName, "source_dir", sourceDir)
 	currentHash, err := hashSource(sourceDir)
 	if err != nil {
 		return nil, fmt.Errorf("hash source: %w", err)
 	}
+	slog.Debug("source hash computed", "plugin", pluginName, "hash", currentHash[:16]+"...")
 
 	// Check cache.
 	if cachedHash, err := os.ReadFile(hashPath); err == nil {
-		if strings.TrimSpace(string(cachedHash)) == currentHash {
+		cachedStr := strings.TrimSpace(string(cachedHash))
+		match := cachedStr == currentHash
+		slog.Debug("cache check", "plugin", pluginName, "cached_hash", cachedStr[:16]+"...", "match", match)
+		if match {
 			if _, err := os.Stat(binaryPath); err == nil {
+				slog.Debug("plugin cache hit, using cached binary", "plugin", pluginName, "binary", binaryPath)
 				return &BuildResult{BinaryPath: binaryPath, FromCache: true}, nil
 			}
+			slog.Debug("cache hash matches but binary missing, rebuilding", "plugin", pluginName, "binary", binaryPath)
 		}
+	} else {
+		slog.Debug("no cached hash found, will compile", "plugin", pluginName)
 	}
 
 	// Build.
+	slog.Debug("compiling plugin", "plugin", pluginName, "source_dir", sourceDir, "output", binaryPath)
 	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
 	cmd.Dir = sourceDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
+		slog.Debug("initial build failed, attempting go mod tidy then retry", "plugin", pluginName, "error", err)
 		// Try go mod tidy first, then rebuild.
 		tidy := exec.Command("go", "mod", "tidy")
 		tidy.Dir = sourceDir
@@ -70,6 +84,7 @@ func (b *Builder) Build(pluginName, sourceDir string) (*BuildResult, error) {
 		tidy.Stderr = os.Stderr
 		_ = tidy.Run()
 
+		slog.Debug("retrying build after go mod tidy", "plugin", pluginName)
 		cmd2 := exec.Command("go", "build", "-o", binaryPath, ".")
 		cmd2.Dir = sourceDir
 		cmd2.Stdout = os.Stdout
@@ -84,12 +99,14 @@ func (b *Builder) Build(pluginName, sourceDir string) (*BuildResult, error) {
 		return nil, fmt.Errorf("write hash: %w", err)
 	}
 
+	slog.Debug("plugin build complete", "plugin", pluginName, "binary", binaryPath, "from_cache", false)
 	return &BuildResult{BinaryPath: binaryPath, FromCache: false}, nil
 }
 
 // hashSource computes a SHA-256 hash of all Go source files, go.mod, and
 // go.sum in the given directory.
 func hashSource(dir string) (string, error) {
+	slog.Debug("hashing source directory", "dir", dir)
 	h := sha256.New()
 
 	// Collect files to hash.

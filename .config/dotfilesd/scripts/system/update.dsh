@@ -1,0 +1,12 @@
+---
+description: Update system packages via pacman
+---
+
+echo "Updating system packages..."
+@confirm "Synchronize and update all packages?" as CONFIRMED
+if [ "$CONFIRMED" = "yes" ]; then
+  exec_run -- sudo pacman -Syu --noconfirm
+  echo "System updated!"
+else
+  echo "Skipped."
+fi
