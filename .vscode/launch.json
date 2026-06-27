@@ -13,18 +13,8 @@
             },
             "args": [],
             "showLog": true,
-            "preLaunchTask": {
-                "label": "stop-dotfilesd-service",
-                "type": "shell",
-                "command": "systemctl --user stop dotfilesd.service",
-                "problemMatcher": []
-            },
-            "postDebugTask": {
-                "label": "start-dotfilesd-service",
-                "type": "shell",
-                "command": "systemctl --user start dotfilesd.service",
-                "problemMatcher": []
-            }
+            "preLaunchTask": "stop-dotfilesd-service",
+            "postDebugTask": "start-dotfilesd-service"
         },
         {
             "name": "Launch dotfilesd (custom port, no service conflict)",
@@ -46,6 +36,46 @@
             "mode": "local",
             "processId": "${command:pickGoProcess}",
             "showLog": true
+        },
+        {
+            "name": "Launch dotfilesd (debug plugins)",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/dotfilesd/cmd/dotfilesd",
+            "env": {
+                "DOTFILESD_PORT": "9105",
+                "DOTFILESD_LOG_LEVEL": "debug",
+                "DOTFILESD_PLUGIN_DEBUG": "weather",
+                "DOTFILESD_PLUGIN_DLV_PORT": "23450"
+            },
+            "args": [],
+            "showLog": true,
+            "preLaunchTask": "stop-dotfilesd-service",
+            "postDebugTask": "start-dotfilesd-service"
+        },
+        {
+            "name": "Attach to plugin (weather)",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "${workspaceFolder}/dotfilesd",
+            "port": 23450,
+            "host": "127.0.0.1",
+            "showLog": true
+        },
+        {
+            "name": "Attach to plugin (resources, set port=23451)",
+            "type": "go",
+            "request": "attach",
+            "mode": "remote",
+            "remotePath": "${workspaceFolder}/dotfilesd",
+            "port": 23451,
+            "host": "127.0.0.1",
+            "showLog": true,
+            "presentation": {
+                "hidden": true
+            }
         }
     ]
 }
