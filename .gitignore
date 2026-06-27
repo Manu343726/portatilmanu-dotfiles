@@ -13,6 +13,9 @@
 !/.agents/
 /.nvm/
 !/.zshrc
+
+# vscode debug config
+!/.vscode/launch.json
 !/.bashrc
 !/.profile
 !/.xprofile
