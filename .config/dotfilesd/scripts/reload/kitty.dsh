@@ -2,5 +2,5 @@
 description: Reload kitty terminal configuration
 ---
 
-exec kitty @ load-config
+kitty @ load-config
 echo "kitty config reloaded"

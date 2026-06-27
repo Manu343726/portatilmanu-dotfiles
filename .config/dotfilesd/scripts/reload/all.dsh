@@ -2,7 +2,7 @@
 description: Reload all dotfiles configurations (tmux, i3, kitty)
 ---
 
-exec tmux source-file ~/.tmux.conf
-exec i3-msg reload
-exec kitty @ load-config
+tmux source-file ~/.tmux.conf
+i3-msg reload
+kitty @ load-config
 echo "all configs reloaded"

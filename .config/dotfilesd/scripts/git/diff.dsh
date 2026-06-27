@@ -2,4 +2,4 @@
 description: Show git diff of working tree
 ---
 
-exec git -C ~ diff
+git -C ~ diff

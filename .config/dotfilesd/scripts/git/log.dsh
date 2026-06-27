@@ -2,4 +2,4 @@
 description: Show recent git log
 ---
 
-exec git -C ~ log --oneline -10
+git -C ~ log --oneline -10

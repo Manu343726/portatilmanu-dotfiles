@@ -2,5 +2,5 @@
 description: Reload tmux configuration
 ---
 
-exec tmux source-file ~/.tmux.conf
+tmux source-file ~/.tmux.conf
 echo "tmux config reloaded"

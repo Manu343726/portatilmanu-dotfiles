@@ -2,5 +2,5 @@
 description: Reload i3 window manager configuration
 ---
 
-exec i3-msg reload
+i3-msg reload
 echo "i3 config reloaded"
