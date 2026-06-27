@@ -155,14 +155,14 @@ var _ = Describe("ExecRaw (internal)", func() {
 	})
 
 	It("executes a command without session or variable injection", func() {
-		resp, err := server.ExecRaw(ctx, "echo raw_output", false)
+		resp, err := server.ExecRaw(ctx, "echo raw_output", false, "test-session")
 		Expect(err).To(Succeed())
 		Expect(resp.Msg.ExitCode).To(Equal(int32(0)))
 		Expect(strings.TrimSpace(resp.Msg.Stdout)).To(Equal("raw_output"))
 	})
 
 	It("reports non-zero exit codes", func() {
-		resp, err := server.ExecRaw(ctx, "exit 99", false)
+		resp, err := server.ExecRaw(ctx, "exit 99", false, "test-session")
 		Expect(err).To(Succeed())
 		Expect(resp.Msg.ExitCode).To(Equal(int32(99)))
 	})

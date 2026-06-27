@@ -22,9 +22,8 @@ type execServer struct {
 }
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
-	slog.Log(ctx, levelTrace, "Exec", "command", req.Msg.Command, "sudo", req.Msg.Sudo)
-
 	session := s.sessions.ResolveSession(req.Msg.GetSession())
+	slog.Log(ctx, levelTrace, "Exec", "session_id", session.id, "command", req.Msg.Command, "sudo", req.Msg.Sudo)
 
 	if req.Msg.Sudo {
 		vars := session.Variables()
@@ -38,7 +37,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 		// 2. Graphical auth (pkexec) — desktop password dialog, no
 		//    terminal UI interference.
 		if vars["_cap_graphical"] == "true" && hasPkexec() {
-			return s.ExecRaw(ctx, req.Msg.Command, true)
+			return s.ExecRaw(ctx, req.Msg.Command, true, session.id)
 		}
 
 		// 3. Terminal callback — fallback for headless terminal sessions.
@@ -47,7 +46,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 		}
 
 		// No viable auth method — return a clear error.
-		slog.Warn("Exec sudo requested but no auth method available", "caps", vars)
+		slog.Warn("Exec sudo requested but no auth method available", "session_id", session.id, "caps", vars)
 		return connect.NewResponse(&dotfilesdv1.ExecResponse{
 			ExitCode: -1,
 			Stderr:   "sudo requires authentication but no interactive method is available (no terminal or desktop detected)",
@@ -55,12 +54,12 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	}
 
 	if session.id == "" {
-		return s.ExecRaw(ctx, req.Msg.Command, false)
+		return s.ExecRaw(ctx, req.Msg.Command, false, session.id)
 	}
 
 	shell, err := session.ensureShell()
 	if err != nil {
-		slog.Error("failed to ensure session shell", "error", err)
+		slog.Error("failed to ensure session shell", "session_id", session.id, "error", err)
 		return connect.NewResponse(&dotfilesdv1.ExecResponse{
 			ExitCode: -1,
 			Stderr:   fmt.Sprintf("session shell error: %v", err),
@@ -70,7 +69,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	stdout, stderr, exitCode := shell.Exec(req.Msg.Command, session.Variables())
 
 	if exitCode != 0 {
-		slog.Warn("Exec command failed", "command", req.Msg.Command, "exit_code", exitCode, "stderr", truncate(stderr, 200))
+		slog.Warn("Exec command failed", "session_id", session.id, "command", req.Msg.Command, "exit_code", exitCode, "stderr", truncate(stderr, 200))
 	}
 
 	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
@@ -79,7 +78,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 		Stderr:   stderr,
 	})
 
-	slog.Log(ctx, levelTrace, "Exec done", "command", req.Msg.Command, "exit_code", exitCode)
+	slog.Log(ctx, levelTrace, "Exec done", "session_id", session.id, "command", req.Msg.Command, "exit_code", exitCode)
 	return resp, nil
 }
 
@@ -89,9 +88,8 @@ func (s *execServer) ExecStream(
 	req *connect.Request[dotfilesdv1.ExecStreamRequest],
 	stream *connect.ServerStream[dotfilesdv1.ExecStreamResponse],
 ) error {
-	slog.Log(ctx, levelTrace, "ExecStream", "command", req.Msg.Command, "sudo", req.Msg.Sudo)
-
 	session := s.sessions.ResolveSession(req.Msg.GetSession())
+	slog.Log(ctx, levelTrace, "ExecStream", "session_id", session.id, "command", req.Msg.Command, "sudo", req.Msg.Sudo)
 
 	if req.Msg.Sudo {
 		// For streaming sudo, we use pkexec (graphical auth) or prompt
@@ -219,7 +217,7 @@ func (s *execServer) execStreamSudoWithPassword(
 }
 
 func (s *execServer) execSudoWithPassword(ctx context.Context, command string, session *Session) (*connect.Response[dotfilesdv1.ExecResponse], error) {
-	slog.Log(ctx, levelTrace, "Exec sudo requesting password")
+	slog.Log(ctx, levelTrace, "Exec sudo requesting password", "session_id", session.id)
 
 	user := os.Getenv("USER")
 	if user == "" {
@@ -229,7 +227,7 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 
 	password, err := session.RequestInput(ctx, prompt, "", true)
 	if err != nil {
-		slog.Warn("Exec sudo password request failed", "error", err)
+		slog.Warn("Exec sudo password request failed", "session_id", session.id, "error", err)
 		return connect.NewResponse(&dotfilesdv1.ExecResponse{
 			ExitCode: -1,
 			Stderr:   fmt.Sprintf("password prompt failed: %v", err),
@@ -256,7 +254,7 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 	}
 
 	if exitCode != 0 {
-		slog.Warn("Exec sudo command failed", "command", command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
+		slog.Warn("Exec sudo command failed", "session_id", session.id, "command", command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
 	}
 
 	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
@@ -265,21 +263,21 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 		Stderr:   stderr.String(),
 	})
 
-	slog.Log(ctx, levelTrace, "Exec sudo done", "command", command, "exit_code", exitCode)
+	slog.Log(ctx, levelTrace, "Exec sudo done", "session_id", session.id, "command", command, "exit_code", exitCode)
 	return resp, nil
 }
 
-func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*connect.Response[dotfilesdv1.ExecResponse], error) {
+func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool, sessionID string) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	cmdStr := command
 	if sudo {
 		cmdStr = fmt.Sprintf("pkexec sh -c '%s'", strings.ReplaceAll(cmdStr, "'", "'\\''"))
-		slog.Debug("Exec wrapping with pkexec", "original_command", command)
+		slog.Debug("Exec wrapping with pkexec", "session_id", sessionID, "original_command", command)
 	}
 
 	stdout, stderr, exitCode := runCmdFull("sh", "-c", cmdStr)
 
 	if exitCode != 0 {
-		slog.Warn("Exec command failed", "command", command, "sudo", sudo, "exit_code", exitCode, "stderr", truncate(stderr, 200))
+		slog.Warn("Exec command failed", "session_id", sessionID, "command", command, "sudo", sudo, "exit_code", exitCode, "stderr", truncate(stderr, 200))
 	}
 
 	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
@@ -288,7 +286,7 @@ func (s *execServer) ExecRaw(ctx context.Context, command string, sudo bool) (*c
 		Stderr:   stderr,
 	})
 
-	slog.Log(ctx, levelTrace, "Exec done", "command", command, "exit_code", exitCode)
+	slog.Log(ctx, levelTrace, "Exec done", "session_id", sessionID, "command", command, "exit_code", exitCode)
 	return resp, nil
 }
 
@@ -299,11 +297,11 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	method := r.PreferredMethod
 
 	hasPassword := password != ""
-	slog.Log(ctx, levelTrace, "SudoExec", "command", r.Command, "method", method, "has_password", hasPassword)
+	slog.Log(ctx, levelTrace, "SudoExec", "session_id", session.id, "command", r.Command, "method", method, "has_password", hasPassword)
 
 	if hasPassword {
 		if !hasSudo() {
-			slog.Warn("SudoExec: sudo not available for password auth")
+			slog.Warn("SudoExec: sudo not available for password auth", "session_id", session.id)
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "sudo not available"},
 			}}), nil
@@ -323,12 +321,12 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 			}
 		}
 		if exitCode != 0 {
-			slog.Warn("SudoExec password auth failed", "command", r.Command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
+			slog.Warn("SudoExec password auth failed", "session_id", session.id, "command", r.Command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
 		}
 		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(exitCode), Stdout: stdout.String(), Stderr: stderr.String()},
 		}})
-		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", exitCode)
+		slog.Log(ctx, levelTrace, "SudoExec done", "session_id", session.id, "command", r.Command, "exit_code", exitCode)
 		return resp, nil
 	}
 
@@ -337,7 +335,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 
 	// 1. Elicitation — MCP client UI prompt.
 	if vars["_cap_elicitation"] == "true" && session.HasCallbackURL() {
-		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (elicitation)")
+		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (elicitation)", "session_id", session.id)
 		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
 		if err != nil {
 			return nil, err
@@ -362,7 +360,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 
 	// 3. Terminal callback fallback.
 	if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
-		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (terminal)")
+		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (terminal)", "session_id", session.id)
 		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
 		if err != nil {
 			return nil, err
@@ -379,24 +377,24 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	switch method {
 	case dotfilesdv1.SudoMethod_SUDO_METHOD_NOPASS:
 		if !hasSudo() {
-			slog.Warn("SudoExec: sudo not available for nopass method")
+			slog.Warn("SudoExec: sudo not available for nopass method", "session_id", session.id)
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "sudo not available"},
 			}}), nil
 		}
 		stdout, stderr, code := runCmdFull("sudo", "-n", "sh", "-c", r.Command)
 		if code != 0 {
-			slog.Warn("SudoExec nopass failed", "command", r.Command, "exit_code", code, "stderr", truncate(stderr, 200))
+			slog.Warn("SudoExec nopass failed", "session_id", session.id, "command", r.Command, "exit_code", code, "stderr", truncate(stderr, 200))
 		}
 		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
 		}})
-		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", code)
+		slog.Log(ctx, levelTrace, "SudoExec done", "session_id", session.id, "command", r.Command, "exit_code", code)
 		return resp, nil
 
 	case dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL:
 		if !hasPkexec() {
-			slog.Warn("SudoExec: pkexec not available for graphical method")
+			slog.Warn("SudoExec: pkexec not available for graphical method", "session_id", session.id)
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "pkexec not available"},
 			}}), nil
@@ -404,14 +402,14 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		cmdStr := fmt.Sprintf("pkexec sh -c '%s'", strings.ReplaceAll(r.Command, "'", "'\\''"))
 		stdout, stderr, code := runCmdFull("sh", "-c", cmdStr)
 		if code == -1 {
-			slog.Warn("SudoExec graphical auth cancelled or failed", "command", r.Command, "exit_code", code)
+			slog.Warn("SudoExec graphical auth cancelled or failed", "session_id", session.id, "command", r.Command, "exit_code", code)
 		} else if code != 0 {
-			slog.Warn("SudoExec graphical command failed", "command", r.Command, "exit_code", code, "stderr", truncate(stderr, 200))
+			slog.Warn("SudoExec graphical command failed", "session_id", session.id, "command", r.Command, "exit_code", code, "stderr", truncate(stderr, 200))
 		}
 		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
 		}})
-		slog.Log(ctx, levelTrace, "SudoExec done", "command", r.Command, "exit_code", code)
+		slog.Log(ctx, levelTrace, "SudoExec done", "session_id", session.id, "command", r.Command, "exit_code", code)
 		return resp, nil
 	}
 
@@ -428,7 +426,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	}
 	prompt := fmt.Sprintf("[sudo] password for %s: ", user)
 
-	slog.Debug("SudoExec issued auth challenge", "command", r.Command, "methods", methods)
+	slog.Debug("SudoExec issued auth challenge", "session_id", session.id, "command", r.Command, "methods", methods)
 
 	return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_AuthChallenge{
 		AuthChallenge: &dotfilesdv1.AuthChallenge{Methods: methods, Prompt: prompt},
@@ -459,7 +457,7 @@ func (s *execServer) BackgroundExec(
 	command := start.Command
 	sudo := start.Sudo
 
-	slog.Log(ctx, levelTrace, "BackgroundExec", "command", command, "sudo", sudo)
+	slog.Log(ctx, levelTrace, "BackgroundExec", "session_id", session.id, "command", command, "sudo", sudo)
 
 	var cmd *exec.Cmd
 
