@@ -130,7 +130,7 @@ files are gitignored so only the .proto source is tracked.
 
 ## [Steps 5+7] — Rewrite serve.go + Create docs.go
 
-**Commit:** `pending`
+**Commit:** `437b6ea`
 **Date:** 2026-06-27
 
 ### Changes
