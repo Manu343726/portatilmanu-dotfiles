@@ -136,6 +136,165 @@ func (x *ContextSudoExecResponse) GetStderr() string {
 	return ""
 }
 
+// LogEntry represents a single log record from a plugin.
+type LogEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Level         string                 `protobuf:"bytes,1,opt,name=level,proto3" json:"level,omitempty"` // trace, debug, info, warn, error, fatal
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Attributes    map[string]string      `protobuf:"bytes,3,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogEntry) Reset() {
+	*x = LogEntry{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogEntry) ProtoMessage() {}
+
+func (x *LogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
+func (*LogEntry) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *LogEntry) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *LogEntry) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogEntry) GetAttributes() map[string]string {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+// LogRequest is sent by plugins to submit log entries to the daemon.
+type LogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
+	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	Entry         *LogEntry              `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogRequest) Reset() {
+	*x = LogRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogRequest) ProtoMessage() {}
+
+func (x *LogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
+func (*LogRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *LogRequest) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *LogRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *LogRequest) GetEntry() *LogEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+// LogResponse acknowledges receipt of a log entry.
+type LogResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogResponse) Reset() {
+	*x = LogResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogResponse) ProtoMessage() {}
+
+func (x *LogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogResponse.ProtoReflect.Descriptor instead.
+func (*LogResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDescGZIP(), []int{4}
+}
+
 var File_proto_dotfilesd_v1_dotfilesdv1_context_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDesc = "" +
@@ -147,13 +306,30 @@ const file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDesc = "" +
 	"\x17ContextSudoExecResponse\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x03 \x01(\tR\x06stderr2\x8e\x03\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\"\xc1\x01\n" +
+	"\bLogEntry\x12\x14\n" +
+	"\x05level\x18\x01 \x01(\tR\x05level\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12F\n" +
+	"\n" +
+	"attributes\x18\x03 \x03(\v2&.dotfilesd.v1.LogEntry.AttributesEntryR\n" +
+	"attributes\x1a=\n" +
+	"\x0fAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x01\n" +
+	"\n" +
+	"LogRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x1f\n" +
+	"\vplugin_name\x18\x01 \x01(\tR\n" +
+	"pluginName\x12,\n" +
+	"\x05entry\x18\x02 \x01(\v2\x16.dotfilesd.v1.LogEntryR\x05entry\"\r\n" +
+	"\vLogResponse2\xca\x03\n" +
 	"\x10ExecutionContext\x12=\n" +
 	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse\x12W\n" +
 	"\bSudoExec\x12$.dotfilesd.v1.ContextSudoExecRequest\x1a%.dotfilesd.v1.ContextSudoExecResponse\x12G\n" +
 	"\fRequestInput\x12\x1a.dotfilesd.v1.InputRequest\x1a\x1b.dotfilesd.v1.InputResponse\x12M\n" +
 	"\x0eRequestConfirm\x12\x1c.dotfilesd.v1.ConfirmRequest\x1a\x1d.dotfilesd.v1.ConfirmResponse\x12J\n" +
-	"\rRequestChoose\x12\x1b.dotfilesd.v1.ChooseRequest\x1a\x1c.dotfilesd.v1.ChooseResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\rRequestChoose\x12\x1b.dotfilesd.v1.ChooseRequest\x1a\x1c.dotfilesd.v1.ChooseResponse\x12:\n" +
+	"\x03Log\x12\x18.dotfilesd.v1.LogRequest\x1a\x19.dotfilesd.v1.LogResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDescOnce sync.Once
@@ -167,37 +343,46 @@ func file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proto_dotfilesd_v1_dotfilesdv1_context_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proto_dotfilesd_v1_dotfilesdv1_context_proto_goTypes = []any{
 	(*ContextSudoExecRequest)(nil),  // 0: dotfilesd.v1.ContextSudoExecRequest
 	(*ContextSudoExecResponse)(nil), // 1: dotfilesd.v1.ContextSudoExecResponse
-	(*Session)(nil),                 // 2: dotfilesd.v1.Session
-	(*ExecRequest)(nil),             // 3: dotfilesd.v1.ExecRequest
-	(*InputRequest)(nil),            // 4: dotfilesd.v1.InputRequest
-	(*ConfirmRequest)(nil),          // 5: dotfilesd.v1.ConfirmRequest
-	(*ChooseRequest)(nil),           // 6: dotfilesd.v1.ChooseRequest
-	(*ExecResponse)(nil),            // 7: dotfilesd.v1.ExecResponse
-	(*InputResponse)(nil),           // 8: dotfilesd.v1.InputResponse
-	(*ConfirmResponse)(nil),         // 9: dotfilesd.v1.ConfirmResponse
-	(*ChooseResponse)(nil),          // 10: dotfilesd.v1.ChooseResponse
+	(*LogEntry)(nil),                // 2: dotfilesd.v1.LogEntry
+	(*LogRequest)(nil),              // 3: dotfilesd.v1.LogRequest
+	(*LogResponse)(nil),             // 4: dotfilesd.v1.LogResponse
+	nil,                             // 5: dotfilesd.v1.LogEntry.AttributesEntry
+	(*Session)(nil),                 // 6: dotfilesd.v1.Session
+	(*ExecRequest)(nil),             // 7: dotfilesd.v1.ExecRequest
+	(*InputRequest)(nil),            // 8: dotfilesd.v1.InputRequest
+	(*ConfirmRequest)(nil),          // 9: dotfilesd.v1.ConfirmRequest
+	(*ChooseRequest)(nil),           // 10: dotfilesd.v1.ChooseRequest
+	(*ExecResponse)(nil),            // 11: dotfilesd.v1.ExecResponse
+	(*InputResponse)(nil),           // 12: dotfilesd.v1.InputResponse
+	(*ConfirmResponse)(nil),         // 13: dotfilesd.v1.ConfirmResponse
+	(*ChooseResponse)(nil),          // 14: dotfilesd.v1.ChooseResponse
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_context_proto_depIdxs = []int32{
-	2,  // 0: dotfilesd.v1.ContextSudoExecRequest.session:type_name -> dotfilesd.v1.Session
-	3,  // 1: dotfilesd.v1.ExecutionContext.Exec:input_type -> dotfilesd.v1.ExecRequest
-	0,  // 2: dotfilesd.v1.ExecutionContext.SudoExec:input_type -> dotfilesd.v1.ContextSudoExecRequest
-	4,  // 3: dotfilesd.v1.ExecutionContext.RequestInput:input_type -> dotfilesd.v1.InputRequest
-	5,  // 4: dotfilesd.v1.ExecutionContext.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
-	6,  // 5: dotfilesd.v1.ExecutionContext.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
-	7,  // 6: dotfilesd.v1.ExecutionContext.Exec:output_type -> dotfilesd.v1.ExecResponse
-	1,  // 7: dotfilesd.v1.ExecutionContext.SudoExec:output_type -> dotfilesd.v1.ContextSudoExecResponse
-	8,  // 8: dotfilesd.v1.ExecutionContext.RequestInput:output_type -> dotfilesd.v1.InputResponse
-	9,  // 9: dotfilesd.v1.ExecutionContext.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
-	10, // 10: dotfilesd.v1.ExecutionContext.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
-	6,  // [6:11] is the sub-list for method output_type
-	1,  // [1:6] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	6,  // 0: dotfilesd.v1.ContextSudoExecRequest.session:type_name -> dotfilesd.v1.Session
+	5,  // 1: dotfilesd.v1.LogEntry.attributes:type_name -> dotfilesd.v1.LogEntry.AttributesEntry
+	6,  // 2: dotfilesd.v1.LogRequest.session:type_name -> dotfilesd.v1.Session
+	2,  // 3: dotfilesd.v1.LogRequest.entry:type_name -> dotfilesd.v1.LogEntry
+	7,  // 4: dotfilesd.v1.ExecutionContext.Exec:input_type -> dotfilesd.v1.ExecRequest
+	0,  // 5: dotfilesd.v1.ExecutionContext.SudoExec:input_type -> dotfilesd.v1.ContextSudoExecRequest
+	8,  // 6: dotfilesd.v1.ExecutionContext.RequestInput:input_type -> dotfilesd.v1.InputRequest
+	9,  // 7: dotfilesd.v1.ExecutionContext.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
+	10, // 8: dotfilesd.v1.ExecutionContext.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
+	3,  // 9: dotfilesd.v1.ExecutionContext.Log:input_type -> dotfilesd.v1.LogRequest
+	11, // 10: dotfilesd.v1.ExecutionContext.Exec:output_type -> dotfilesd.v1.ExecResponse
+	1,  // 11: dotfilesd.v1.ExecutionContext.SudoExec:output_type -> dotfilesd.v1.ContextSudoExecResponse
+	12, // 12: dotfilesd.v1.ExecutionContext.RequestInput:output_type -> dotfilesd.v1.InputResponse
+	13, // 13: dotfilesd.v1.ExecutionContext.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
+	14, // 14: dotfilesd.v1.ExecutionContext.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
+	4,  // 15: dotfilesd.v1.ExecutionContext.Log:output_type -> dotfilesd.v1.LogResponse
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_context_proto_init() }
@@ -214,7 +399,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_context_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_context_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

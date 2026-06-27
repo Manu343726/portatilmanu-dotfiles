@@ -5,12 +5,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
 )
+
+// Logger is a minimal logging interface for plugins. It allows plugins
+// to emit structured log entries that are routed through the daemon's
+// logging system.
+type Logger interface {
+	Trace(msg string, attrs ...any)
+	Debug(msg string, attrs ...any)
+	Info(msg string, attrs ...any)
+	Warn(msg string, attrs ...any)
+	Error(msg string, attrs ...any)
+	Fatal(msg string, attrs ...any)
+}
 
 // Context provides a plugin tool with controlled access to the daemon's
 // capabilities: shell execution (with or without sudo), user input prompts,
@@ -32,6 +45,11 @@ type Context interface {
 	// Stderr returns a writer that tunnels stderr output back to the
 	// CLI/MCP caller in real time via RPC streaming.
 	Stderr() io.Writer
+
+	// Logger returns a structured logger that sends log entries to the
+	// daemon's logging system. The plugin name is automatically attached
+	// so entries appear under a "plugins.<name>" hierarchy.
+	Logger() Logger
 
 	// Exec runs a shell command without privilege escalation.
 	Exec(cmd string) (ExecResult, error)
@@ -61,20 +79,28 @@ type ExecResult struct {
 // contextClient implements the Context interface by calling the daemon's
 // ExecutionContext service over Connect RPC.
 type contextClient struct {
-	client    dotfilesdv1connect.ExecutionContextClient
-	token     string
-	sessionID string
+	client     dotfilesdv1connect.ExecutionContextClient
+	token      string
+	sessionID  string
+	pluginName string
+	logger     Logger
 }
 
 // newContextClient creates a new Context client connected to the daemon's
 // Execution Context service.
-func newContextClient(url, token, sessionID string) *contextClient {
-	return &contextClient{
-		client:    dotfilesdv1connect.NewExecutionContextClient(&http.Client{}, url),
-		token:     token,
-		sessionID: sessionID,
+func newContextClient(url, token, sessionID, pluginName string) *contextClient {
+	c := &contextClient{
+		client:     dotfilesdv1connect.NewExecutionContextClient(&http.Client{}, url),
+		token:      token,
+		sessionID:  sessionID,
+		pluginName: pluginName,
 	}
+	c.logger = &pluginLogger{client: c, pluginName: pluginName}
+	return c
 }
+
+// Logger returns a structured logger that sends entries to the daemon.
+func (c *contextClient) Logger() Logger { return c.logger }
 
 // buildSession creates a Session message for use in context requests.
 func (c *contextClient) buildSession() *dotfilesdv1.Session {
@@ -198,3 +224,49 @@ type streamingContext struct {
 
 func (c *streamingContext) Stdout() io.Writer { return c.stdout }
 func (c *streamingContext) Stderr() io.Writer { return c.stderr }
+func (c *streamingContext) Logger() Logger    { return c.Context.Logger() }
+
+// ---------------------------------------------------------------------------
+// pluginLogger — sends log entries to the daemon via the Log RPC
+// ---------------------------------------------------------------------------
+
+// pluginLogger implements the Logger interface by calling the daemon's
+// Log RPC for each entry. It buffers minimally; each log call sends a
+// separate RPC. The daemon routes entries through its logging system
+// with the plugin name as the logger module.
+type pluginLogger struct {
+	client     *contextClient
+	pluginName string
+}
+
+func (l *pluginLogger) log(level, msg string, attrs ...any) {
+	attrMap := make(map[string]string)
+	for i := 0; i < len(attrs)-1; i += 2 {
+		k := fmt.Sprintf("%v", attrs[i])
+		v := fmt.Sprintf("%v", attrs[i+1])
+		attrMap[k] = v
+	}
+
+	req := connect.NewRequest(&dotfilesdv1.LogRequest{
+		Session:    l.client.buildSession(),
+		PluginName: l.pluginName,
+		Entry: &dotfilesdv1.LogEntry{
+			Level:      level,
+			Message:    msg,
+			Attributes: attrMap,
+		},
+	})
+	req.Header().Set("X-Dotfiles-Context-Token", l.client.authHeader())
+
+	_, _ = l.client.client.Log(context.Background(), req)
+}
+
+func (l *pluginLogger) Trace(msg string, attrs ...any) { l.log("trace", msg, attrs...) }
+func (l *pluginLogger) Debug(msg string, attrs ...any) { l.log("debug", msg, attrs...) }
+func (l *pluginLogger) Info(msg string, attrs ...any)  { l.log("info", msg, attrs...) }
+func (l *pluginLogger) Warn(msg string, attrs ...any)  { l.log("warn", msg, attrs...) }
+func (l *pluginLogger) Error(msg string, attrs ...any) { l.log("error", msg, attrs...) }
+func (l *pluginLogger) Fatal(msg string, attrs ...any) {
+	l.log("fatal", msg, attrs...)
+	os.Exit(1)
+}

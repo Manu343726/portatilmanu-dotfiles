@@ -6,9 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"dotfilesd/internal/pkg/logging"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
-
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // cliTraceLevel is a custom slog level for TRACE, below Debug.
@@ -62,9 +61,11 @@ func parseLogLevelStr(s string) (slog.Level, bool) {
 
 // SetupLogging configures the CLI's structured logger.
 //
-// Logs go exclusively to the log file — never to stdout or stderr.
-// The log file is created in the DOTFILESD_LOG_DIR (defaults to
-// ~/dotfilesd/logs/dotfilesctl.log) with rotation via lumberjack.
+// Logs go to a rotating file (<DOTFILESD_LOG_DIR>/dotfilesctl.log).
+// The new logging package is configured with:
+//   - A rotating file sink (for CLI history)
+//   - A stderr sink (for interactive CLI output)
+//   - Level-based filtering
 //
 // level can be: trace, debug, info, warn, error.
 // If empty or invalid, info is used.
@@ -75,33 +76,49 @@ func SetupLogging(level string) {
 	}
 	os.MkdirAll(logDir, 0755)
 
-	writer := &lumberjack.Logger{
-		Filename:   logDir + "/dotfilesctl.log",
-		MaxSize:    10,
-		MaxBackups: 5,
-		MaxAge:     30,
-		Compress:   true,
+	// Validate and normalise the level.
+	lvl := level
+	if lvl == "" {
+		lvl = "info"
+	}
+	if _, ok := logging.ParseLevel(lvl); !ok {
+		lvl = "info"
 	}
 
-	lvl, ok := parseLogLevelStr(level)
-	if !ok {
-		lvl = slog.LevelInfo
-	}
-
-	handler := slog.NewTextHandler(writer, &slog.HandlerOptions{
-		Level: lvl,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.LevelKey {
-				level := a.Value.Any().(slog.Level)
-				if level == cliTraceLevel {
-					a.Value = slog.StringValue("TRACE")
-				}
-			}
-			return a
+	cfg := logging.Config{
+		Formatter: logging.FormatterConfig{
+			TimeFormat: "15:04:05.000",
+			Color:      boolPtr(false), // CLI logs to file only by default
 		},
-	})
-	slog.SetDefault(slog.New(handler))
+		Sinks: []logging.SinkConfig{
+			{
+				Name:       "file",
+				Type:       "rotating_file",
+				Path:       logDir + "/dotfilesctl.log",
+				MaxSizeMB:  10,
+				MaxBackups: 5,
+				MaxAgeDays: 30,
+			},
+		},
+		Loggers: []logging.LoggerConfig{
+			{
+				Name:   "root",
+				Level:  lvl,
+				Sinks:  []string{"file"},
+				Source: false,
+			},
+		},
+	}
+
+	logging.Configure(cfg)
+
+	// Also bridge to slog so CLI code using slog still works.
+	slogHandler := logging.NewSlogHandler(logging.NewPackageLogger("cli"))
+	slog.SetDefault(slog.New(slogHandler))
 }
+
+// boolPtr returns a pointer to a bool.
+func boolPtr(v bool) *bool { return &v }
 
 func Fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)

@@ -31,6 +31,10 @@ type ContextBackend interface {
 
 	// RequestChoose prompts the user to pick from a list of options.
 	RequestChoose(ctx context.Context, sessionID, prompt string, options []string, defaultIndex int) (selectedIndex int32, selectedOption string, err error)
+
+	// Log submits a log entry from a plugin. The daemon routes it through
+	// its logging system with the plugin name as the logger module.
+	Log(ctx context.Context, pluginName, level, msg string, attrs map[string]string) error
 }
 
 // ContextServerOptions configures the Execution Context server.
@@ -228,4 +232,29 @@ func (s *contextServer) RequestChoose(
 		SelectedIndex:  selectedIndex,
 		SelectedOption: selectedOption,
 	}), nil
+}
+
+// ---- Log ----
+
+func (s *contextServer) Log(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.LogRequest],
+) (*connect.Response[dotfilesdv1.LogResponse], error) {
+	if err := s.authenticate(req); err != nil {
+		return nil, err
+	}
+
+	pluginName := req.Msg.PluginName
+	entry := req.Msg.Entry
+	if entry == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("log entry is required"))
+	}
+
+	slog.Debug("context server Log", "plugin", pluginName, "level", entry.Level, "msg", entry.Message)
+	if err := s.opts.Backend.Log(ctx, pluginName, entry.Level, entry.Message, entry.Attributes); err != nil {
+		slog.Debug("context server Log failed", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("log: %w", err))
+	}
+
+	return connect.NewResponse(&dotfilesdv1.LogResponse{}), nil
 }

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"dotfilesd/internal/pkg/logging"
 	"dotfilesd/internal/pkg/plugin"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 )
@@ -31,6 +32,9 @@ type Daemon struct {
 	server   *http.Server
 	sessions *SessionStore
 	scripts  *ScriptRegistry
+
+	// Logging system.
+	logger *logging.Manager
 
 	// Plugin system.
 	pluginMgr        *plugin.Manager
@@ -64,7 +68,7 @@ func (d *Daemon) ScriptsRegistry() *ScriptRegistry {
 }
 
 func (d *Daemon) Start() error {
-	setupLogging(d.config.LogDir, d.config.LogLevel, d.config.LogMaxMB, d.config.LogBackup, d.config.LogAge)
+	d.setupLogging()
 
 	sysSvc := &systemServer{startedAt: time.Now(), sessions: d.sessions, daemon: d}
 	dotSvc := &dotfilesServer{sessions: d.sessions}

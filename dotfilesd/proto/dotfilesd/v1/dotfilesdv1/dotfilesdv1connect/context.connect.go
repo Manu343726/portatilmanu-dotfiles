@@ -47,6 +47,8 @@ const (
 	// ExecutionContextRequestChooseProcedure is the fully-qualified name of the ExecutionContext's
 	// RequestChoose RPC.
 	ExecutionContextRequestChooseProcedure = "/dotfilesd.v1.ExecutionContext/RequestChoose"
+	// ExecutionContextLogProcedure is the fully-qualified name of the ExecutionContext's Log RPC.
+	ExecutionContextLogProcedure = "/dotfilesd.v1.ExecutionContext/Log"
 )
 
 // ExecutionContextClient is a client for the dotfilesd.v1.ExecutionContext service.
@@ -62,6 +64,9 @@ type ExecutionContextClient interface {
 	RequestConfirm(context.Context, *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error)
 	// RequestChoose prompts the user to pick from a list of options.
 	RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error)
+	// Log submits a log entry from a plugin. The daemon routes it through
+	// its logging system with the plugin name as the logger module.
+	Log(context.Context, *connect.Request[dotfilesdv1.LogRequest]) (*connect.Response[dotfilesdv1.LogResponse], error)
 }
 
 // NewExecutionContextClient constructs a client for the dotfilesd.v1.ExecutionContext service. By
@@ -105,6 +110,12 @@ func NewExecutionContextClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(executionContextMethods.ByName("RequestChoose")),
 			connect.WithClientOptions(opts...),
 		),
+		log: connect.NewClient[dotfilesdv1.LogRequest, dotfilesdv1.LogResponse](
+			httpClient,
+			baseURL+ExecutionContextLogProcedure,
+			connect.WithSchema(executionContextMethods.ByName("Log")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -115,6 +126,7 @@ type executionContextClient struct {
 	requestInput   *connect.Client[dotfilesdv1.InputRequest, dotfilesdv1.InputResponse]
 	requestConfirm *connect.Client[dotfilesdv1.ConfirmRequest, dotfilesdv1.ConfirmResponse]
 	requestChoose  *connect.Client[dotfilesdv1.ChooseRequest, dotfilesdv1.ChooseResponse]
+	log            *connect.Client[dotfilesdv1.LogRequest, dotfilesdv1.LogResponse]
 }
 
 // Exec calls dotfilesd.v1.ExecutionContext.Exec.
@@ -142,6 +154,11 @@ func (c *executionContextClient) RequestChoose(ctx context.Context, req *connect
 	return c.requestChoose.CallUnary(ctx, req)
 }
 
+// Log calls dotfilesd.v1.ExecutionContext.Log.
+func (c *executionContextClient) Log(ctx context.Context, req *connect.Request[dotfilesdv1.LogRequest]) (*connect.Response[dotfilesdv1.LogResponse], error) {
+	return c.log.CallUnary(ctx, req)
+}
+
 // ExecutionContextHandler is an implementation of the dotfilesd.v1.ExecutionContext service.
 type ExecutionContextHandler interface {
 	// Exec runs a shell command without privilege escalation.
@@ -155,6 +172,9 @@ type ExecutionContextHandler interface {
 	RequestConfirm(context.Context, *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error)
 	// RequestChoose prompts the user to pick from a list of options.
 	RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error)
+	// Log submits a log entry from a plugin. The daemon routes it through
+	// its logging system with the plugin name as the logger module.
+	Log(context.Context, *connect.Request[dotfilesdv1.LogRequest]) (*connect.Response[dotfilesdv1.LogResponse], error)
 }
 
 // NewExecutionContextHandler builds an HTTP handler from the service implementation. It returns the
@@ -194,6 +214,12 @@ func NewExecutionContextHandler(svc ExecutionContextHandler, opts ...connect.Han
 		connect.WithSchema(executionContextMethods.ByName("RequestChoose")),
 		connect.WithHandlerOptions(opts...),
 	)
+	executionContextLogHandler := connect.NewUnaryHandler(
+		ExecutionContextLogProcedure,
+		svc.Log,
+		connect.WithSchema(executionContextMethods.ByName("Log")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dotfilesd.v1.ExecutionContext/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExecutionContextExecProcedure:
@@ -206,6 +232,8 @@ func NewExecutionContextHandler(svc ExecutionContextHandler, opts ...connect.Han
 			executionContextRequestConfirmHandler.ServeHTTP(w, r)
 		case ExecutionContextRequestChooseProcedure:
 			executionContextRequestChooseHandler.ServeHTTP(w, r)
+		case ExecutionContextLogProcedure:
+			executionContextLogHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -233,4 +261,8 @@ func (UnimplementedExecutionContextHandler) RequestConfirm(context.Context, *con
 
 func (UnimplementedExecutionContextHandler) RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecutionContext.RequestChoose is not implemented"))
+}
+
+func (UnimplementedExecutionContextHandler) Log(context.Context, *connect.Request[dotfilesdv1.LogRequest]) (*connect.Response[dotfilesdv1.LogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecutionContext.Log is not implemented"))
 }

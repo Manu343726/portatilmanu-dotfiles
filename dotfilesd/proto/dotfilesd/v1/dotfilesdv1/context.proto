@@ -39,6 +39,10 @@ service ExecutionContext {
 
   // RequestChoose prompts the user to pick from a list of options.
   rpc RequestChoose(ChooseRequest) returns (ChooseResponse);
+
+  // Log submits a log entry from a plugin. The daemon routes it through
+  // its logging system with the plugin name as the logger module.
+  rpc Log(LogRequest) returns (LogResponse);
 }
 
 // ContextSudoExecRequest — simplified sudo exec for plugins. The daemon
@@ -54,3 +58,20 @@ message ContextSudoExecResponse {
   string stdout = 2;
   string stderr = 3;
 }
+
+// LogEntry represents a single log record from a plugin.
+message LogEntry {
+  string level = 1;       // trace, debug, info, warn, error, fatal
+  string message = 2;
+  map<string, string> attributes = 3;
+}
+
+// LogRequest is sent by plugins to submit log entries to the daemon.
+message LogRequest {
+  Session session = 100;
+  string plugin_name = 1;
+  LogEntry entry = 2;
+}
+
+// LogResponse acknowledges receipt of a log entry.
+message LogResponse {}

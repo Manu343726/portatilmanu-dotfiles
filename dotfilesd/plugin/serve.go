@@ -118,7 +118,7 @@ func serve(
 	}
 
 	// Build the extension server with tool handlers.
-	ctxClient := newContextClient(ctxURL, ctxToken, sessionID)
+	ctxClient := newContextClient(ctxURL, ctxToken, sessionID, name)
 
 	mux := http.NewServeMux()
 

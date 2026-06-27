@@ -72,6 +72,52 @@ func (b *pluginBackend) RequestChoose(ctx context.Context, sessionID, prompt str
 	return int32(idx), opt, nil
 }
 
+func (b *pluginBackend) Log(ctx context.Context, pluginName, level, msg string, attrs map[string]string) error {
+	// Convert map attrs to key-value pairs.
+	kv := make([]any, 0, len(attrs)*2)
+	for k, v := range attrs {
+		kv = append(kv, k, v)
+	}
+
+	// Use the daemon's new logging package if available, otherwise slog.
+	if b.daemon.logger != nil {
+		log := b.daemon.logger.Logger("plugin." + pluginName)
+		switch level {
+		case "trace":
+			log.Trace(msg, kv...)
+		case "debug":
+			log.Debug(msg, kv...)
+		case "info":
+			log.Info(msg, kv...)
+		case "warn":
+			log.Warn(msg, kv...)
+		case "error":
+			log.Error(msg, kv...)
+		case "fatal":
+			log.Fatal(msg, kv...)
+		default:
+			log.Info(msg, kv...)
+		}
+	} else {
+		// Fallback to slog.
+		slogLevel := slog.LevelInfo
+		switch level {
+		case "trace":
+			slogLevel = levelTrace
+		case "debug":
+			slogLevel = slog.LevelDebug
+		case "info":
+			slogLevel = slog.LevelInfo
+		case "warn":
+			slogLevel = slog.LevelWarn
+		case "error":
+			slogLevel = slog.LevelError
+		}
+		slog.Log(ctx, slogLevel, msg, "plugin", pluginName, "attrs", attrs)
+	}
+	return nil
+}
+
 // ------------------------------------------------
 // Plugin system initialization
 // ------------------------------------------------
