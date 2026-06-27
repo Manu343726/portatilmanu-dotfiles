@@ -46,11 +46,11 @@ type DiskSnapshot struct {
 }
 
 type DiskIOSnapshot struct {
-	Device            string
-	ReadsPerSec       float64
-	WritesPerSec      float64
-	ReadBytesPerSec   float64
-	WriteBytesPerSec  float64
+	Device           string
+	ReadsPerSec      float64
+	WritesPerSec     float64
+	ReadBytesPerSec  float64
+	WriteBytesPerSec float64
 }
 
 type ProcessInfo struct {
@@ -79,9 +79,9 @@ type SharedState struct {
 
 func newSharedState() *SharedState {
 	return &SharedState{
-		maxHistory: 100,
-		ramHistory: make([]float64, 0, 100),
-		cpuHistory: make([]float64, 0, 100),
+		maxHistory:  100,
+		ramHistory:  make([]float64, 0, 100),
+		cpuHistory:  make([]float64, 0, 100),
 		diskHistory: make([]float64, 0, 100),
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
 	"dotfilesd/internal/pkg/cli"
 	"dotfilesd/internal/pkg/shared"
@@ -40,7 +39,17 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 	pluginResp, err := dynClients.Registry.ListPlugins(context.Background(), connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{}))
 	if err == nil {
 		for _, p := range pluginResp.Msg.Plugins {
-			registerPluginCommand(root, p)
+			info := cli.PluginRegistryInfo{
+				Name:        p.Name,
+				DisplayName: p.DisplayName,
+				Version:     p.Version,
+				Description: p.Description,
+				URL:         p.Url,
+				Services:    p.Services,
+			}
+			pluginCmd := cli.BuildPluginCommand(info)
+			pluginCmd.GroupID = "plugins"
+			root.AddCommand(pluginCmd)
 		}
 	} else {
 		slog.Debug("failed to fetch plugins for command registration", "error", err)
@@ -55,37 +64,6 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 	} else {
 		slog.Debug("failed to fetch scripts for command registration", "error", err)
 	}
-}
-
-// registerPluginCommand creates a cobra command for a plugin that shows its
-// metadata and services when invoked.
-func registerPluginCommand(parent *cobra.Command, p *dotfilesdv1.RegistryGetPluginResponse) {
-	name := p.Name
-	desc := p.DisplayName
-	if desc == "" {
-		desc = name
-	}
-
-	pluginCmd := &cobra.Command{
-		Use:     name,
-		Short:   desc,
-		Long:    fmt.Sprintf("Plugin: %s (%s v%s)\n%s\nServices: %s", p.Name, p.DisplayName, p.Version, p.Description, strings.Join(p.Services, ", ")),
-		GroupID: "plugins",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("Name:        %s\n", p.Name)
-			fmt.Printf("Display:     %s\n", p.DisplayName)
-			fmt.Printf("Version:     %s\n", p.Version)
-			fmt.Printf("Description: %s\n", p.Description)
-			if len(p.Services) > 0 {
-				fmt.Println("Services:")
-				for _, svc := range p.Services {
-					fmt.Printf("  - %s\n", svc)
-				}
-			}
-			return nil
-		},
-	}
-	parent.AddCommand(pluginCmd)
 }
 
 // registerScriptCommand recursively creates cobra commands from the script

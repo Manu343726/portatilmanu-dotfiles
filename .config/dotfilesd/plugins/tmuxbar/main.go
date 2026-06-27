@@ -12,10 +12,10 @@ import (
 	"dotfilesd/plugin"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
-	pb "plugins/tmuxbar/proto/tmuxbar"
-	"plugins/tmuxbar/proto/tmuxbar/tmuxbarconnect"
 	respb "plugins/resources/proto/resources"
 	"plugins/resources/proto/resources/resourcesconnect"
+	pb "plugins/tmuxbar/proto/tmuxbar"
+	"plugins/tmuxbar/proto/tmuxbar/tmuxbarconnect"
 
 	"connectrpc.com/connect"
 )

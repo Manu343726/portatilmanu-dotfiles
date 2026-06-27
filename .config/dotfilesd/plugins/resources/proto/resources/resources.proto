@@ -28,17 +28,17 @@ message CurrentResponse {
 }
 
 message TopRequest {
-  int32 count = 1;   // Number of processes (default: 10)
-  string sort = 2;   // "cpu" or "mem" (default: cpu)
+  int32 count = 1; // Number of processes (default: 10)
+  string sort = 2; // "cpu" or "mem" (default: cpu)
 }
 message TopResponse {
   repeated ProcessInfo processes = 1;
 }
 
 message PSRequest {
-  int32 pid = 1;       // Filter to a specific PID (optional)
-  int32 count = 2;     // Number of processes (default: 20)
-  string sort = 3;     // "cpu" or "mem" (default: cpu)
+  int32 pid = 1; // Filter to a specific PID (optional)
+  int32 count = 2; // Number of processes (default: 20)
+  string sort = 3; // "cpu" or "mem" (default: cpu)
 }
 message PSResponse {
   repeated ProcessInfo processes = 1;
@@ -46,7 +46,7 @@ message PSResponse {
 
 message HistoryRequest {
   string resource = 1; // "ram", "cpu", or "disk" (default: ram)
-  int32 count = 2;     // Number of data points (default: 20)
+  int32 count = 2; // Number of data points (default: 20)
 }
 message HistoryResponse {
   repeated double values = 1;

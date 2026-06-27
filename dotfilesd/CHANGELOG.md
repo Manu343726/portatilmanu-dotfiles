@@ -294,6 +294,46 @@ background goroutine is launched by plugin.Serve().
 - [x] CLI builds
 - [x] All plugins build
 - [ ] Daemon starts and loads plugins (not yet tested)
+
+---
+
+## [CLI] — Proto-Based Dynamic Command Generation
+
+**Commit:** `307dbd6`
+**Date:** 2026-06-28
+
+### Changes
+- `dotfilesd/go.mod`: Added `github.com/fullstorydev/grpcurl` dependency for
+  proto reflection-based CLI command generation.
+- `dotfilesd/go.sum`: Updated by `go get` and `go mod tidy`.
+- `dotfilesd/internal/pkg/cli/protoflags.go`: Created with:
+  - `BuildPluginCommand()` — builds cobra command trees from plugin registry
+    info using gRPC reflection to discover services, methods, and field types.
+  - `addFlagsFromMessage()` — recursively generates typed cobra flags
+    (string, int, float, bool, enum with completion, nested messages with dot
+    notation, maps, repeated fields) from protobuf message descriptors.
+  - `makeRunE()` — builds JSON request body from flags and POSTs to Connect
+    RPC endpoint, pretty-printing the JSON response.
+  - `camelToKebab()` — converts field names to kebab-case flag names.
+  - Falls back to static info-only command if reflection is unavailable.
+- `dotfilesd/cmd/dotfilesctl/root.go`: Replaced `registerPluginCommand()` with
+  `cli.BuildPluginCommand()` which generates typed commands from proto schemas.
+  Removed dead `registerPluginCommand` function and unused `"strings"` import.
+- Formatting fixes in `.config/dotfilesd/plugins/resources/main.go`,
+  `.config/dotfilesd/plugins/tmuxbar/main.go`, and proto files.
+
+### State
+- [x] Full build passes
+- [x] `go vet` clean
+- [x] `go mod tidy` clean
+- [ ] Proto-based command generation tested (requires running plugins)
+
+### Notes
+The proto-based command generation connects to plugins via gRPC reflection
+to get service/method/field descriptors. If a plugin is unreachable (not
+loaded or not running), the command falls back to static info display. The
+MCP tool listing still uses the simple one-tool-per-plugin approach; MCP
+can be extended for per-method tool definitions in a future session.
 **Date:** 2026-06-27
 
 ### Changes
