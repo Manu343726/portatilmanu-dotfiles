@@ -159,7 +159,7 @@ next.
 
 ## [Step 6] — Rewrite context.go
 
-**Commit:** `pending`
+**Commit:** `053c51c`
 **Date:** 2026-06-27
 
 ### Changes
