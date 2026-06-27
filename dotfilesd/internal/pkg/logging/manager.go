@@ -15,11 +15,11 @@ import (
 type Manager struct {
 	mu sync.RWMutex
 
-	config     Config
-	sinks      *sinkRegistry
-	formatter  *Formatter
-	resolved   map[string]resolvedLogger // cache resolved loggers by name
-	pluginDir  string                     // plugin log directory for dedicated sinks
+	config    Config
+	sinks     *sinkRegistry
+	formatter *Formatter
+	resolved  map[string]resolvedLogger // cache resolved loggers by name
+	pluginDir string                    // plugin log directory for dedicated sinks
 }
 
 // NewManager creates a Manager from the given Config.

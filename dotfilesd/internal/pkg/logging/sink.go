@@ -30,7 +30,7 @@ type stdoutSink struct {
 	w    io.Writer
 }
 
-func (s *stdoutSink) Name() string       { return s.name }
+func (s *stdoutSink) Name() string                { return s.name }
 func (s *stdoutSink) Write(p []byte) (int, error) { return s.w.Write(p) }
 func (s *stdoutSink) Close() error                { return nil }
 
@@ -48,7 +48,7 @@ type stderrSink struct {
 	w    io.Writer
 }
 
-func (s *stderrSink) Name() string       { return s.name }
+func (s *stderrSink) Name() string                { return s.name }
 func (s *stderrSink) Write(p []byte) (int, error) { return s.w.Write(p) }
 func (s *stderrSink) Close() error                { return nil }
 
@@ -170,9 +170,9 @@ type syslogStubSink struct {
 	msg  string
 }
 
-func (s *syslogStubSink) Name() string                  { return s.name }
-func (s *syslogStubSink) Write(p []byte) (int, error)   { return len(p), nil }
-func (s *syslogStubSink) Close() error                  { return nil }
+func (s *syslogStubSink) Name() string                { return s.name }
+func (s *syslogStubSink) Write(p []byte) (int, error) { return len(p), nil }
+func (s *syslogStubSink) Close() error                { return nil }
 
 func nonZero(vals ...int) int {
 	for _, v := range vals {

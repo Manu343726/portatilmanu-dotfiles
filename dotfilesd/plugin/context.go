@@ -7,23 +7,12 @@ import (
 	"net/http"
 	"os"
 
+	"dotfilesd/internal/pkg/logging"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
 )
-
-// Logger is a minimal logging interface for plugins. It allows plugins
-// to emit structured log entries that are routed through the daemon's
-// logging system.
-type Logger interface {
-	Trace(msg string, attrs ...any)
-	Debug(msg string, attrs ...any)
-	Info(msg string, attrs ...any)
-	Warn(msg string, attrs ...any)
-	Error(msg string, attrs ...any)
-	Fatal(msg string, attrs ...any)
-}
 
 // Context provides a plugin tool with controlled access to the daemon's
 // capabilities: shell execution (with or without sudo), user input prompts,
@@ -46,10 +35,10 @@ type Context interface {
 	// CLI/MCP caller in real time via RPC streaming.
 	Stderr() io.Writer
 
-	// Logger returns a structured logger that sends log entries to the
+	// Log returns a structured logger that sends log entries to the
 	// daemon's logging system. The plugin name is automatically attached
 	// so entries appear under a "plugins.<name>" hierarchy.
-	Logger() Logger
+	Log() logging.Logger
 
 	// Exec runs a shell command without privilege escalation.
 	Exec(cmd string) (ExecResult, error)
@@ -83,7 +72,7 @@ type contextClient struct {
 	token      string
 	sessionID  string
 	pluginName string
-	logger     Logger
+	log        logging.Logger
 }
 
 // newContextClient creates a new Context client connected to the daemon's
@@ -95,12 +84,12 @@ func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 		sessionID:  sessionID,
 		pluginName: pluginName,
 	}
-	c.logger = &pluginLogger{client: c, pluginName: pluginName}
+	c.log = &pluginLogger{client: c, pluginName: pluginName}
 	return c
 }
 
-// Logger returns a structured logger that sends entries to the daemon.
-func (c *contextClient) Logger() Logger { return c.logger }
+// Log returns a structured logger that sends entries to the daemon.
+func (c *contextClient) Log() logging.Logger { return c.log }
 
 // buildSession creates a Session message for use in context requests.
 func (c *contextClient) buildSession() *dotfilesdv1.Session {
@@ -224,27 +213,33 @@ type streamingContext struct {
 
 func (c *streamingContext) Stdout() io.Writer { return c.stdout }
 func (c *streamingContext) Stderr() io.Writer { return c.stderr }
-func (c *streamingContext) Logger() Logger    { return c.Context.Logger() }
+func (c *streamingContext) Log() logging.Logger { return c.Context.Log() }
 
 // ---------------------------------------------------------------------------
 // pluginLogger — sends log entries to the daemon via the Log RPC
 // ---------------------------------------------------------------------------
 
-// pluginLogger implements the Logger interface by calling the daemon's
-// Log RPC for each entry. It buffers minimally; each log call sends a
-// separate RPC. The daemon routes entries through its logging system
-// with the plugin name as the logger module.
+// pluginLogger implements logging.Logger by calling the daemon's Log RPC.
+// Each log call sends a separate RPC. The daemon routes entries through
+// its logging system with the plugin name as the logger module.
 type pluginLogger struct {
 	client     *contextClient
 	pluginName string
+	fixedAttrs []any
 }
 
 func (l *pluginLogger) log(level, msg string, attrs ...any) {
-	attrMap := make(map[string]string)
+	// Merge fixed attrs with call attrs (call attrs take precedence).
+	merged := make(map[string]string)
+	for i := 0; i < len(l.fixedAttrs)-1; i += 2 {
+		k := fmt.Sprintf("%v", l.fixedAttrs[i])
+		v := fmt.Sprintf("%v", l.fixedAttrs[i+1])
+		merged[k] = v
+	}
 	for i := 0; i < len(attrs)-1; i += 2 {
 		k := fmt.Sprintf("%v", attrs[i])
 		v := fmt.Sprintf("%v", attrs[i+1])
-		attrMap[k] = v
+		merged[k] = v
 	}
 
 	req := connect.NewRequest(&dotfilesdv1.LogRequest{
@@ -253,7 +248,7 @@ func (l *pluginLogger) log(level, msg string, attrs ...any) {
 		Entry: &dotfilesdv1.LogEntry{
 			Level:      level,
 			Message:    msg,
-			Attributes: attrMap,
+			Attributes: merged,
 		},
 	})
 	req.Header().Set("X-Dotfiles-Context-Token", l.client.authHeader())
@@ -270,3 +265,25 @@ func (l *pluginLogger) Fatal(msg string, attrs ...any) {
 	l.log("fatal", msg, attrs...)
 	os.Exit(1)
 }
+
+// Child returns self — plugins don't need hierarchical sub-loggers.
+// All child log entries still route through the daemon under the same
+// plugin name.
+func (l *pluginLogger) Child(name string) logging.Logger { return l }
+
+// WithAttrs returns a new pluginLogger with the given attributes attached
+// to every log entry.
+func (l *pluginLogger) WithAttrs(attrs ...any) logging.Logger {
+	newFixed := make([]any, 0, len(l.fixedAttrs)+len(attrs))
+	newFixed = append(newFixed, l.fixedAttrs...)
+	newFixed = append(newFixed, attrs...)
+	return &pluginLogger{
+		client:     l.client,
+		pluginName: l.pluginName,
+		fixedAttrs: newFixed,
+	}
+}
+
+// Enabled always returns true. Level filtering is handled by the daemon
+// side so the plugin doesn't need to know the daemon's log level.
+func (l *pluginLogger) Enabled(level logging.Level) bool { return true }

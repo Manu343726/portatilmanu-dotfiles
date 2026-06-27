@@ -166,15 +166,15 @@ func (l *namedLogger) Fatal(msg string, attrs ...any) {
 
 type nopLogger struct{}
 
-func (nopLogger) Trace(string, ...any)           {}
-func (nopLogger) Debug(string, ...any)           {}
-func (nopLogger) Info(string, ...any)            {}
-func (nopLogger) Warn(string, ...any)            {}
-func (nopLogger) Error(string, ...any)           {}
-func (nopLogger) Fatal(string, ...any)           { os.Exit(1) }
-func (nopLogger) Child(string) Logger            { return nopLogger{} }
-func (nopLogger) WithAttrs(...any) Logger        { return nopLogger{} }
-func (nopLogger) Enabled(Level) bool             { return false }
+func (nopLogger) Trace(string, ...any)    {}
+func (nopLogger) Debug(string, ...any)    {}
+func (nopLogger) Info(string, ...any)     {}
+func (nopLogger) Warn(string, ...any)     {}
+func (nopLogger) Error(string, ...any)    {}
+func (nopLogger) Fatal(string, ...any)    { os.Exit(1) }
+func (nopLogger) Child(string) Logger     { return nopLogger{} }
+func (nopLogger) WithAttrs(...any) Logger { return nopLogger{} }
+func (nopLogger) Enabled(Level) bool      { return false }
 
 // NopLogger is a logger that discards all output.
 var NopLogger Logger = nopLogger{}
@@ -195,11 +195,11 @@ type resolvedLogger struct {
 
 // Globals for standard library interop
 func Trace(msg string, attrs ...any) { global.Logger("root").Trace(msg, attrs...) }
-func Debug(msg string, attrs ...any)  { global.Logger("root").Debug(msg, attrs...) }
-func Info(msg string, attrs ...any)   { global.Logger("root").Info(msg, attrs...) }
-func Warn(msg string, attrs ...any)   { global.Logger("root").Warn(msg, attrs...) }
-func Error(msg string, attrs ...any)  { global.Logger("root").Error(msg, attrs...) }
-func Fatal(msg string, attrs ...any)  { global.Logger("root").Fatal(msg, attrs...) }
+func Debug(msg string, attrs ...any) { global.Logger("root").Debug(msg, attrs...) }
+func Info(msg string, attrs ...any)  { global.Logger("root").Info(msg, attrs...) }
+func Warn(msg string, attrs ...any)  { global.Logger("root").Warn(msg, attrs...) }
+func Error(msg string, attrs ...any) { global.Logger("root").Error(msg, attrs...) }
+func Fatal(msg string, attrs ...any) { global.Logger("root").Fatal(msg, attrs...) }
 
 // ---------------------------------------------------------------------------
 // Helper: merge attrs

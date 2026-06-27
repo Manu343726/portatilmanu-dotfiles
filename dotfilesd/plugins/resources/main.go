@@ -114,14 +114,20 @@ const (
 
 // collect runs in a background goroutine, sampling system stats.
 func (m *monitor) collect(ctx plugin.Context, stop <-chan struct{}) {
+	ctx.Log().Info("starting resource collection background loop", "interval", collectInterval.String())
+
 	// Prime the CPU with an initial sample so we can compute deltas.
 	for retries := 0; retries < 3; retries++ {
 		if raw, err := readCPUStat(ctx); err == nil {
 			m.prevCPU = raw
 			m.firstCPU = true
+			ctx.Log().Trace("initial CPU sample collected")
 			break
 		} else if retries < 2 {
+			ctx.Log().Debug("retrying initial CPU sample", "retry", retries+1, "error", err)
 			time.Sleep(500 * time.Millisecond)
+		} else {
+			ctx.Log().Warn("failed to collect initial CPU sample after retries", "error", err)
 		}
 	}
 
@@ -130,9 +136,13 @@ func (m *monitor) collect(ctx plugin.Context, stop <-chan struct{}) {
 	for retries := 0; retries < 5; retries++ {
 		if rawList, err := readCPUPerCore(ctx); err == nil {
 			m.numCores = len(rawList)
+			ctx.Log().Debug("detected CPU cores", "count", m.numCores)
 			break
 		} else if retries < 4 {
+			ctx.Log().Debug("retrying CPU core detection", "retry", retries+1, "error", err)
 			time.Sleep(500 * time.Millisecond)
+		} else {
+			ctx.Log().Warn("failed to detect CPU cores, defaulting to 1", "error", err)
 		}
 	}
 	if m.numCores == 0 {
@@ -142,6 +152,7 @@ func (m *monitor) collect(ctx plugin.Context, stop <-chan struct{}) {
 	for {
 		select {
 		case <-stop:
+			ctx.Log().Info("resource collection stopped")
 			return
 		case <-time.After(collectInterval):
 		}
@@ -151,6 +162,8 @@ func (m *monitor) collect(ctx plugin.Context, stop <-chan struct{}) {
 		// RAM.
 		if mem, err := collectRAM(ctx); err == nil {
 			snap.RAM = mem
+		} else {
+			ctx.Log().Debug("failed to collect RAM", "error", err)
 		}
 
 		// CPU (delta-based).
@@ -160,11 +173,15 @@ func (m *monitor) collect(ctx plugin.Context, stop <-chan struct{}) {
 		if raw, err := readCPUStat(ctx); err == nil {
 			m.prevCPU = raw
 			m.firstCPU = false
+		} else {
+			ctx.Log().Debug("failed to read CPU stats", "error", err)
 		}
 
 		// Disk usage.
 		if disks, err := collectDisks(ctx); err == nil {
 			snap.Disks = disks
+		} else {
+			ctx.Log().Debug("failed to collect disk usage", "error", err)
 		}
 
 		// Disk I/O rates (delta-based).
@@ -173,6 +190,8 @@ func (m *monitor) collect(ctx plugin.Context, stop <-chan struct{}) {
 		}
 		if rawMap, err := readDiskIORaw(ctx); err == nil {
 			m.prevDiskIO = rawMap
+		} else {
+			ctx.Log().Debug("failed to read disk I/O raw", "error", err)
 		}
 
 		m.mu.Lock()
@@ -182,6 +201,13 @@ func (m *monitor) collect(ctx plugin.Context, stop <-chan struct{}) {
 			m.history = m.history[len(m.history)-maxHistory:]
 		}
 		m.mu.Unlock()
+
+		ctx.Log().Trace("resource snapshot collected",
+			"ram_pct", snap.RAM.Percent,
+			"cpu_pct", snap.CPU.TotalPercent,
+			"disks", len(snap.Disks),
+			"disk_io", len(snap.DiskIO),
+		)
 	}
 }
 
@@ -625,6 +651,8 @@ func sparkline(pct float64, width int) string {
 // =========================================================================
 
 func (m *monitor) currentTool(ctx plugin.Context, _ map[string]string) error {
+	ctx.Log().Debug("current resource snapshot requested")
+
 	m.mu.RLock()
 	snap := m.current
 	m.mu.RUnlock()
@@ -674,10 +702,17 @@ func (m *monitor) currentTool(ctx plugin.Context, _ map[string]string) error {
 		}
 	}
 
+	ctx.Log().Trace("current snapshot served",
+		"ram_pct", snap.RAM.Percent,
+		"cpu_pct", snap.CPU.TotalPercent,
+		"disks", len(snap.Disks),
+		"disk_io", len(snap.DiskIO),
+	)
 	return nil
 }
 
 func (m *monitor) topTool(ctx plugin.Context, args map[string]string) error {
+	ctx.Log().Debug("top processes requested", "count", args["count"], "sort", args["sort"])
 	count := 10
 	sortBy := "cpu"
 	if v := args["count"]; v != "" {
@@ -730,6 +765,8 @@ func (m *monitor) topTool(ctx plugin.Context, args map[string]string) error {
 }
 
 func (m *monitor) psTool(ctx plugin.Context, args map[string]string) error {
+	ctx.Log().Debug("process list requested", "pid", args["pid"], "count", args["count"], "sort", args["sort"])
+
 	// Optional specific PID.
 	if pidStr := args["pid"]; pidStr != "" {
 		pid, err := strconv.Atoi(pidStr)
@@ -839,6 +876,8 @@ func (m *monitor) printProcessDetail(ctx plugin.Context, p ProcessInfo) {
 }
 
 func (m *monitor) historyTool(ctx plugin.Context, args map[string]string) error {
+	ctx.Log().Debug("resource history requested", "resource", args["resource"], "count", args["count"])
+
 	resource := "ram"
 	if v := args["resource"]; v != "" {
 		switch v {

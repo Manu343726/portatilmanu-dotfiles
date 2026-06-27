@@ -2,9 +2,9 @@ package logging
 
 // ANSI color / style escape codes used by the formatter.
 const (
-	ColorReset    = "\033[0m"
-	ColorDim      = "\033[2m"
-	ColorBold     = "\033[1m"
+	ColorReset = "\033[0m"
+	ColorDim   = "\033[2m"
+	ColorBold  = "\033[1m"
 
 	ColorFgBlack   = "\033[30m"
 	ColorFgRed     = "\033[31m"
