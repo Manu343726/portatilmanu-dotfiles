@@ -2,7 +2,7 @@
 
 ## [Step 0.0] — Document: Development Workflow Rules
 
-**Commit:** `pending`
+**Commit:** `37786d6`
 **Date:** 2026-06-27
 
 ### Changes
