@@ -24,7 +24,7 @@ foundation but are not tracked here since the changelog didn't exist yet.
 
 ## [Step 0] — Scaffold Plugin Directories
 
-**Commit:** `ba1dc27`
+**Commit:** `e6a9e01`
 **Date:** 2026-06-27
 
 ### Changes
