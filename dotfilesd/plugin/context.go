@@ -269,26 +269,6 @@ func (c *contextClient) Stderr() io.Writer { return &nopWriter{} }
 type nopWriter struct{}
 func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
-// streamingContext wraps Context with real stdout/stderr writers for tool execution.
-type streamingContext struct {
-	Context
-	client *contextClient
-	stdout io.Writer
-	stderr io.Writer
-}
-
-func (c *streamingContext) Stdout() io.Writer   { return c.stdout }
-func (c *streamingContext) Stderr() io.Writer   { return c.stderr }
-func (c *streamingContext) Log() logging.Logger { return c.Context.Log() }
-
-func (c *streamingContext) ExecStream(cmd string, sudo bool) (int, error) {
-	return execStreamWithWriters(c.client, c.stdout, c.stderr, cmd, sudo)
-}
-
-func (c *streamingContext) BackgroundExec(cmd string, sudo bool) (BackgroundTask, error) {
-	return startBackgroundTask(c.client.execClient, c.client.token, c.client.buildSession(), c.stdout, c.stderr, cmd, sudo)
-}
-
 // pluginLogger implements logging.Logger by calling the daemon's Log RPC.
 type pluginLogger struct {
 	client     *contextClient

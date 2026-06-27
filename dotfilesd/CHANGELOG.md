@@ -154,6 +154,28 @@ files are gitignored so only the .proto source is tracked.
 Steps 5 and 7 are combined because step 5 (mount DocumentationService)
 needs the type from step 7 (docs.go). Step 6 (context.go rewrite) is
 next.
+
+---
+
+## [Step 6] — Rewrite context.go
+
+**Commit:** `pending`
+**Date:** 2026-06-27
+
+### Changes
+- `dotfilesd/plugin/context.go`: Removed `streamingContext` type and all
+  its methods (`Stdout`, `Stderr`, `Log`, `ExecStream`, `BackgroundExec`).
+  This was dead code after the old Tool-based `extensionServiceServer`
+  was removed in Step 1. The `execStreamWithWriters` helper function is
+  preserved — still used by `contextClient.ExecStream`.
+
+### State
+- [x] Plugin SDK (`plugin/...`) builds
+
+### Notes
+`pluginClient` and `CallPlugin` were already absent from the codebase
+(removed in earlier sessions). Step 8 (Build SDK) is implicitly verified
+by every build check in steps 5-7.
 **Date:** 2026-06-27
 
 ### Changes
