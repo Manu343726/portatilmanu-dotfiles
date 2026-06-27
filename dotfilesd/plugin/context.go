@@ -454,6 +454,12 @@ func (c *streamingContext) ExecStream(cmd string, sudo bool) (int, error) {
 	return execStreamWithWriters(c.client, c.stdout, c.stderr, cmd, sudo)
 }
 
+// BackgroundExec overrides the embedded contextClient.BackgroundExec to
+// use the real streaming writers for Tee() instead of no-op writers.
+func (c *streamingContext) BackgroundExec(cmd string, sudo bool) (BackgroundTask, error) {
+	return startBackgroundTask(c.client.execClient, c.client.token, c.client.buildSession(), c.stdout, c.stderr, cmd, sudo)
+}
+
 // ---------------------------------------------------------------------------
 // pluginLogger — sends log entries to the daemon via the Log RPC
 // ---------------------------------------------------------------------------
