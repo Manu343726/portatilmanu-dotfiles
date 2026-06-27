@@ -236,7 +236,7 @@ individual tools rather than exposing individual tool commands.
 
 ## [Steps 14-15] — Rewrite Plugins (resources + tmuxbar)
 
-**Commit:** `pending`
+**Commit:** `1f270f7`
 **Date:** 2026-06-28
 
 ### Changes
@@ -279,7 +279,7 @@ background goroutine is launched by plugin.Serve().
 
 ## [Step 16] — Update Makefile
 
-**Commit:** `pending`
+**Commit:** `5d48361`
 **Date:** 2026-06-28
 
 ### Changes
