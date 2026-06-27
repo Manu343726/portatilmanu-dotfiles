@@ -1,0 +1,11 @@
+{
+    "servers": {
+        "dotfilesd": {
+            "command": "dotfilesctl",
+            "args": [
+                "mcp"
+            ],
+            "env": {}
+        }
+    }
+}

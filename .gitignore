@@ -14,8 +14,9 @@
 /.nvm/
 !/.zshrc
 
-# vscode debug config
+# vscode configs
 !/.vscode/launch.json
+!/.vscode/mcp.json
 !/.bashrc
 !/.profile
 !/.xprofile
