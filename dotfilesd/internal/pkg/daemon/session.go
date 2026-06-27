@@ -518,6 +518,21 @@ func (ss *SessionStore) CreateEphemeral() *Session {
 	return s
 }
 
+// CreateNamed creates a session with the given ID. If a session with that
+// ID already exists, it is returned as-is. This is used for plugin sessions.
+func (ss *SessionStore) CreateNamed(id string) *Session {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	if s, ok := ss.sessions[id]; ok {
+		slog.Debug("session already exists, reusing", "session_id", id)
+		return s
+	}
+	s := newSession(id)
+	ss.sessions[id] = s
+	slog.Debug("session created (named)", "session_id", id)
+	return s
+}
+
 func (ss *SessionStore) Get(id string) *Session {
 	ss.mu.RLock()
 	defer ss.mu.RUnlock()

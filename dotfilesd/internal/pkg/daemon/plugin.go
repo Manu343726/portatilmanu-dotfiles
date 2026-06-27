@@ -51,6 +51,10 @@ func (d *Daemon) InitPlugins() error {
 	slog.Info("plugins loaded", "count", len(plugins))
 	for _, p := range plugins {
 		slog.Info("  plugin", "name", p.Name, "version", p.Version, "tools", len(p.Tools))
+		// Create a session for this plugin so its RPC calls resolve
+		// to a real session (no ephemeral fallback warnings).
+		sessionID := fmt.Sprintf("plugin-%s", p.Name)
+		d.sessions.CreateNamed(sessionID)
 	}
 
 	return nil
