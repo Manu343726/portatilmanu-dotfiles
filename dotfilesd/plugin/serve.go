@@ -10,8 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"connectrpc.com/grpcreflect"
 	dotfilesdv1connect "dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+
+	"connectrpc.com/grpcreflect"
 )
 
 // Service is a Connect RPC service a plugin exposes.

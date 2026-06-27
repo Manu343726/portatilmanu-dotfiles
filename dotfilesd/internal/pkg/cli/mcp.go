@@ -161,10 +161,26 @@ func getPluginTools(clients *Clients) []toolDef {
 	if err := clients.Connect(context.Background()); err != nil {
 		return nil
 	}
-	tools, err := ListPluginTools(clients, "")
+	// List plugins from registry and create a tool per plugin.
+	req := connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{})
+	resp, err := clients.Registry.ListPlugins(context.Background(), req)
 	if err != nil {
-		slog.Debug("failed to fetch plugin tools", "error", err)
+		slog.Debug("failed to fetch plugins", "error", err)
 		return nil
+	}
+	var tools []toolDef
+	for _, p := range resp.Msg.Plugins {
+		desc := p.Description
+		if desc == "" {
+			desc = fmt.Sprintf("Plugin %q", p.Name)
+		}
+		tools = append(tools, toolDef{
+			Name:        p.Name,
+			Description: desc,
+			InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+				"session_id": {Type: "string", Description: "optional session ID for grouping"},
+			}},
+		})
 	}
 	pluginTools = tools
 	return pluginTools
@@ -764,40 +780,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		}
 
 	default:
-		// Try plugin tool dispatch for qualified names (format: "<plugin>_<tool>").
-		if !strings.Contains(name, "_") {
-			return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
-		}
-		parts := splitQualifiedName(name)
-		if len(parts) < 2 {
-			return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
-		}
-
-		// Parse arguments into flat string map.
-		var rawArgs map[string]json.RawMessage
-		strArgs := make(map[string]string)
-		sessionID := ""
-		if err := json.Unmarshal(args, &rawArgs); err == nil {
-			for k, v := range rawArgs {
-				if k == "session_id" {
-					json.Unmarshal(v, &sessionID)
-					continue
-				}
-				var s string
-				if err := json.Unmarshal(v, &s); err == nil {
-					strArgs[k] = s
-				} else {
-					// Non-string value: pass as JSON.
-					strArgs[k] = string(v)
-				}
-			}
-		}
-
-		text, err := CallPluginToolViaMCP(clients, sessionID, name, strArgs)
-		if err != nil {
-			return mcpErr(id, -32603, fmt.Sprintf("plugin tool call failed: %v", err))
-		}
-		return mcpToolResult(id, text)
+		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
 	}
 }
 

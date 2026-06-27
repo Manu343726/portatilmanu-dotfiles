@@ -176,6 +176,61 @@ next.
 `pluginClient` and `CallPlugin` were already absent from the codebase
 (removed in earlier sessions). Step 8 (Build SDK) is implicitly verified
 by every build check in steps 5-7.
+
+---
+
+## [Steps 9-13] — Daemon-Side Rewrite (Manager + Registry + CLI)
+
+**Commit:** `87f40e8`
+**Date:** 2026-06-28
+
+### Changes
+- `internal/pkg/plugin/manager.go`:
+  - Rewrote `PluginInfo` with flat fields (Name, DisplayName, Version,
+    Description, URL, Services []string) instead of old
+    `*dotfilesdv1.GetInfoResponse` / `[]*dotfilesdv1.ServiceDescriptor`.
+  - Replaced `PluginBaseService.GetInfo/ListServices` calls with
+    grpcreflect `NewClient().NewStream().ListServices()` discovery.
+  - Added handshake struct with name/version/description fields.
+  - Added `stepProto()` function for proto compilation before go build.
+  - Removed unused imports.
+- `internal/pkg/daemon/plugin.go`: Updated to use new flat PluginInfo
+  fields (p.Version, p.DisplayName instead of p.Info.Version).
+- `internal/pkg/daemon/registry_svc.go`: Updated to populate flat
+  RegistryGetPluginResponse fields (DisplayName, Version, Description)
+  instead of old GetInfoResponse/ServiceDescriptor.
+- `internal/pkg/cli/plugin.go`:
+  - Removed RunCallPluginTool, RunListPluginTools, ListPluginTools,
+    CallPluginToolViaMCP, splitQualifiedName, containsString,
+    propertyTypeToString, schemaTypeToString functions.
+  - Updated RunListPlugins to use flat RegistryGetPluginResponse fields.
+- `internal/pkg/cli/client.go`: Removed `Plugin` field from Clients
+  struct and NewClients constructor.
+- `internal/pkg/cli/mcp.go`:
+  - Rewrote getPluginTools to use PluginRegistryService.
+  - Removed old plugin tool dispatch in default case (CallPluginToolViaMCP).
+- `cmd/dotfilesctl/root.go`:
+  - Removed old ListPluginTree/registerPluginTreeEntry dispatch.
+  - Simplified registerDynamicCommands to use Registry.ListPlugins.
+  - Added registerPluginCommand for registry-based plugin listing.
+  - Removed splitKeyValue function.
+- `.config/dotfilesd/plugins/weather/go.mod` / `go.sum`: Updated by
+  `go mod tidy`.
+
+### State
+- [x] Full daemon (`./...`) builds
+- [x] Daemon binary (`cmd/dotfilesd`) builds
+- [x] CLI binary (`cmd/dotfilesctl`) builds
+- [x] Weather plugin builds
+- [ ] Daemon starts and loads plugins (not yet tested)
+- [ ] Plugin RPCs work (not yet tested)
+
+### Notes
+The dynamic cobra command generation from proto reflection (doc §5a)
+is NOT yet implemented — plugins are registered as simple info-only
+commands. The full proto-based flag generation will come in a later
+phase. The MCP tool dispatch for plugins now shows plugins as
+individual tools rather than exposing individual tool commands.
 **Date:** 2026-06-27
 
 ### Changes

@@ -14,20 +14,20 @@ import (
 	"strings"
 	"sync"
 
-	"connectrpc.com/connect"
-	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
-	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+	"connectrpc.com/grpcreflect"
 )
 
 // PluginInfo holds metadata for a loaded plugin.
 type PluginInfo struct {
-	Name      string
-	URL       string
-	Info      *dotfilesdv1.GetInfoResponse
-	Services  []*dotfilesdv1.ServiceDescriptor
-	Process   *os.Process
-	SourceDir string
-	CacheDir  string
+	Name        string
+	DisplayName string
+	Version     string
+	Description string
+	URL         string
+	Services    []string // service names from grpcreflect discovery
+	Process     *os.Process
+	SourceDir   string
+	CacheDir    string
 }
 
 // Manager orchestrates plugin lifecycle with dependency-aware builds.
@@ -50,6 +50,36 @@ func NewManager(pluginsDir, cacheDir, ctxURL, ctxToken string) *Manager {
 		CtxToken:   ctxToken,
 		plugins:    make(map[string]*PluginInfo),
 	}
+}
+
+// handshake is the JSON structure a plugin writes to stdout on startup.
+type handshake struct {
+	Protocol    string `json:"protocol"`
+	URL         string `json:"url"`
+	SessionID   string `json:"session_id"`
+	Name        string `json:"name,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// stepProto compiles proto files for a plugin if it has a proto/<name>/ directory.
+func stepProto(sourceDir, name string) error {
+	protoDir := filepath.Join(sourceDir, "proto", name)
+	matches, err := filepath.Glob(filepath.Join(protoDir, "*.proto"))
+	if err != nil || len(matches) == 0 {
+		return nil // no proto files to compile
+	}
+	cmd := exec.Command("protoc",
+		"--proto_path="+sourceDir,
+		"--go_out="+sourceDir, "--go_opt=paths=source_relative",
+		"--connect-go_out="+sourceDir, "--connect-go_opt=paths=source_relative",
+	)
+	cmd.Args = append(cmd.Args, matches...)
+	cmd.Dir = sourceDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("proto compile: %w\n%s", err, string(out))
+	}
+	return nil
 }
 
 // LoadPlugins discovers, builds (in dependency order), launches, and registers all plugins.
@@ -75,13 +105,19 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 	for _, name := range buildOrder {
 		sourceDir := filepath.Join(pluginsDir, name)
 
+		// Step a: Proto compilation.
+		if err := stepProto(sourceDir, name); err != nil {
+			slog.Error("proto compile failed", "name", name, "error", err)
+			continue
+		}
+
+		// Step b: Go build.
 		slog.Info("building plugin", "name", name)
 		binaryPath := filepath.Join(cacheDir, name, name)
 		if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
 			slog.Error("mkdir failed", "name", name, "error", err)
 			continue
 		}
-
 		cmd := exec.Command("go", "build", "-o", binaryPath, ".")
 		cmd.Dir = sourceDir
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -89,6 +125,7 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 			continue
 		}
 
+		// Step c: Launch subprocess.
 		sessionID := fmt.Sprintf("plugin-%s", name)
 		procCmd := exec.Command(binaryPath)
 		procCmd.Env = append(os.Environ(),
@@ -96,68 +133,74 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 			"EXECUTION_CONTEXT_TOKEN="+m.CtxToken,
 			"SESSION_ID="+sessionID,
 		)
-
 		stdout, err := procCmd.StdoutPipe()
 		if err != nil {
 			slog.Error("stdout pipe failed", "name", name, "error", err)
 			continue
 		}
 		procCmd.Stderr = os.Stderr
-
 		if err := procCmd.Start(); err != nil {
 			slog.Error("start failed", "name", name, "error", err)
 			continue
 		}
 
-		var hs struct {
-			Protocol string `json:"protocol"`
-			URL      string `json:"url"`
-			Session  string `json:"session_id"`
-		}
+		// Step d: Read handshake JSON from stdout.
+		var hs handshake
 		if err := readJSONLine(stdout, &hs); err != nil {
 			procCmd.Process.Kill()
-			slog.Error("handshake failed", "name", name, "error", err)
+			slog.Error("handshake read failed", "name", name, "error", err)
 			continue
 		}
-
 		if hs.Protocol != "dotfilesd-plugin-v1" {
 			procCmd.Process.Kill()
-			slog.Error("unknown protocol", "name", name, "protocol", hs.Protocol)
+			slog.Error("unknown handshake protocol", "name", name, "protocol", hs.Protocol)
 			continue
 		}
-
 		slog.Info("plugin launched", "name", name, "url", hs.URL, "pid", procCmd.Process.Pid)
 
-		// Call PluginBaseService.GetInfo and ListServices.
+		// Step e: grpcreflect discovery — ListServices.
 		httpClient := &http.Client{}
-		baseClient := dotfilesdv1connect.NewPluginBaseServiceClient(httpClient, hs.URL)
-
-		infoResp, err := baseClient.GetInfo(ctx, connect.NewRequest(&dotfilesdv1.GetInfoRequest{}))
-		if err != nil {
+		refClient := grpcreflect.NewClient(httpClient, hs.URL)
+		stream := refClient.NewStream(ctx)
+		svcNames, listErr := stream.ListServices()
+		stream.Close()
+		if listErr != nil {
 			procCmd.Process.Kill()
-			slog.Error("GetInfo failed", "name", name, "error", err)
+			slog.Error("grpcreflect ListServices failed", "name", name, "error", listErr)
 			continue
 		}
 
-		svcResp, err := baseClient.ListServices(ctx, connect.NewRequest(&dotfilesdv1.ListServicesRequest{}))
-		if err != nil {
-			procCmd.Process.Kill()
-			slog.Error("ListServices failed", "name", name, "error", err)
-			continue
+		// Convert []protoreflect.FullName to []string and filter out reflection services.
+		var services []string
+		for _, s := range svcNames {
+			s := string(s)
+			if s == "grpc.reflection.v1.ServerReflection" || s == "grpc.reflection.v1alpha.ServerReflection" {
+				continue
+			}
+			services = append(services, s)
 		}
 
+		// Step f: If DocumentationService is exposed, call it (best-effort).
+		_ = services // documentation caching will be added later
+
+		// Step g: Store PluginInfo.
+		displayName := hs.Name
+		if displayName == "" {
+			displayName = name
+		}
 		info := &PluginInfo{
-			Name:      name,
-			URL:       hs.URL,
-			Info:      infoResp.Msg,
-			Services:  svcResp.Msg.Services,
-			Process:   procCmd.Process,
-			SourceDir: sourceDir,
-			CacheDir:  cacheDir,
+			Name:        name,
+			DisplayName: displayName,
+			Version:     hs.Version,
+			Description: hs.Description,
+			URL:         hs.URL,
+			Services:    services,
+			Process:     procCmd.Process,
+			SourceDir:   sourceDir,
+			CacheDir:    cacheDir,
 		}
-
 		m.plugins[name] = info
-		slog.Info("plugin registered", "name", name, "services", len(info.Services))
+		slog.Info("plugin registered", "name", name, "services", services)
 	}
 
 	slog.Info("plugins loaded", "count", len(m.plugins))

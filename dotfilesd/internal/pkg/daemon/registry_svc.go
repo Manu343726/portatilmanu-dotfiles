@@ -36,10 +36,12 @@ func (s *registryServer) GetPlugin(
 	}
 
 	resp := connect.NewResponse(&dotfilesdv1.RegistryGetPluginResponse{
-		Name:     info.Name,
-		Url:      info.URL,
-		Info:     info.Info,
-		Services: info.Services,
+		Name:        info.Name,
+		DisplayName: info.DisplayName,
+		Version:     info.Version,
+		Description: info.Description,
+		Url:         info.URL,
+		Services:    info.Services,
 	})
 	slog.Log(ctx, levelTrace, "Registry.GetPlugin done", "plugin", req.Msg.PluginName, "url", info.URL)
 	return resp, nil
@@ -60,10 +62,12 @@ func (s *registryServer) ListPlugins(
 	plugins := make([]*dotfilesdv1.RegistryGetPluginResponse, 0, len(infos))
 	for _, info := range infos {
 		plugins = append(plugins, &dotfilesdv1.RegistryGetPluginResponse{
-			Name:     info.Name,
-			Url:      info.URL,
-			Info:     info.Info,
-			Services: info.Services,
+			Name:        info.Name,
+			DisplayName: info.DisplayName,
+			Version:     info.Version,
+			Description: info.Description,
+			Url:         info.URL,
+			Services:    info.Services,
 		})
 	}
 

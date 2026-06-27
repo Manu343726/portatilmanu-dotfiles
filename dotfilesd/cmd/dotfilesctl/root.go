@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"dotfilesd/internal/pkg/cli"
 	"dotfilesd/internal/pkg/shared"
@@ -24,10 +25,9 @@ var (
 	clients   *cli.Clients
 )
 
-// registerDynamicCommands connects to the daemon and registers plugin tools
-// and registered scripts as top-level cobra commands grouped under "plugins"
-// and "scripts" groups respectively. This is best-effort: if the daemon is
-// unreachable, only the static core commands are available.
+// registerDynamicCommands connects to the daemon and registers plugin services
+// and registered scripts as top-level cobra commands. This is best-effort: if
+// the daemon is unreachable, only the static core commands are available.
 func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 	dynClients := cli.NewClients(daemonPort)
 	if err := dynClients.Connect(context.Background()); err != nil {
@@ -36,14 +36,14 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 	}
 	slog.Debug("connected to daemon for dynamic command registration")
 
-	// Fetch plugin tree (directory hierarchy with loaded plugin descriptors).
-	pluginResp, err := dynClients.Plugin.ListPluginTree(context.Background(), connect.NewRequest(&dotfilesdv1.ListPluginTreeRequest{}))
+	// Register plugin list commands (one per plugin) from the registry.
+	pluginResp, err := dynClients.Registry.ListPlugins(context.Background(), connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{}))
 	if err == nil {
-		for _, entry := range pluginResp.Msg.Entries {
-			registerPluginTreeEntry(root, dynClients, entry, true)
+		for _, p := range pluginResp.Msg.Plugins {
+			registerPluginCommand(root, p)
 		}
 	} else {
-		slog.Debug("failed to fetch plugin tree for command registration", "error", err)
+		slog.Debug("failed to fetch plugins for command registration", "error", err)
 	}
 
 	// Fetch script tree.
@@ -57,101 +57,35 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 	}
 }
 
-// hasCommand checks if parent already has a registered subcommand with the
-// given name. We iterate Commands() directly instead of using Find() because
-// Find() treats commands with Run/RunE as terminal, returning no error even
-// when the named subcommand doesn't exist.
-func hasCommand(parent *cobra.Command, name string) bool {
-	for _, sub := range parent.Commands() {
-		if sub.Name() == name {
-			return true
-		}
-	}
-	return false
-}
-
-// registerPluginTreeEntry recursively registers plugin tree entries as cobra
-// commands. Directory entries become parent commands with subcommands; leaf
-// entries (loaded plugins) get their tools registered as subcommands.
-// isTopLevel controls whether GroupID "plugins" is set.
-func registerPluginTreeEntry(parent *cobra.Command, dynClients *cli.Clients, entry *dotfilesdv1.PluginTreeEntry, isTopLevel bool) {
-	name := entry.Name
-
-	// Check for name conflicts.
-	if hasCommand(parent, name) {
-		slog.Debug("skipping plugin entry, name conflict", "plugin", name)
-		return
-	}
-
-	desc := entry.Description
+// registerPluginCommand creates a cobra command for a plugin that shows its
+// metadata and services when invoked.
+func registerPluginCommand(parent *cobra.Command, p *dotfilesdv1.RegistryGetPluginResponse) {
+	name := p.Name
+	desc := p.DisplayName
 	if desc == "" {
 		desc = name
 	}
 
-	if entry.IsDirectory {
-		// Category directory — create parent command, recurse into children.
-		dirCmd := &cobra.Command{
-			Use:   name,
-			Short: desc,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return cmd.Help()
-			},
-		}
-		if isTopLevel {
-			dirCmd.GroupID = "plugins"
-		}
-		for _, child := range entry.Children {
-			registerPluginTreeEntry(dirCmd, dynClients, child, false)
-		}
-		parent.AddCommand(dirCmd)
-	} else if entry.Plugin != nil {
-		// Loaded plugin leaf — create command with tool subcommands.
-		p := entry.Plugin
-		pluginCmd := &cobra.Command{
-			Use:     name + " <tool> [<key=value>...]",
-			Short:   desc,
-			GroupID: "plugins",
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return cmd.Help()
-			},
-		}
-		if isTopLevel {
-			pluginCmd.GroupID = "plugins"
-		}
-		for _, t := range p.Tools {
-			tool := t
-			toolCmd := &cobra.Command{
-				Use:   tool.Name + " [<key=value>...]",
-				Short: tool.Description,
-				Args:  cobra.ArbitraryArgs,
-				RunE: func(cmd *cobra.Command, args []string) error {
-					argsMap := make(map[string]string)
-					for _, arg := range args {
-						parts := splitKeyValue(arg)
-						if len(parts) == 2 {
-							argsMap[parts[0]] = parts[1]
-						}
-					}
-					return cli.RunCallPluginTool(clients, sessionID, p.Name, tool.Name, argsMap)
-				},
+	pluginCmd := &cobra.Command{
+		Use:     name,
+		Short:   desc,
+		Long:    fmt.Sprintf("Plugin: %s (%s v%s)\n%s\nServices: %s", p.Name, p.DisplayName, p.Version, p.Description, strings.Join(p.Services, ", ")),
+		GroupID: "plugins",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("Name:        %s\n", p.Name)
+			fmt.Printf("Display:     %s\n", p.DisplayName)
+			fmt.Printf("Version:     %s\n", p.Version)
+			fmt.Printf("Description: %s\n", p.Description)
+			if len(p.Services) > 0 {
+				fmt.Println("Services:")
+				for _, svc := range p.Services {
+					fmt.Printf("  - %s\n", svc)
+				}
 			}
-			pluginCmd.AddCommand(toolCmd)
-		}
-		parent.AddCommand(pluginCmd)
-	} else {
-		// Disabled or failed plugin — show as disabled command.
-		disabledCmd := &cobra.Command{
-			Use:   name,
-			Short: desc + " [disabled]",
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return fmt.Errorf("plugin %q is not available (disabled or failed to load)", name)
-			},
-		}
-		if isTopLevel {
-			disabledCmd.GroupID = "plugins"
-		}
-		parent.AddCommand(disabledCmd)
+			return nil
+		},
 	}
+	parent.AddCommand(pluginCmd)
 }
 
 // registerScriptCommand recursively creates cobra commands from the script
@@ -162,9 +96,6 @@ func registerScriptCommand(parent *cobra.Command, dynClients *cli.Clients, entry
 	scriptPath := entry.Path
 
 	// Check for name conflicts by iterating Commands() directly.
-	// We cannot use Find() because it treats commands with Run/RunE as
-	// terminal — it returns no error even when the named subcommand is
-	// not registered, defeating the conflict check.
 	if hasCommand(parent, name) {
 		slog.Debug("skipping script command, name conflict", "script", name)
 		return
@@ -206,14 +137,17 @@ func registerScriptCommand(parent *cobra.Command, dynClients *cli.Clients, entry
 	}
 }
 
-// splitKeyValue splits "key=value" into ["key", "value"].
-func splitKeyValue(s string) []string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '=' {
-			return []string{s[:i], s[i+1:]}
+// hasCommand checks if parent already has a registered subcommand with the
+// given name. We iterate Commands() directly instead of using Find() because
+// Find() treats commands with Run/RunE as terminal, returning no error even
+// when the named subcommand doesn't exist.
+func hasCommand(parent *cobra.Command, name string) bool {
+	for _, sub := range parent.Commands() {
+		if sub.Name() == name {
+			return true
 		}
 	}
-	return []string{s}
+	return false
 }
 
 func newRootCmd() *cobra.Command {

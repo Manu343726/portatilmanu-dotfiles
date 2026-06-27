@@ -44,7 +44,7 @@ func (d *Daemon) InitPlugins() error {
 	plugins := d.pluginMgr.ListPlugins()
 	slog.Info("plugins loaded", "count", len(plugins))
 	for _, p := range plugins {
-		slog.Info("  plugin", "name", p.Name, "version", p.Info.Version, "services", len(p.Services))
+		slog.Info("  plugin", "name", p.Name, "version", p.Version, "display", p.DisplayName, "services", p.Services)
 	}
 
 	return nil

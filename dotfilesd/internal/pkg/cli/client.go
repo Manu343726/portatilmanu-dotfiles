@@ -64,7 +64,6 @@ type Clients struct {
 	Cfg       dotfilesdv1connect.ConfigServiceClient
 	Session   dotfilesdv1connect.SessionServiceClient
 	Script    dotfilesdv1connect.ScriptServiceClient
-	Plugin    dotfilesdv1connect.PluginServiceClient
 	Registry  dotfilesdv1connect.PluginRegistryServiceClient
 	Feedback  *FeedbackServer
 	SessionID string
@@ -81,7 +80,6 @@ func NewClients(port string) *Clients {
 		Cfg:      dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL),
 		Session:  dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
 		Script:   dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
-		Plugin:   dotfilesdv1connect.NewPluginServiceClient(http.DefaultClient, baseURL),
 		Registry: dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, baseURL),
 	}
 }

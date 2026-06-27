@@ -267,6 +267,7 @@ func (c *contextClient) Stdout() io.Writer { return &nopWriter{} }
 func (c *contextClient) Stderr() io.Writer { return &nopWriter{} }
 
 type nopWriter struct{}
+
 func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 // pluginLogger implements logging.Logger by calling the daemon's Log RPC.
@@ -302,11 +303,21 @@ func (l *pluginLogger) log(level dotfilesdv1.LogLevel, msg string, attrs ...any)
 	_, _ = l.client.logClient.Log(context.Background(), req)
 }
 
-func (l *pluginLogger) Trace(msg string, attrs ...any) { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_TRACE, msg, attrs...) }
-func (l *pluginLogger) Debug(msg string, attrs ...any) { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_DEBUG, msg, attrs...) }
-func (l *pluginLogger) Info(msg string, attrs ...any)  { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_INFO, msg, attrs...) }
-func (l *pluginLogger) Warn(msg string, attrs ...any)  { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_WARN, msg, attrs...) }
-func (l *pluginLogger) Error(msg string, attrs ...any) { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...) }
+func (l *pluginLogger) Trace(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_TRACE, msg, attrs...)
+}
+func (l *pluginLogger) Debug(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_DEBUG, msg, attrs...)
+}
+func (l *pluginLogger) Info(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_INFO, msg, attrs...)
+}
+func (l *pluginLogger) Warn(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_WARN, msg, attrs...)
+}
+func (l *pluginLogger) Error(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...)
+}
 func (l *pluginLogger) Fatal(msg string, attrs ...any) {
 	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...)
 	os.Exit(1)

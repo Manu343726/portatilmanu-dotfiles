@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package dotfilesd.v1;
 
-option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
-
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 // PluginRegistryService is exposed by the daemon so plugins can discover
 // and connect to each other's custom RPC services.
@@ -18,7 +18,7 @@ import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 service PluginRegistryService {
   // GetPlugin returns connection info for a named plugin.
   rpc GetPlugin(RegistryGetPluginRequest) returns (RegistryGetPluginResponse);
-  
+
   // ListPlugins returns all registered plugins.
   rpc ListPlugins(RegistryListPluginsRequest) returns (RegistryListPluginsResponse);
 }
