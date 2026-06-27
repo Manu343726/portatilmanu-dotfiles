@@ -45,17 +45,18 @@ var _ = Describe("systemServer", func() {
 		})
 	})
 
-	Describe("SystemInfo", func() {
-		It("returns system information", func() {
+	Describe("RuntimeInfo", func() {
+		It("returns runtime information", func() {
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 
 			client := dotfilesdv1connect.NewSystemServiceClient(http.DefaultClient, srv.URL)
-			resp, err := client.SystemInfo(ctx, connect.NewRequest(&dotfilesdv1.SystemInfoRequest{}))
+			resp, err := client.RuntimeInfo(ctx, connect.NewRequest(&dotfilesdv1.RuntimeInfoRequest{}))
 			Expect(err).To(Succeed())
 			Expect(resp.Msg.Os).To(Equal("linux"))
 			Expect(resp.Msg.Kernel).ToNot(BeEmpty())
 			Expect(resp.Msg.Shell).ToNot(BeEmpty())
+			Expect(resp.Msg.Hostname).ToNot(BeEmpty())
 		})
 	})
 
@@ -99,61 +100,7 @@ var _ = Describe("dotfilesServer", func() {
 			client := dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, srv.URL)
 			resp, err := client.Status(ctx, connect.NewRequest(&dotfilesdv1.StatusRequest{}))
 			Expect(err).To(Succeed())
-			Expect(resp.Msg.Hostname).ToNot(BeEmpty())
-			Expect(resp.Msg.Uptime).ToNot(BeEmpty())
-		})
-	})
-
-	Describe("Git", func() {
-		It("returns status for STATUS action", func() {
-			srv := httptest.NewServer(handler)
-			defer srv.Close()
-
-			client := dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, srv.URL)
-			resp, err := client.Git(ctx, connect.NewRequest(&dotfilesdv1.GitRequest{
-				Action: dotfilesdv1.GitAction_GIT_ACTION_STATUS,
-			}))
-			Expect(err).To(Succeed())
-			Expect(resp.Msg.ExitCode).To(Equal(int32(0)))
-			Expect(resp.Msg.Stdout).ToNot(BeEmpty())
-		})
-
-		It("returns log for LOG action", func() {
-			srv := httptest.NewServer(handler)
-			defer srv.Close()
-
-			client := dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, srv.URL)
-			resp, err := client.Git(ctx, connect.NewRequest(&dotfilesdv1.GitRequest{
-				Action: dotfilesdv1.GitAction_GIT_ACTION_LOG,
-			}))
-			Expect(err).To(Succeed())
-			Expect(resp.Msg.ExitCode).To(Equal(int32(0)))
-			Expect(resp.Msg.Stdout).ToNot(BeEmpty())
-		})
-
-		It("returns diff for DIFF action", func() {
-			srv := httptest.NewServer(handler)
-			defer srv.Close()
-
-			client := dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, srv.URL)
-			resp, err := client.Git(ctx, connect.NewRequest(&dotfilesdv1.GitRequest{
-				Action: dotfilesdv1.GitAction_GIT_ACTION_DIFF,
-			}))
-			Expect(err).To(Succeed())
-			Expect(resp.Msg.ExitCode).To(Equal(int32(0)))
-		})
-
-		It("returns error for unknown action", func() {
-			srv := httptest.NewServer(handler)
-			defer srv.Close()
-
-			client := dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, srv.URL)
-			resp, err := client.Git(ctx, connect.NewRequest(&dotfilesdv1.GitRequest{
-				Action: dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED,
-			}))
-			Expect(err).To(Succeed())
-			Expect(resp.Msg.ExitCode).To(Equal(int32(1)))
-			Expect(resp.Msg.Stderr).To(ContainSubstring("unknown"))
+			Expect(resp.Msg.GitBranch).ToNot(BeEmpty())
 		})
 	})
 })

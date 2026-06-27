@@ -125,27 +125,27 @@ func (x *PingResponse) GetUptimeSecs() int64 {
 	return 0
 }
 
-type SystemInfoRequest struct {
+type RuntimeInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SystemInfoRequest) Reset() {
-	*x = SystemInfoRequest{}
+func (x *RuntimeInfoRequest) Reset() {
+	*x = RuntimeInfoRequest{}
 	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SystemInfoRequest) String() string {
+func (x *RuntimeInfoRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SystemInfoRequest) ProtoMessage() {}
+func (*RuntimeInfoRequest) ProtoMessage() {}
 
-func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
+func (x *RuntimeInfoRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -157,48 +157,52 @@ func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SystemInfoRequest.ProtoReflect.Descriptor instead.
-func (*SystemInfoRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RuntimeInfoRequest.ProtoReflect.Descriptor instead.
+func (*RuntimeInfoRequest) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *SystemInfoRequest) GetSession() *Session {
+func (x *RuntimeInfoRequest) GetSession() *Session {
 	if x != nil {
 		return x.Session
 	}
 	return nil
 }
 
-type SystemInfoResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Os            string                 `protobuf:"bytes,1,opt,name=os,proto3" json:"os,omitempty"`
-	Kernel        string                 `protobuf:"bytes,2,opt,name=kernel,proto3" json:"kernel,omitempty"`
-	Shell         string                 `protobuf:"bytes,3,opt,name=shell,proto3" json:"shell,omitempty"`
-	Desktop       string                 `protobuf:"bytes,4,opt,name=desktop,proto3" json:"desktop,omitempty"`
-	MemoryTotalKb int64                  `protobuf:"varint,5,opt,name=memory_total_kb,json=memoryTotalKb,proto3" json:"memory_total_kb,omitempty"`
-	MemoryAvailKb int64                  `protobuf:"varint,6,opt,name=memory_avail_kb,json=memoryAvailKb,proto3" json:"memory_avail_kb,omitempty"`
-	CpuLoad_1M    float64                `protobuf:"fixed64,7,opt,name=cpu_load_1m,json=cpuLoad1m,proto3" json:"cpu_load_1m,omitempty"`
-	TmuxVersion   string                 `protobuf:"bytes,8,opt,name=tmux_version,json=tmuxVersion,proto3" json:"tmux_version,omitempty"`
-	KittyVersion  string                 `protobuf:"bytes,9,opt,name=kitty_version,json=kittyVersion,proto3" json:"kitty_version,omitempty"`
-	I3Version     string                 `protobuf:"bytes,10,opt,name=i3_version,json=i3Version,proto3" json:"i3_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type RuntimeInfoResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Operating system (always "linux").
+	Os string `protobuf:"bytes,1,opt,name=os,proto3" json:"os,omitempty"`
+	// Kernel version (uname -r).
+	Kernel string `protobuf:"bytes,2,opt,name=kernel,proto3" json:"kernel,omitempty"`
+	// Current shell binary path.
+	Shell string `protobuf:"bytes,3,opt,name=shell,proto3" json:"shell,omitempty"`
+	// Desktop environment name (XDG_CURRENT_DESKTOP).
+	Desktop string `protobuf:"bytes,4,opt,name=desktop,proto3" json:"desktop,omitempty"`
+	// Machine hostname.
+	Hostname string `protobuf:"bytes,5,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	// System uptime (uptime -p).
+	Uptime string `protobuf:"bytes,6,opt,name=uptime,proto3" json:"uptime,omitempty"`
+	// Tools found on PATH: sudo, pkexec, tmux, i3, kitty, etc.
+	AvailableTools []string `protobuf:"bytes,7,rep,name=available_tools,json=availableTools,proto3" json:"available_tools,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
-func (x *SystemInfoResponse) Reset() {
-	*x = SystemInfoResponse{}
+func (x *RuntimeInfoResponse) Reset() {
+	*x = RuntimeInfoResponse{}
 	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SystemInfoResponse) String() string {
+func (x *RuntimeInfoResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SystemInfoResponse) ProtoMessage() {}
+func (*RuntimeInfoResponse) ProtoMessage() {}
 
-func (x *SystemInfoResponse) ProtoReflect() protoreflect.Message {
+func (x *RuntimeInfoResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -210,79 +214,58 @@ func (x *SystemInfoResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SystemInfoResponse.ProtoReflect.Descriptor instead.
-func (*SystemInfoResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use RuntimeInfoResponse.ProtoReflect.Descriptor instead.
+func (*RuntimeInfoResponse) Descriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *SystemInfoResponse) GetOs() string {
+func (x *RuntimeInfoResponse) GetOs() string {
 	if x != nil {
 		return x.Os
 	}
 	return ""
 }
 
-func (x *SystemInfoResponse) GetKernel() string {
+func (x *RuntimeInfoResponse) GetKernel() string {
 	if x != nil {
 		return x.Kernel
 	}
 	return ""
 }
 
-func (x *SystemInfoResponse) GetShell() string {
+func (x *RuntimeInfoResponse) GetShell() string {
 	if x != nil {
 		return x.Shell
 	}
 	return ""
 }
 
-func (x *SystemInfoResponse) GetDesktop() string {
+func (x *RuntimeInfoResponse) GetDesktop() string {
 	if x != nil {
 		return x.Desktop
 	}
 	return ""
 }
 
-func (x *SystemInfoResponse) GetMemoryTotalKb() int64 {
+func (x *RuntimeInfoResponse) GetHostname() string {
 	if x != nil {
-		return x.MemoryTotalKb
-	}
-	return 0
-}
-
-func (x *SystemInfoResponse) GetMemoryAvailKb() int64 {
-	if x != nil {
-		return x.MemoryAvailKb
-	}
-	return 0
-}
-
-func (x *SystemInfoResponse) GetCpuLoad_1M() float64 {
-	if x != nil {
-		return x.CpuLoad_1M
-	}
-	return 0
-}
-
-func (x *SystemInfoResponse) GetTmuxVersion() string {
-	if x != nil {
-		return x.TmuxVersion
+		return x.Hostname
 	}
 	return ""
 }
 
-func (x *SystemInfoResponse) GetKittyVersion() string {
+func (x *RuntimeInfoResponse) GetUptime() string {
 	if x != nil {
-		return x.KittyVersion
+		return x.Uptime
 	}
 	return ""
 }
 
-func (x *SystemInfoResponse) GetI3Version() string {
+func (x *RuntimeInfoResponse) GetAvailableTools() []string {
 	if x != nil {
-		return x.I3Version
+		return x.AvailableTools
 	}
-	return ""
+	return nil
 }
 
 type SudoMethodsRequest struct {
@@ -400,32 +383,26 @@ const file_proto_dotfilesd_v1_dotfilesdv1_system_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x10\n" +
 	"\x03pid\x18\x02 \x01(\x03R\x03pid\x12\x1f\n" +
 	"\vuptime_secs\x18\x03 \x01(\x03R\n" +
-	"uptimeSecs\"D\n" +
-	"\x11SystemInfoRequest\x12/\n" +
-	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\xc3\x02\n" +
-	"\x12SystemInfoResponse\x12\x0e\n" +
+	"uptimeSecs\"E\n" +
+	"\x12RuntimeInfoRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\xca\x01\n" +
+	"\x13RuntimeInfoResponse\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x16\n" +
 	"\x06kernel\x18\x02 \x01(\tR\x06kernel\x12\x14\n" +
 	"\x05shell\x18\x03 \x01(\tR\x05shell\x12\x18\n" +
-	"\adesktop\x18\x04 \x01(\tR\adesktop\x12&\n" +
-	"\x0fmemory_total_kb\x18\x05 \x01(\x03R\rmemoryTotalKb\x12&\n" +
-	"\x0fmemory_avail_kb\x18\x06 \x01(\x03R\rmemoryAvailKb\x12\x1e\n" +
-	"\vcpu_load_1m\x18\a \x01(\x01R\tcpuLoad1m\x12!\n" +
-	"\ftmux_version\x18\b \x01(\tR\vtmuxVersion\x12#\n" +
-	"\rkitty_version\x18\t \x01(\tR\fkittyVersion\x12\x1d\n" +
-	"\n" +
-	"i3_version\x18\n" +
-	" \x01(\tR\ti3Version\"E\n" +
+	"\adesktop\x18\x04 \x01(\tR\adesktop\x12\x1a\n" +
+	"\bhostname\x18\x05 \x01(\tR\bhostname\x12\x16\n" +
+	"\x06uptime\x18\x06 \x01(\tR\x06uptime\x12'\n" +
+	"\x0favailable_tools\x18\a \x03(\tR\x0eavailableTools\"E\n" +
 	"\x12SudoMethodsRequest\x12/\n" +
 	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\x8e\x01\n" +
 	"\x13SudoMethodsResponse\x12+\n" +
 	"\x11available_methods\x18\x01 \x03(\tR\x10availableMethods\x12%\n" +
 	"\x0ecurrent_method\x18\x02 \x01(\tR\rcurrentMethod\x12#\n" +
-	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xf3\x01\n" +
+	"\rhas_elevation\x18\x03 \x01(\bR\fhasElevation2\xf6\x01\n" +
 	"\rSystemService\x12=\n" +
-	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12O\n" +
-	"\n" +
-	"SystemInfo\x12\x1f.dotfilesd.v1.SystemInfoRequest\x1a .dotfilesd.v1.SystemInfoResponse\x12R\n" +
+	"\x04Ping\x12\x19.dotfilesd.v1.PingRequest\x1a\x1a.dotfilesd.v1.PingResponse\x12R\n" +
+	"\vRuntimeInfo\x12 .dotfilesd.v1.RuntimeInfoRequest\x1a!.dotfilesd.v1.RuntimeInfoResponse\x12R\n" +
 	"\vSudoMethods\x12 .dotfilesd.v1.SudoMethodsRequest\x1a!.dotfilesd.v1.SudoMethodsResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
@@ -444,21 +421,21 @@ var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_msgTypes = make([]protoimpl
 var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_goTypes = []any{
 	(*PingRequest)(nil),         // 0: dotfilesd.v1.PingRequest
 	(*PingResponse)(nil),        // 1: dotfilesd.v1.PingResponse
-	(*SystemInfoRequest)(nil),   // 2: dotfilesd.v1.SystemInfoRequest
-	(*SystemInfoResponse)(nil),  // 3: dotfilesd.v1.SystemInfoResponse
+	(*RuntimeInfoRequest)(nil),  // 2: dotfilesd.v1.RuntimeInfoRequest
+	(*RuntimeInfoResponse)(nil), // 3: dotfilesd.v1.RuntimeInfoResponse
 	(*SudoMethodsRequest)(nil),  // 4: dotfilesd.v1.SudoMethodsRequest
 	(*SudoMethodsResponse)(nil), // 5: dotfilesd.v1.SudoMethodsResponse
 	(*Session)(nil),             // 6: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_system_proto_depIdxs = []int32{
 	6, // 0: dotfilesd.v1.PingRequest.session:type_name -> dotfilesd.v1.Session
-	6, // 1: dotfilesd.v1.SystemInfoRequest.session:type_name -> dotfilesd.v1.Session
+	6, // 1: dotfilesd.v1.RuntimeInfoRequest.session:type_name -> dotfilesd.v1.Session
 	6, // 2: dotfilesd.v1.SudoMethodsRequest.session:type_name -> dotfilesd.v1.Session
 	0, // 3: dotfilesd.v1.SystemService.Ping:input_type -> dotfilesd.v1.PingRequest
-	2, // 4: dotfilesd.v1.SystemService.SystemInfo:input_type -> dotfilesd.v1.SystemInfoRequest
+	2, // 4: dotfilesd.v1.SystemService.RuntimeInfo:input_type -> dotfilesd.v1.RuntimeInfoRequest
 	4, // 5: dotfilesd.v1.SystemService.SudoMethods:input_type -> dotfilesd.v1.SudoMethodsRequest
 	1, // 6: dotfilesd.v1.SystemService.Ping:output_type -> dotfilesd.v1.PingResponse
-	3, // 7: dotfilesd.v1.SystemService.SystemInfo:output_type -> dotfilesd.v1.SystemInfoResponse
+	3, // 7: dotfilesd.v1.SystemService.RuntimeInfo:output_type -> dotfilesd.v1.RuntimeInfoResponse
 	5, // 8: dotfilesd.v1.SystemService.SudoMethods:output_type -> dotfilesd.v1.SudoMethodsResponse
 	6, // [6:9] is the sub-list for method output_type
 	3, // [3:6] is the sub-list for method input_type

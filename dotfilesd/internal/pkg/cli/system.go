@@ -26,24 +26,22 @@ func RunPing(clients *Clients, sessionID string) error {
 }
 
 func RunInfo(clients *Clients, sessionID string) error {
-	slog.Debug("system info requested", "session_id", sessionID)
-	req := connect.NewRequest(&dotfilesdv1.SystemInfoRequest{Session: sessionProto(sessionID)})
-	resp, err := clients.Sys.SystemInfo(context.Background(), req)
+	slog.Debug("runtime info requested", "session_id", sessionID)
+	req := connect.NewRequest(&dotfilesdv1.RuntimeInfoRequest{Session: sessionProto(sessionID)})
+	resp, err := clients.Sys.RuntimeInfo(context.Background(), req)
 	if err != nil {
-		slog.Error("info failed", "error", err)
-		return fmt.Errorf("info failed: %w", err)
+		slog.Error("runtime info failed", "error", err)
+		return fmt.Errorf("runtime info failed: %w", err)
 	}
 	s := resp.Msg
-	slog.Debug("system info response", "os", s.Os, "kernel", s.Kernel)
+	slog.Debug("runtime info response", "os", s.Os, "kernel", s.Kernel)
 	fmt.Printf("OS:      %s\n", s.Os)
 	fmt.Printf("Kernel:  %s\n", s.Kernel)
 	fmt.Printf("Shell:   %s\n", s.Shell)
 	fmt.Printf("Desktop: %s\n", s.Desktop)
-	fmt.Printf("Memory:  %d MB total / %d MB avail\n", s.MemoryTotalKb/1024, s.MemoryAvailKb/1024)
-	fmt.Printf("CPU:     %.2f load\n", s.CpuLoad_1M)
-	fmt.Printf("Tmux:    %s\n", s.TmuxVersion)
-	fmt.Printf("Kitty:   %s\n", s.KittyVersion)
-	fmt.Printf("I3:      %s\n", s.I3Version)
+	fmt.Printf("Host:    %s\n", s.Hostname)
+	fmt.Printf("Uptime:  %s\n", s.Uptime)
+	fmt.Printf("Tools:   %s\n", strings.Join(s.AvailableTools, ", "))
 	return nil
 }
 

@@ -79,157 +79,6 @@ func (LogLevel) EnumDescriptor() ([]byte, []int) {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{0}
 }
 
-type ReloadTarget int32
-
-const (
-	ReloadTarget_RELOAD_TARGET_UNSPECIFIED ReloadTarget = 0
-	ReloadTarget_RELOAD_TARGET_TMUX        ReloadTarget = 1
-	ReloadTarget_RELOAD_TARGET_I3          ReloadTarget = 2
-	ReloadTarget_RELOAD_TARGET_KITTY       ReloadTarget = 3
-	ReloadTarget_RELOAD_TARGET_ALL         ReloadTarget = 4
-)
-
-// Enum value maps for ReloadTarget.
-var (
-	ReloadTarget_name = map[int32]string{
-		0: "RELOAD_TARGET_UNSPECIFIED",
-		1: "RELOAD_TARGET_TMUX",
-		2: "RELOAD_TARGET_I3",
-		3: "RELOAD_TARGET_KITTY",
-		4: "RELOAD_TARGET_ALL",
-	}
-	ReloadTarget_value = map[string]int32{
-		"RELOAD_TARGET_UNSPECIFIED": 0,
-		"RELOAD_TARGET_TMUX":        1,
-		"RELOAD_TARGET_I3":          2,
-		"RELOAD_TARGET_KITTY":       3,
-		"RELOAD_TARGET_ALL":         4,
-	}
-)
-
-func (x ReloadTarget) Enum() *ReloadTarget {
-	p := new(ReloadTarget)
-	*p = x
-	return p
-}
-
-func (x ReloadTarget) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ReloadTarget) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_enumTypes[1].Descriptor()
-}
-
-func (ReloadTarget) Type() protoreflect.EnumType {
-	return &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_enumTypes[1]
-}
-
-func (x ReloadTarget) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ReloadTarget.Descriptor instead.
-func (ReloadTarget) EnumDescriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{1}
-}
-
-type ReloadRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
-	Target        ReloadTarget           `protobuf:"varint,1,opt,name=target,proto3,enum=dotfilesd.v1.ReloadTarget" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReloadRequest) Reset() {
-	*x = ReloadRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReloadRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReloadRequest) ProtoMessage() {}
-
-func (x *ReloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReloadRequest.ProtoReflect.Descriptor instead.
-func (*ReloadRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *ReloadRequest) GetSession() *Session {
-	if x != nil {
-		return x.Session
-	}
-	return nil
-}
-
-func (x *ReloadRequest) GetTarget() ReloadTarget {
-	if x != nil {
-		return x.Target
-	}
-	return ReloadTarget_RELOAD_TARGET_UNSPECIFIED
-}
-
-type ReloadResponse struct {
-	state         protoimpl.MessageState         `protogen:"open.v1"`
-	Results       []*ReloadResponse_ReloadResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReloadResponse) Reset() {
-	*x = ReloadResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReloadResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReloadResponse) ProtoMessage() {}
-
-func (x *ReloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReloadResponse.ProtoReflect.Descriptor instead.
-func (*ReloadResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ReloadResponse) GetResults() []*ReloadResponse_ReloadResult {
-	if x != nil {
-		return x.Results
-	}
-	return nil
-}
-
 type ReconfigureRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
@@ -240,7 +89,7 @@ type ReconfigureRequest struct {
 
 func (x *ReconfigureRequest) Reset() {
 	*x = ReconfigureRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -252,7 +101,7 @@ func (x *ReconfigureRequest) String() string {
 func (*ReconfigureRequest) ProtoMessage() {}
 
 func (x *ReconfigureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[2]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -265,7 +114,7 @@ func (x *ReconfigureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconfigureRequest.ProtoReflect.Descriptor instead.
 func (*ReconfigureRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{2}
+	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ReconfigureRequest) GetSession() *Session {
@@ -292,7 +141,7 @@ type ReconfigureResponse struct {
 
 func (x *ReconfigureResponse) Reset() {
 	*x = ReconfigureResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -304,7 +153,7 @@ func (x *ReconfigureResponse) String() string {
 func (*ReconfigureResponse) ProtoMessage() {}
 
 func (x *ReconfigureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[3]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -317,7 +166,7 @@ func (x *ReconfigureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconfigureResponse.ProtoReflect.Descriptor instead.
 func (*ReconfigureResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{3}
+	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ReconfigureResponse) GetSuccess() bool {
@@ -343,7 +192,7 @@ type RestartRequest struct {
 
 func (x *RestartRequest) Reset() {
 	*x = RestartRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -355,7 +204,7 @@ func (x *RestartRequest) String() string {
 func (*RestartRequest) ProtoMessage() {}
 
 func (x *RestartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[4]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -368,7 +217,7 @@ func (x *RestartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartRequest.ProtoReflect.Descriptor instead.
 func (*RestartRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{4}
+	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RestartRequest) GetSession() *Session {
@@ -387,7 +236,7 @@ type RestartResponse struct {
 
 func (x *RestartResponse) Reset() {
 	*x = RestartResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -399,7 +248,7 @@ func (x *RestartResponse) String() string {
 func (*RestartResponse) ProtoMessage() {}
 
 func (x *RestartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[5]
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -412,70 +261,10 @@ func (x *RestartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartResponse.ProtoReflect.Descriptor instead.
 func (*RestartResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{5}
+	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RestartResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-type ReloadResponse_ReloadResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Target        string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReloadResponse_ReloadResult) Reset() {
-	*x = ReloadResponse_ReloadResult{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReloadResponse_ReloadResult) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReloadResponse_ReloadResult) ProtoMessage() {}
-
-func (x *ReloadResponse_ReloadResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReloadResponse_ReloadResult.ProtoReflect.Descriptor instead.
-func (*ReloadResponse_ReloadResult) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP(), []int{1, 0}
-}
-
-func (x *ReloadResponse_ReloadResult) GetTarget() string {
-	if x != nil {
-		return x.Target
-	}
-	return ""
-}
-
-func (x *ReloadResponse_ReloadResult) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ReloadResponse_ReloadResult) GetMessage() string {
 	if x != nil {
 		return x.Message
 	}
@@ -486,16 +275,7 @@ var File_proto_dotfilesd_v1_dotfilesdv1_config_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/config.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"t\n" +
-	"\rReloadRequest\x12/\n" +
-	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x122\n" +
-	"\x06target\x18\x01 \x01(\x0e2\x1a.dotfilesd.v1.ReloadTargetR\x06target\"\xb1\x01\n" +
-	"\x0eReloadResponse\x12C\n" +
-	"\aresults\x18\x01 \x03(\v2).dotfilesd.v1.ReloadResponse.ReloadResultR\aresults\x1aZ\n" +
-	"\fReloadResult\x12\x16\n" +
-	"\x06target\x18\x01 \x01(\tR\x06target\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"z\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/config.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"z\n" +
 	"\x12ReconfigureRequest\x12/\n" +
 	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x123\n" +
 	"\tlog_level\x18\x01 \x01(\x0e2\x16.dotfilesd.v1.LogLevelR\blogLevel\"I\n" +
@@ -512,15 +292,8 @@ const file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDesc = "" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x03\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x04\x12\x13\n" +
-	"\x0fLOG_LEVEL_ERROR\x10\x05*\x8b\x01\n" +
-	"\fReloadTarget\x12\x1d\n" +
-	"\x19RELOAD_TARGET_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12RELOAD_TARGET_TMUX\x10\x01\x12\x14\n" +
-	"\x10RELOAD_TARGET_I3\x10\x02\x12\x17\n" +
-	"\x13RELOAD_TARGET_KITTY\x10\x03\x12\x15\n" +
-	"\x11RELOAD_TARGET_ALL\x10\x042\xf0\x01\n" +
-	"\rConfigService\x12C\n" +
-	"\x06Reload\x12\x1b.dotfilesd.v1.ReloadRequest\x1a\x1c.dotfilesd.v1.ReloadResponse\x12R\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x052\xab\x01\n" +
+	"\rConfigService\x12R\n" +
 	"\vReconfigure\x12 .dotfilesd.v1.ReconfigureRequest\x1a!.dotfilesd.v1.ReconfigureResponse\x12F\n" +
 	"\aRestart\x12\x1c.dotfilesd.v1.RestartRequest\x1a\x1d.dotfilesd.v1.RestartResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
@@ -536,38 +309,29 @@ func file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_goTypes = []any{
-	(LogLevel)(0),                       // 0: dotfilesd.v1.LogLevel
-	(ReloadTarget)(0),                   // 1: dotfilesd.v1.ReloadTarget
-	(*ReloadRequest)(nil),               // 2: dotfilesd.v1.ReloadRequest
-	(*ReloadResponse)(nil),              // 3: dotfilesd.v1.ReloadResponse
-	(*ReconfigureRequest)(nil),          // 4: dotfilesd.v1.ReconfigureRequest
-	(*ReconfigureResponse)(nil),         // 5: dotfilesd.v1.ReconfigureResponse
-	(*RestartRequest)(nil),              // 6: dotfilesd.v1.RestartRequest
-	(*RestartResponse)(nil),             // 7: dotfilesd.v1.RestartResponse
-	(*ReloadResponse_ReloadResult)(nil), // 8: dotfilesd.v1.ReloadResponse.ReloadResult
-	(*Session)(nil),                     // 9: dotfilesd.v1.Session
+	(LogLevel)(0),               // 0: dotfilesd.v1.LogLevel
+	(*ReconfigureRequest)(nil),  // 1: dotfilesd.v1.ReconfigureRequest
+	(*ReconfigureResponse)(nil), // 2: dotfilesd.v1.ReconfigureResponse
+	(*RestartRequest)(nil),      // 3: dotfilesd.v1.RestartRequest
+	(*RestartResponse)(nil),     // 4: dotfilesd.v1.RestartResponse
+	(*Session)(nil),             // 5: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_config_proto_depIdxs = []int32{
-	9, // 0: dotfilesd.v1.ReloadRequest.session:type_name -> dotfilesd.v1.Session
-	1, // 1: dotfilesd.v1.ReloadRequest.target:type_name -> dotfilesd.v1.ReloadTarget
-	8, // 2: dotfilesd.v1.ReloadResponse.results:type_name -> dotfilesd.v1.ReloadResponse.ReloadResult
-	9, // 3: dotfilesd.v1.ReconfigureRequest.session:type_name -> dotfilesd.v1.Session
-	0, // 4: dotfilesd.v1.ReconfigureRequest.log_level:type_name -> dotfilesd.v1.LogLevel
-	9, // 5: dotfilesd.v1.RestartRequest.session:type_name -> dotfilesd.v1.Session
-	2, // 6: dotfilesd.v1.ConfigService.Reload:input_type -> dotfilesd.v1.ReloadRequest
-	4, // 7: dotfilesd.v1.ConfigService.Reconfigure:input_type -> dotfilesd.v1.ReconfigureRequest
-	6, // 8: dotfilesd.v1.ConfigService.Restart:input_type -> dotfilesd.v1.RestartRequest
-	3, // 9: dotfilesd.v1.ConfigService.Reload:output_type -> dotfilesd.v1.ReloadResponse
-	5, // 10: dotfilesd.v1.ConfigService.Reconfigure:output_type -> dotfilesd.v1.ReconfigureResponse
-	7, // 11: dotfilesd.v1.ConfigService.Restart:output_type -> dotfilesd.v1.RestartResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	5, // 0: dotfilesd.v1.ReconfigureRequest.session:type_name -> dotfilesd.v1.Session
+	0, // 1: dotfilesd.v1.ReconfigureRequest.log_level:type_name -> dotfilesd.v1.LogLevel
+	5, // 2: dotfilesd.v1.RestartRequest.session:type_name -> dotfilesd.v1.Session
+	1, // 3: dotfilesd.v1.ConfigService.Reconfigure:input_type -> dotfilesd.v1.ReconfigureRequest
+	3, // 4: dotfilesd.v1.ConfigService.Restart:input_type -> dotfilesd.v1.RestartRequest
+	2, // 5: dotfilesd.v1.ConfigService.Reconfigure:output_type -> dotfilesd.v1.ReconfigureResponse
+	4, // 6: dotfilesd.v1.ConfigService.Restart:output_type -> dotfilesd.v1.RestartResponse
+	5, // [5:7] is the sub-list for method output_type
+	3, // [3:5] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_config_proto_init() }
@@ -581,8 +345,8 @@ func file_proto_dotfilesd_v1_dotfilesdv1_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_config_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   7,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

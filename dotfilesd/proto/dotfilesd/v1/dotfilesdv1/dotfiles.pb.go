@@ -21,67 +21,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type GitAction int32
-
-const (
-	GitAction_GIT_ACTION_UNSPECIFIED GitAction = 0
-	GitAction_GIT_ACTION_STATUS      GitAction = 1
-	GitAction_GIT_ACTION_DIFF        GitAction = 2
-	GitAction_GIT_ACTION_ADD         GitAction = 3
-	GitAction_GIT_ACTION_COMMIT      GitAction = 4
-	GitAction_GIT_ACTION_PUSH        GitAction = 5
-	GitAction_GIT_ACTION_LOG         GitAction = 6
-)
-
-// Enum value maps for GitAction.
-var (
-	GitAction_name = map[int32]string{
-		0: "GIT_ACTION_UNSPECIFIED",
-		1: "GIT_ACTION_STATUS",
-		2: "GIT_ACTION_DIFF",
-		3: "GIT_ACTION_ADD",
-		4: "GIT_ACTION_COMMIT",
-		5: "GIT_ACTION_PUSH",
-		6: "GIT_ACTION_LOG",
-	}
-	GitAction_value = map[string]int32{
-		"GIT_ACTION_UNSPECIFIED": 0,
-		"GIT_ACTION_STATUS":      1,
-		"GIT_ACTION_DIFF":        2,
-		"GIT_ACTION_ADD":         3,
-		"GIT_ACTION_COMMIT":      4,
-		"GIT_ACTION_PUSH":        5,
-		"GIT_ACTION_LOG":         6,
-	}
-)
-
-func (x GitAction) Enum() *GitAction {
-	p := new(GitAction)
-	*p = x
-	return p
-}
-
-func (x GitAction) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (GitAction) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_enumTypes[0].Descriptor()
-}
-
-func (GitAction) Type() protoreflect.EnumType {
-	return &file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_enumTypes[0]
-}
-
-func (x GitAction) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use GitAction.Descriptor instead.
-func (GitAction) EnumDescriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescGZIP(), []int{0}
-}
-
 type StatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
@@ -133,8 +72,6 @@ type StatusResponse struct {
 	GitAhead      int32                  `protobuf:"varint,3,opt,name=git_ahead,json=gitAhead,proto3" json:"git_ahead,omitempty"`
 	GitBehind     int32                  `protobuf:"varint,4,opt,name=git_behind,json=gitBehind,proto3" json:"git_behind,omitempty"`
 	LastCommit    string                 `protobuf:"bytes,5,opt,name=last_commit,json=lastCommit,proto3" json:"last_commit,omitempty"`
-	Uptime        string                 `protobuf:"bytes,6,opt,name=uptime,proto3" json:"uptime,omitempty"`
-	Hostname      string                 `protobuf:"bytes,7,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -204,155 +141,13 @@ func (x *StatusResponse) GetLastCommit() string {
 	return ""
 }
 
-func (x *StatusResponse) GetUptime() string {
-	if x != nil {
-		return x.Uptime
-	}
-	return ""
-}
-
-func (x *StatusResponse) GetHostname() string {
-	if x != nil {
-		return x.Hostname
-	}
-	return ""
-}
-
-type GitRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
-	Action        GitAction              `protobuf:"varint,1,opt,name=action,proto3,enum=dotfilesd.v1.GitAction" json:"action,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Paths         string                 `protobuf:"bytes,3,opt,name=paths,proto3" json:"paths,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GitRequest) Reset() {
-	*x = GitRequest{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GitRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GitRequest) ProtoMessage() {}
-
-func (x *GitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GitRequest.ProtoReflect.Descriptor instead.
-func (*GitRequest) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *GitRequest) GetSession() *Session {
-	if x != nil {
-		return x.Session
-	}
-	return nil
-}
-
-func (x *GitRequest) GetAction() GitAction {
-	if x != nil {
-		return x.Action
-	}
-	return GitAction_GIT_ACTION_UNSPECIFIED
-}
-
-func (x *GitRequest) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *GitRequest) GetPaths() string {
-	if x != nil {
-		return x.Paths
-	}
-	return ""
-}
-
-type GitResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ExitCode      int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	Stdout        string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr        string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GitResponse) Reset() {
-	*x = GitResponse{}
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GitResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GitResponse) ProtoMessage() {}
-
-func (x *GitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GitResponse.ProtoReflect.Descriptor instead.
-func (*GitResponse) Descriptor() ([]byte, []int) {
-	return file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *GitResponse) GetExitCode() int32 {
-	if x != nil {
-		return x.ExitCode
-	}
-	return 0
-}
-
-func (x *GitResponse) GetStdout() string {
-	if x != nil {
-		return x.Stdout
-	}
-	return ""
-}
-
-func (x *GitResponse) GetStderr() string {
-	if x != nil {
-		return x.Stderr
-	}
-	return ""
-}
-
 var File_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDesc = "" +
 	"\n" +
 	"-proto/dotfilesd/v1/dotfilesdv1/dotfiles.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"@\n" +
 	"\rStatusRequest\x12/\n" +
-	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\xdd\x01\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\xa9\x01\n" +
 	"\x0eStatusResponse\x12\x1b\n" +
 	"\tgit_clean\x18\x01 \x01(\bR\bgitClean\x12\x1d\n" +
 	"\n" +
@@ -361,30 +156,9 @@ const file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDesc = "" +
 	"\n" +
 	"git_behind\x18\x04 \x01(\x05R\tgitBehind\x12\x1f\n" +
 	"\vlast_commit\x18\x05 \x01(\tR\n" +
-	"lastCommit\x12\x16\n" +
-	"\x06uptime\x18\x06 \x01(\tR\x06uptime\x12\x1a\n" +
-	"\bhostname\x18\a \x01(\tR\bhostname\"\x9e\x01\n" +
-	"\n" +
-	"GitRequest\x12/\n" +
-	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12/\n" +
-	"\x06action\x18\x01 \x01(\x0e2\x17.dotfilesd.v1.GitActionR\x06action\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
-	"\x05paths\x18\x03 \x01(\tR\x05paths\"Z\n" +
-	"\vGitResponse\x12\x1b\n" +
-	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
-	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\x03 \x01(\tR\x06stderr*\xa7\x01\n" +
-	"\tGitAction\x12\x1a\n" +
-	"\x16GIT_ACTION_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11GIT_ACTION_STATUS\x10\x01\x12\x13\n" +
-	"\x0fGIT_ACTION_DIFF\x10\x02\x12\x12\n" +
-	"\x0eGIT_ACTION_ADD\x10\x03\x12\x15\n" +
-	"\x11GIT_ACTION_COMMIT\x10\x04\x12\x13\n" +
-	"\x0fGIT_ACTION_PUSH\x10\x05\x12\x12\n" +
-	"\x0eGIT_ACTION_LOG\x10\x062\x92\x01\n" +
+	"lastCommit2V\n" +
 	"\x0fDotfilesService\x12C\n" +
-	"\x06Status\x12\x1b.dotfilesd.v1.StatusRequest\x1a\x1c.dotfilesd.v1.StatusResponse\x12:\n" +
-	"\x03Git\x12\x18.dotfilesd.v1.GitRequest\x1a\x19.dotfilesd.v1.GitResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\x06Status\x12\x1b.dotfilesd.v1.StatusRequest\x1a\x1c.dotfilesd.v1.StatusResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescOnce sync.Once
@@ -398,29 +172,21 @@ func file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_goTypes = []any{
-	(GitAction)(0),         // 0: dotfilesd.v1.GitAction
-	(*StatusRequest)(nil),  // 1: dotfilesd.v1.StatusRequest
-	(*StatusResponse)(nil), // 2: dotfilesd.v1.StatusResponse
-	(*GitRequest)(nil),     // 3: dotfilesd.v1.GitRequest
-	(*GitResponse)(nil),    // 4: dotfilesd.v1.GitResponse
-	(*Session)(nil),        // 5: dotfilesd.v1.Session
+	(*StatusRequest)(nil),  // 0: dotfilesd.v1.StatusRequest
+	(*StatusResponse)(nil), // 1: dotfilesd.v1.StatusResponse
+	(*Session)(nil),        // 2: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_depIdxs = []int32{
-	5, // 0: dotfilesd.v1.StatusRequest.session:type_name -> dotfilesd.v1.Session
-	5, // 1: dotfilesd.v1.GitRequest.session:type_name -> dotfilesd.v1.Session
-	0, // 2: dotfilesd.v1.GitRequest.action:type_name -> dotfilesd.v1.GitAction
-	1, // 3: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
-	3, // 4: dotfilesd.v1.DotfilesService.Git:input_type -> dotfilesd.v1.GitRequest
-	2, // 5: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
-	4, // 6: dotfilesd.v1.DotfilesService.Git:output_type -> dotfilesd.v1.GitResponse
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 0: dotfilesd.v1.StatusRequest.session:type_name -> dotfilesd.v1.Session
+	0, // 1: dotfilesd.v1.DotfilesService.Status:input_type -> dotfilesd.v1.StatusRequest
+	1, // 2: dotfilesd.v1.DotfilesService.Status:output_type -> dotfilesd.v1.StatusResponse
+	2, // [2:3] is the sub-list for method output_type
+	1, // [1:2] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_init() }
@@ -434,14 +200,13 @@ func file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   4,
+			NumEnums:      0,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_goTypes,
 		DependencyIndexes: file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_depIdxs,
-		EnumInfos:         file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_enumTypes,
 		MessageInfos:      file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_msgTypes,
 	}.Build()
 	File_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto = out.File

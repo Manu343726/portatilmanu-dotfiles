@@ -6,9 +6,10 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 
-// ConfigService - dotfiles configuration reload, daemon reconfiguration, and restart.
+// ConfigService — daemon runtime reconfiguration and restart.
+// Reloading user-facing dotfiles (tmux, i3, kitty) is handled by scripts
+// in the scripts/reload/ directory, not by this service.
 service ConfigService {
-  rpc Reload(ReloadRequest) returns (ReloadResponse);
   rpc Reconfigure(ReconfigureRequest) returns (ReconfigureResponse);
   rpc Restart(RestartRequest) returns (RestartResponse);
 }
@@ -20,28 +21,6 @@ enum LogLevel {
   LOG_LEVEL_INFO = 3;
   LOG_LEVEL_WARN = 4;
   LOG_LEVEL_ERROR = 5;
-}
-
-enum ReloadTarget {
-  RELOAD_TARGET_UNSPECIFIED = 0;
-  RELOAD_TARGET_TMUX = 1;
-  RELOAD_TARGET_I3 = 2;
-  RELOAD_TARGET_KITTY = 3;
-  RELOAD_TARGET_ALL = 4;
-}
-
-message ReloadRequest {
-  Session session = 100;
-  ReloadTarget target = 1;
-}
-
-message ReloadResponse {
-  message ReloadResult {
-    string target = 1;
-    bool success = 2;
-    string message = 3;
-  }
-  repeated ReloadResult results = 1;
 }
 
 message ReconfigureRequest {

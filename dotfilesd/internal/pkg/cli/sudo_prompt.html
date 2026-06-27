@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1e1f1c; color: #f8f8f2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; font-size: 14px; }
+  .header { color: #a6e22e; font-weight: 600; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .command { background: #272822; border: 1px solid #3e3d32; border-radius: 6px; padding: 10px; margin: 12px 0; font-family: 'SF Mono', 'Fira Code', monospace; color: #f8f8f2; word-break: break-all; font-size: 13px; }
+  label { display: block; margin-bottom: 4px; color: #f8f8f2; font-size: 13px; }
+  input[type="password"] { width: 100%; background: #272822; border: 1px solid #75715e; border-radius: 6px; padding: 10px 12px; color: #f8f8f2; font-size: 14px; font-family: inherit; outline: none; }
+  input[type="password"]:focus { border-color: #a6e22e; }
+  button { margin-top: 12px; background: #a6e22e; color: #272822; border: none; border-radius: 6px; padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #b6f23e; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { margin-top: 10px; color: #75715e; font-size: 12px; }
+  .hidden { display: none; }
+  .success { color: #a6e22e; }
+  .error { color: #f92672; }
+  #result { margin-top: 12px; white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+</style>
+</head>
+<body>
+  <div id="loading">
+    <div class="header">Sudo Password Required</div>
+    <div class="status">Waiting for command...</div>
+  </div>
+
+  <div id="form" class="hidden">
+    <div class="header">Sudo Password Required</div>
+    <div class="command" id="commandDisplay">$ </div>
+    <label for="password">Password:</label>
+    <input type="password" id="password" placeholder="Enter sudo password" autofocus>
+    <button id="submitBtn">Authenticate</button>
+    <div class="status" id="status">Enter your password to authorize this command.</div>
+  </div>
+
+  <div id="result" class="hidden"></div>
+
+<script>
+(function() {
+  let pendingCommand = '';
+  const loading = document.getElementById('loading');
+  const form = document.getElementById('form');
+  const result = document.getElementById('result');
+  const cmdDisplay = document.getElementById('commandDisplay');
+  const passwordInput = document.getElementById('password');
+  const submitBtn = document.getElementById('submitBtn');
+  const statusEl = document.getElementById('status');
+  let initSent = false;
+
+  // MCP Apps: send ui/initialize when the page loads
+  function sendInitialize() {
+    if (initSent) return;
+    initSent = true;
+    window.parent.postMessage({
+      jsonrpc: '2.0',
+      id: 'init-1',
+      method: 'ui/initialize',
+      params: {
+        appCapabilities: {},
+        appInfo: { name: 'dotfilesd-sudo-prompt', version: '0.1.0' },
+        protocolVersion: '2024-11-05'
+      }
+    }, '*');
+  }
+
+  // Call a tool via MCP JSON-RPC over postMessage
+  let toolCallId = 100;
+  function callTool(name, args) {
+    const id = toolCallId++;
+    window.parent.postMessage({
+      jsonrpc: '2.0',
+      id: id,
+      method: 'tools/call',
+      params: { name: name, arguments: args }
+    }, '*');
+    return id;
+  }
+
+  // Handle messages from the host
+  window.addEventListener('message', function(event) {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    // Handle ui/initialize result
+    if (data.id === 'init-1' && data.result) {
+      loading.classList.add('hidden');
+      form.classList.remove('hidden');
+      statusEl.textContent = 'Waiting for command...';
+      return;
+    }
+
+    // Handle ui/notifications/tool-input (contains the command arguments)
+    if (data.method === 'ui/notifications/tool-input') {
+      const args = data.params.arguments || {};
+      pendingCommand = args.command || '';
+      cmdDisplay.textContent = '$ ' + pendingCommand;
+      statusEl.textContent = 'Enter your sudo password to authorize this command.';
+      passwordInput.disabled = false;
+      passwordInput.focus();
+      return;
+    }
+
+    // Handle ui/notifications/tool-result — the exec_run goroutine has
+    // unblocked and this IS the actual sudo command output.
+    if (data.method === 'ui/notifications/tool-result') {
+      const params = data.params || {};
+      const text = (params.content || [])
+        .map(function(c) { return c.text || ''; })
+        .filter(Boolean)
+        .join('\n');
+      loading.classList.add('hidden');
+      form.classList.add('hidden');
+      result.classList.remove('hidden');
+      result.textContent = text || '[empty result]';
+      return;
+    }
+
+    // Handle response to _sudo_submit_password call
+    if (typeof data.id === 'number' && data.id >= 100) {
+      if (data.result) {
+        statusEl.textContent = '✅ Password submitted, waiting for result...';
+        submitBtn.disabled = true;
+        passwordInput.disabled = true;
+      } else if (data.error) {
+        var errMsg = data.error.message || 'unknown error';
+        statusEl.textContent = '❌ Error: ' + errMsg;
+        submitBtn.disabled = false;
+        passwordInput.disabled = false;
+      }
+      return;
+    }
+  });
+
+  // Submit button handler
+  submitBtn.addEventListener('click', function() {
+    const pwd = passwordInput.value;
+    if (!pwd) return;
+
+    submitBtn.disabled = true;
+    passwordInput.disabled = true;
+    statusEl.textContent = 'Authenticating...';
+
+    // Call _sudo_submit_password via MCP tools/call
+    callTool('_sudo_submit_password', {
+      request_id: '',
+      password: pwd
+    });
+
+    passwordInput.value = '';
+  });
+
+  // Allow Enter to submit
+  passwordInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitBtn.click();
+  });
+
+  // Send initialize after a short delay to ensure DOM is ready
+  setTimeout(sendInitialize, 100);
+})();
+</script>
+</body>
+</html>

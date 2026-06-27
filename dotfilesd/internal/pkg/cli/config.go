@@ -11,29 +11,32 @@ import (
 	"connectrpc.com/connect"
 )
 
-func RunReload(clients *Clients, sessionID, targetStr string) error {
-	target := dotfilesdv1.ReloadTarget_RELOAD_TARGET_ALL
-	if targetStr != "" {
-		target = ParseReloadTarget(targetStr)
-		if target == dotfilesdv1.ReloadTarget_RELOAD_TARGET_UNSPECIFIED {
-			slog.Warn("unknown reload target", "target", targetStr)
-			return fmt.Errorf("unknown target: %s (valid: tmux, i3, kitty, all)", targetStr)
-		}
+// RunReload reloads dotfiles configs by running scripts in the reload/ tree.
+func RunReload(clients *Clients, sessionID, target string) error {
+	if target == "" {
+		target = "all"
 	}
-	slog.Info("config reload", "target", target.String(), "session_id", sessionID)
-	req := connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target, Session: sessionProto(sessionID)})
-	resp, err := clients.Cfg.Reload(context.Background(), req)
+	slog.Info("config reload via script", "target", target, "session_id", sessionID)
+	req := connect.NewRequest(&dotfilesdv1.RunScriptRequest{
+		Session: sessionProto(sessionID),
+		Source: &dotfilesdv1.RunScriptRequest_RegisteredScript{
+			RegisteredScript: "reload/" + target,
+		},
+	})
+	resp, err := clients.Script.RunScript(context.Background(), req)
 	if err != nil {
-		slog.Error("reload failed", "error", err)
-		return fmt.Errorf("reload failed: %w", err)
+		slog.Error("reload script failed", "target", target, "error", err)
+		return fmt.Errorf("reload %s failed: %w", target, err)
 	}
-	for _, r := range resp.Msg.Results {
+	for _, step := range resp.Msg.Steps {
 		status := "ok"
-		if !r.Success {
+		if step.ExitCode != 0 {
 			status = "error"
 		}
-		slog.Debug("reload result", "target", r.Target, "success", r.Success, "message", r.Message)
-		fmt.Printf("%-6s %s: %s\n", status, r.Target, r.Message)
+		fmt.Printf("%-6s %s: %s\n", status, step.SourceLine, step.Stdout)
+		if step.Stderr != "" {
+			fmt.Fprint(os.Stderr, step.Stderr)
+		}
 	}
 	return nil
 }

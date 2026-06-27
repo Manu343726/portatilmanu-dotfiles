@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
@@ -27,37 +26,45 @@ func RunStatus(clients *Clients, sessionID string) error {
 	}
 	fmt.Printf("branch: %s (%s)\n", s.GitBranch, clean)
 	fmt.Printf("last:   %s\n", s.LastCommit)
-	fmt.Printf("host:   %s\n", s.Hostname)
-	fmt.Printf("uptime: %s\n", s.Uptime)
+
+	// Hostname and uptime come from RuntimeInfo now.
+	runtimeReq := connect.NewRequest(&dotfilesdv1.RuntimeInfoRequest{Session: sessionProto(sessionID)})
+	runtimeResp, err := clients.Sys.RuntimeInfo(context.Background(), runtimeReq)
+	if err == nil {
+		fmt.Printf("host:   %s\n", runtimeResp.Msg.Hostname)
+		fmt.Printf("uptime: %s\n", runtimeResp.Msg.Uptime)
+	}
 	return nil
 }
 
-func RunGit(clients *Clients, sessionID, actionStr, message, paths string) error {
-	action := ParseGitAction(actionStr)
-	if action == dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED {
-		slog.Warn("unknown git action", "action", actionStr)
-		return fmt.Errorf("unknown git action: %s (valid: status, diff, add, commit, push, log)", actionStr)
-	}
-
-	slog.Info("git", "action", actionStr, "session_id", sessionID)
-	req := connect.NewRequest(&dotfilesdv1.GitRequest{
-		Action: action, Message: message, Paths: paths,
+// RunGit runs a git operation via the scripts/git/ script tree.
+func RunGit(clients *Clients, sessionID, action, message, paths string) error {
+	slog.Info("git via script", "action", action, "session_id", sessionID)
+	req := connect.NewRequest(&dotfilesdv1.RunScriptRequest{
 		Session: sessionProto(sessionID),
+		Source: &dotfilesdv1.RunScriptRequest_RegisteredScript{
+			RegisteredScript: "git/" + action,
+		},
 	})
-	resp, err := clients.Dot.Git(context.Background(), req)
+	resp, err := clients.Script.RunScript(context.Background(), req)
 	if err != nil {
-		slog.Error("git failed", "action", actionStr, "error", err)
-		return fmt.Errorf("git failed: %w", err)
+		slog.Error("git script failed", "action", action, "error", err)
+		return fmt.Errorf("git %s: %w", action, err)
 	}
-	slog.Debug("git result", "action", actionStr, "exit_code", resp.Msg.ExitCode)
-	if resp.Msg.Stderr != "" {
-		fmt.Fprint(os.Stderr, resp.Msg.Stderr)
+	allOK := true
+	for _, step := range resp.Msg.Steps {
+		if step.Stdout != "" {
+			fmt.Print(step.Stdout)
+		}
+		if step.Stderr != "" {
+			fmt.Print(step.Stderr)
+		}
+		if step.ExitCode != 0 {
+			allOK = false
+		}
 	}
-	if resp.Msg.Stdout != "" {
-		fmt.Print(resp.Msg.Stdout)
-	}
-	if resp.Msg.ExitCode != 0 {
-		os.Exit(int(resp.Msg.ExitCode))
+	if !allOK || !resp.Msg.AllSucceeded {
+		return fmt.Errorf("git %s failed: %s", action, resp.Msg.Error)
 	}
 	return nil
 }

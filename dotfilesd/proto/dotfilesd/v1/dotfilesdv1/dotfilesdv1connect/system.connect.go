@@ -35,9 +35,9 @@ const (
 const (
 	// SystemServicePingProcedure is the fully-qualified name of the SystemService's Ping RPC.
 	SystemServicePingProcedure = "/dotfilesd.v1.SystemService/Ping"
-	// SystemServiceSystemInfoProcedure is the fully-qualified name of the SystemService's SystemInfo
+	// SystemServiceRuntimeInfoProcedure is the fully-qualified name of the SystemService's RuntimeInfo
 	// RPC.
-	SystemServiceSystemInfoProcedure = "/dotfilesd.v1.SystemService/SystemInfo"
+	SystemServiceRuntimeInfoProcedure = "/dotfilesd.v1.SystemService/RuntimeInfo"
 	// SystemServiceSudoMethodsProcedure is the fully-qualified name of the SystemService's SudoMethods
 	// RPC.
 	SystemServiceSudoMethodsProcedure = "/dotfilesd.v1.SystemService/SudoMethods"
@@ -46,7 +46,7 @@ const (
 // SystemServiceClient is a client for the dotfilesd.v1.SystemService service.
 type SystemServiceClient interface {
 	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
-	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
+	RuntimeInfo(context.Context, *connect.Request[dotfilesdv1.RuntimeInfoRequest]) (*connect.Response[dotfilesdv1.RuntimeInfoResponse], error)
 	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
 }
 
@@ -67,10 +67,10 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("Ping")),
 			connect.WithClientOptions(opts...),
 		),
-		systemInfo: connect.NewClient[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse](
+		runtimeInfo: connect.NewClient[dotfilesdv1.RuntimeInfoRequest, dotfilesdv1.RuntimeInfoResponse](
 			httpClient,
-			baseURL+SystemServiceSystemInfoProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("SystemInfo")),
+			baseURL+SystemServiceRuntimeInfoProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("RuntimeInfo")),
 			connect.WithClientOptions(opts...),
 		),
 		sudoMethods: connect.NewClient[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse](
@@ -85,7 +85,7 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
 	ping        *connect.Client[dotfilesdv1.PingRequest, dotfilesdv1.PingResponse]
-	systemInfo  *connect.Client[dotfilesdv1.SystemInfoRequest, dotfilesdv1.SystemInfoResponse]
+	runtimeInfo *connect.Client[dotfilesdv1.RuntimeInfoRequest, dotfilesdv1.RuntimeInfoResponse]
 	sudoMethods *connect.Client[dotfilesdv1.SudoMethodsRequest, dotfilesdv1.SudoMethodsResponse]
 }
 
@@ -94,9 +94,9 @@ func (c *systemServiceClient) Ping(ctx context.Context, req *connect.Request[dot
 	return c.ping.CallUnary(ctx, req)
 }
 
-// SystemInfo calls dotfilesd.v1.SystemService.SystemInfo.
-func (c *systemServiceClient) SystemInfo(ctx context.Context, req *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
-	return c.systemInfo.CallUnary(ctx, req)
+// RuntimeInfo calls dotfilesd.v1.SystemService.RuntimeInfo.
+func (c *systemServiceClient) RuntimeInfo(ctx context.Context, req *connect.Request[dotfilesdv1.RuntimeInfoRequest]) (*connect.Response[dotfilesdv1.RuntimeInfoResponse], error) {
+	return c.runtimeInfo.CallUnary(ctx, req)
 }
 
 // SudoMethods calls dotfilesd.v1.SystemService.SudoMethods.
@@ -107,7 +107,7 @@ func (c *systemServiceClient) SudoMethods(ctx context.Context, req *connect.Requ
 // SystemServiceHandler is an implementation of the dotfilesd.v1.SystemService service.
 type SystemServiceHandler interface {
 	Ping(context.Context, *connect.Request[dotfilesdv1.PingRequest]) (*connect.Response[dotfilesdv1.PingResponse], error)
-	SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error)
+	RuntimeInfo(context.Context, *connect.Request[dotfilesdv1.RuntimeInfoRequest]) (*connect.Response[dotfilesdv1.RuntimeInfoResponse], error)
 	SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error)
 }
 
@@ -124,10 +124,10 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("Ping")),
 		connect.WithHandlerOptions(opts...),
 	)
-	systemServiceSystemInfoHandler := connect.NewUnaryHandler(
-		SystemServiceSystemInfoProcedure,
-		svc.SystemInfo,
-		connect.WithSchema(systemServiceMethods.ByName("SystemInfo")),
+	systemServiceRuntimeInfoHandler := connect.NewUnaryHandler(
+		SystemServiceRuntimeInfoProcedure,
+		svc.RuntimeInfo,
+		connect.WithSchema(systemServiceMethods.ByName("RuntimeInfo")),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceSudoMethodsHandler := connect.NewUnaryHandler(
@@ -140,8 +140,8 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		switch r.URL.Path {
 		case SystemServicePingProcedure:
 			systemServicePingHandler.ServeHTTP(w, r)
-		case SystemServiceSystemInfoProcedure:
-			systemServiceSystemInfoHandler.ServeHTTP(w, r)
+		case SystemServiceRuntimeInfoProcedure:
+			systemServiceRuntimeInfoHandler.ServeHTTP(w, r)
 		case SystemServiceSudoMethodsProcedure:
 			systemServiceSudoMethodsHandler.ServeHTTP(w, r)
 		default:
@@ -157,8 +157,8 @@ func (UnimplementedSystemServiceHandler) Ping(context.Context, *connect.Request[
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.Ping is not implemented"))
 }
 
-func (UnimplementedSystemServiceHandler) SystemInfo(context.Context, *connect.Request[dotfilesdv1.SystemInfoRequest]) (*connect.Response[dotfilesdv1.SystemInfoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.SystemInfo is not implemented"))
+func (UnimplementedSystemServiceHandler) RuntimeInfo(context.Context, *connect.Request[dotfilesdv1.RuntimeInfoRequest]) (*connect.Response[dotfilesdv1.RuntimeInfoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.SystemService.RuntimeInfo is not implemented"))
 }
 
 func (UnimplementedSystemServiceHandler) SudoMethods(context.Context, *connect.Request[dotfilesdv1.SudoMethodsRequest]) (*connect.Response[dotfilesdv1.SudoMethodsResponse], error) {

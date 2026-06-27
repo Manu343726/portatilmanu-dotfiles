@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,11 @@ import (
 
 	"connectrpc.com/connect"
 )
+
+// sudoPromptHTML is the MCP Apps webview for sudo password entry.
+//
+//go:embed sudo_prompt.html
+var sudoPromptHTML string
 
 type mcpRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -66,8 +72,8 @@ var mcpTools = []toolDef{
 		}},
 	},
 	{
-		Name:        "system_info",
-		Description: "Detailed system information",
+		Name:        "system_runtime",
+		Description: "Show daemon runtime environment (OS, kernel, shell, desktop, hostname, uptime, available tools)",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}},
@@ -87,16 +93,6 @@ var mcpTools = []toolDef{
 		}},
 	},
 	{
-		Name:        "dotfiles_git",
-		Description: "Git operations on the dotfiles repo",
-		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"action":     {Type: "string", Enum: []string{"status", "diff", "add", "commit", "push", "log"}},
-			"message":    {Type: "string"},
-			"paths":      {Type: "string"},
-			"session_id": {Type: "string", Description: "optional session ID for grouping"},
-		}, Required: []string{"action"}},
-	},
-	{
 		Name:        "exec_run",
 		Description: "Execute a shell command",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
@@ -105,14 +101,6 @@ var mcpTools = []toolDef{
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"command"}},
 		Meta: json.RawMessage(`{"ui":{"resourceUri":"ui://dotfilesd/sudo-prompt"}}`),
-	},
-	{
-		Name:        "config_reload",
-		Description: "Reload dotfiles configs (tmux, i3, kitty)",
-		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"target":     {Type: "string", Enum: []string{"tmux", "i3", "kitty", "all"}},
-			"session_id": {Type: "string", Description: "optional session ID for grouping"},
-		}},
 	},
 	{
 		Name:        "config_reconfigure",
@@ -457,18 +445,17 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		text := fmt.Sprintf("dotfilesd v%s (pid %d, up %ds)", s.Version, s.Pid, s.UptimeSecs)
 		return mcpToolResult(id, text)
 
-	case "system_info":
-		req := connect.NewRequest(&dotfilesdv1.SystemInfoRequest{Session: sessionFromArgs(args, clients.SessionID)})
-		resp, err := clients.Sys.SystemInfo(context.Background(), req)
+	case "system_runtime":
+		req := connect.NewRequest(&dotfilesdv1.RuntimeInfoRequest{Session: sessionFromArgs(args, clients.SessionID)})
+		resp, err := clients.Sys.RuntimeInfo(context.Background(), req)
 		if err != nil {
 			return mcpErr(id, -32603, err.Error())
 		}
 		s := resp.Msg
-		text := fmt.Sprintf("os: %s\nkernel: %s\nshell: %s\ndesktop: %s\nmemory: %d MB total / %d MB avail\ncpu: %.2f load\n%s\n%s\n%s",
+		text := fmt.Sprintf("os: %s\nkernel: %s\nshell: %s\ndesktop: %s\nhost: %s\nuptime: %s\ntools: %s",
 			s.Os, s.Kernel, s.Shell, s.Desktop,
-			s.MemoryTotalKb/1024, s.MemoryAvailKb/1024,
-			s.CpuLoad_1M,
-			s.TmuxVersion, s.KittyVersion, s.I3Version)
+			s.Hostname, s.Uptime,
+			strings.Join(s.AvailableTools, ", "))
 		return mcpToolResult(id, text)
 
 	case "system_sudo":
@@ -489,8 +476,8 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			return mcpErr(id, -32603, err.Error())
 		}
 		s := resp.Msg
-		text := fmt.Sprintf("branch: %s\nclean: %v\nlast: %s\nhost: %s\nuptime: %s",
-			s.GitBranch, s.GitClean, s.LastCommit, s.Hostname, s.Uptime)
+		text := fmt.Sprintf("branch: %s\nclean: %v\nlast: %s",
+			s.GitBranch, s.GitClean, s.LastCommit)
 		return mcpToolResult(id, text)
 
 	case "dotfiles_git":
@@ -500,22 +487,11 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			Paths   string `json:"paths"`
 		}
 		json.Unmarshal(args, &p)
-		action := ParseGitAction(p.Action)
-		if action == dotfilesdv1.GitAction_GIT_ACTION_UNSPECIFIED {
-			return mcpErr(id, -32602, fmt.Sprintf("unknown action: %s", p.Action))
+		if p.Action == "" {
+			return mcpErr(id, -32602, "action is required (status, diff, add, commit, push, log)")
 		}
-		req := connect.NewRequest(&dotfilesdv1.GitRequest{Action: action, Message: p.Message, Paths: p.Paths, Session: sessionFromArgs(args, clients.SessionID)})
-		resp, err := clients.Dot.Git(context.Background(), req)
-		if err != nil {
-			return mcpErr(id, -32603, err.Error())
-		}
-		if resp.Msg.ExitCode != 0 {
-			return mcpResp(id, map[string]any{
-				"content": []map[string]any{{"type": "text", "text": resp.Msg.Stderr}},
-				"isError": true,
-			})
-		}
-		return mcpToolResult(id, resp.Msg.Stdout)
+		// Run via scripts/git/<action>.dsh
+		return runMCPToolViaScript(id, clients, "git/"+p.Action, args)
 
 	case "exec_run":
 		var p struct {
@@ -616,27 +592,11 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			Target string `json:"target"`
 		}
 		json.Unmarshal(args, &p)
-		target := dotfilesdv1.ReloadTarget_RELOAD_TARGET_ALL
-		if p.Target != "" {
-			target = ParseReloadTarget(p.Target)
-			if target == dotfilesdv1.ReloadTarget_RELOAD_TARGET_UNSPECIFIED {
-				return mcpErr(id, -32602, fmt.Sprintf("unknown target: %s", p.Target))
-			}
+		target := p.Target
+		if target == "" {
+			target = "all"
 		}
-		req := connect.NewRequest(&dotfilesdv1.ReloadRequest{Target: target, Session: sessionFromArgs(args, clients.SessionID)})
-		resp, err := clients.Cfg.Reload(context.Background(), req)
-		if err != nil {
-			return mcpErr(id, -32603, err.Error())
-		}
-		var lines []string
-		for _, r := range resp.Msg.Results {
-			s := "ok"
-			if !r.Success {
-				s = "err"
-			}
-			lines = append(lines, fmt.Sprintf("%s: %s (%s)", r.Target, s, r.Message))
-		}
-		return mcpToolResult(id, linesJoin(lines, "\n"))
+		return runMCPToolViaScript(id, clients, "reload/"+target, args)
 
 	case "config_reconfigure":
 		var p struct {
@@ -841,6 +801,46 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 	}
 }
 
+// runMCPToolViaScript dispatches a tool call to a registered script.
+func runMCPToolViaScript(id json.RawMessage, clients *Clients, scriptName string, args json.RawMessage) *mcpResponse {
+	req := connect.NewRequest(&dotfilesdv1.RunScriptRequest{
+		Session: sessionFromArgs(args, clients.SessionID),
+		Source:  &dotfilesdv1.RunScriptRequest_RegisteredScript{RegisteredScript: scriptName},
+	})
+	resp, err := clients.Script.RunScript(context.Background(), req)
+	if err != nil {
+		return mcpErr(id, -32603, fmt.Sprintf("script %s: %v", scriptName, err))
+	}
+
+	var lines []string
+	for _, step := range resp.Msg.Steps {
+		switch step.StepKind {
+		case "exec":
+			l := fmt.Sprintf("[%d] $ %s", step.StepNumber, step.SourceLine)
+			lines = append(lines, l)
+			if step.Stdout != "" {
+				lines = append(lines, step.Stdout)
+			}
+			if step.Stderr != "" {
+				lines = append(lines, "stderr: "+step.Stderr)
+			}
+			if step.ExitCode != 0 {
+				lines = append(lines, fmt.Sprintf("→ exit code %d", step.ExitCode))
+			}
+		case "confirm", "input", "choose":
+			lines = append(lines, fmt.Sprintf("[%d] @%s → %s", step.StepNumber, step.StepKind, step.FeedbackValue))
+		}
+	}
+	text := strings.Join(lines, "\n")
+	if !resp.Msg.AllSucceeded {
+		return mcpResp(id, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": text}},
+			"isError": true,
+		})
+	}
+	return mcpToolResult(id, text)
+}
+
 func generateRequestID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
@@ -848,171 +848,7 @@ func generateRequestID() string {
 }
 
 func generateSudoPromptHTML() string {
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #1e1f1c; color: #f8f8f2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 16px; font-size: 14px; }
-  .header { color: #a6e22e; font-weight: 600; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .command { background: #272822; border: 1px solid #3e3d32; border-radius: 6px; padding: 10px; margin: 12px 0; font-family: 'SF Mono', 'Fira Code', monospace; color: #f8f8f2; word-break: break-all; font-size: 13px; }
-  label { display: block; margin-bottom: 4px; color: #f8f8f2; font-size: 13px; }
-  input[type="password"] { width: 100%; background: #272822; border: 1px solid #75715e; border-radius: 6px; padding: 10px 12px; color: #f8f8f2; font-size: 14px; font-family: inherit; outline: none; }
-  input[type="password"]:focus { border-color: #a6e22e; }
-  button { margin-top: 12px; background: #a6e22e; color: #272822; border: none; border-radius: 6px; padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  button:hover { background: #b6f23e; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .status { margin-top: 10px; color: #75715e; font-size: 12px; }
-  .hidden { display: none; }
-  .success { color: #a6e22e; }
-  .error { color: #f92672; }
-  #result { margin-top: 12px; white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
-</style>
-</head>
-<body>
-  <div id="loading">
-    <div class="header">Sudo Password Required</div>
-    <div class="status">Waiting for command...</div>
-  </div>
-
-  <div id="form" class="hidden">
-    <div class="header">Sudo Password Required</div>
-    <div class="command" id="commandDisplay">$ </div>
-    <label for="password">Password:</label>
-    <input type="password" id="password" placeholder="Enter sudo password" autofocus>
-    <button id="submitBtn">Authenticate</button>
-    <div class="status" id="status">Enter your password to authorize this command.</div>
-  </div>
-
-  <div id="result" class="hidden"></div>
-
-<script>
-(function() {
-  let pendingCommand = '';
-  const loading = document.getElementById('loading');
-  const form = document.getElementById('form');
-  const result = document.getElementById('result');
-  const cmdDisplay = document.getElementById('commandDisplay');
-  const passwordInput = document.getElementById('password');
-  const submitBtn = document.getElementById('submitBtn');
-  const statusEl = document.getElementById('status');
-  let initSent = false;
-
-  // MCP Apps: send ui/initialize when the page loads
-  function sendInitialize() {
-    if (initSent) return;
-    initSent = true;
-    window.parent.postMessage({
-      jsonrpc: '2.0',
-      id: 'init-1',
-      method: 'ui/initialize',
-      params: {
-        appCapabilities: {},
-        appInfo: { name: 'dotfilesd-sudo-prompt', version: '0.1.0' },
-        protocolVersion: '2024-11-05'
-      }
-    }, '*');
-  }
-
-  // Call a tool via MCP JSON-RPC over postMessage
-  let toolCallId = 100;
-  function callTool(name, args) {
-    const id = toolCallId++;
-    window.parent.postMessage({
-      jsonrpc: '2.0',
-      id: id,
-      method: 'tools/call',
-      params: { name: name, arguments: args }
-    }, '*');
-    return id;
-  }
-
-  // Handle messages from the host
-  window.addEventListener('message', function(event) {
-    const data = event.data;
-    if (!data || typeof data !== 'object') return;
-
-    // Handle ui/initialize result
-    if (data.id === 'init-1' && data.result) {
-      loading.classList.add('hidden');
-      form.classList.remove('hidden');
-      statusEl.textContent = 'Waiting for command...';
-      return;
-    }
-
-    // Handle ui/notifications/tool-input (contains the command arguments)
-    if (data.method === 'ui/notifications/tool-input') {
-      const args = data.params.arguments || {};
-      pendingCommand = args.command || '';
-      cmdDisplay.textContent = '$ ' + pendingCommand;
-      statusEl.textContent = 'Enter your sudo password to authorize this command.';
-      passwordInput.disabled = false;
-      passwordInput.focus();
-      return;
-    }
-
-    // Handle ui/notifications/tool-result — the exec_run goroutine has
-    // unblocked and this IS the actual sudo command output.
-    if (data.method === 'ui/notifications/tool-result') {
-      const params = data.params || {};
-      const text = (params.content || [])
-        .map(function(c) { return c.text || ''; })
-        .filter(Boolean)
-        .join('\n');
-      loading.classList.add('hidden');
-      form.classList.add('hidden');
-      result.classList.remove('hidden');
-      result.textContent = text || '[empty result]';
-      return;
-    }
-
-    // Handle response to _sudo_submit_password call
-    if (typeof data.id === 'number' && data.id >= 100) {
-      if (data.result) {
-        statusEl.textContent = '✅ Password submitted, waiting for result...';
-        submitBtn.disabled = true;
-        passwordInput.disabled = true;
-      } else if (data.error) {
-        var errMsg = data.error.message || 'unknown error';
-        statusEl.textContent = '❌ Error: ' + errMsg;
-        submitBtn.disabled = false;
-        passwordInput.disabled = false;
-      }
-      return;
-    }
-  });
-
-  // Submit button handler
-  submitBtn.addEventListener('click', function() {
-    const pwd = passwordInput.value;
-    if (!pwd) return;
-
-    submitBtn.disabled = true;
-    passwordInput.disabled = true;
-    statusEl.textContent = 'Authenticating...';
-
-    // Call _sudo_submit_password via MCP tools/call
-    callTool('_sudo_submit_password', {
-      request_id: '',
-      password: pwd
-    });
-
-    passwordInput.value = '';
-  });
-
-  // Allow Enter to submit
-  passwordInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') submitBtn.click();
-  });
-
-  // Send initialize after a short delay to ensure DOM is ready
-  setTimeout(sendInitialize, 100);
-})();
-</script>
-</body>
-</html>`
+	return sudoPromptHTML
 }
 
 func mcpToolResult(id json.RawMessage, text string) *mcpResponse {

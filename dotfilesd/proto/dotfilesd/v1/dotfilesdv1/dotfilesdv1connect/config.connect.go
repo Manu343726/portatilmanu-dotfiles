@@ -33,8 +33,6 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ConfigServiceReloadProcedure is the fully-qualified name of the ConfigService's Reload RPC.
-	ConfigServiceReloadProcedure = "/dotfilesd.v1.ConfigService/Reload"
 	// ConfigServiceReconfigureProcedure is the fully-qualified name of the ConfigService's Reconfigure
 	// RPC.
 	ConfigServiceReconfigureProcedure = "/dotfilesd.v1.ConfigService/Reconfigure"
@@ -44,7 +42,6 @@ const (
 
 // ConfigServiceClient is a client for the dotfilesd.v1.ConfigService service.
 type ConfigServiceClient interface {
-	Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error)
 	Reconfigure(context.Context, *connect.Request[dotfilesdv1.ReconfigureRequest]) (*connect.Response[dotfilesdv1.ReconfigureResponse], error)
 	Restart(context.Context, *connect.Request[dotfilesdv1.RestartRequest]) (*connect.Response[dotfilesdv1.RestartResponse], error)
 }
@@ -60,12 +57,6 @@ func NewConfigServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	configServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_config_proto.Services().ByName("ConfigService").Methods()
 	return &configServiceClient{
-		reload: connect.NewClient[dotfilesdv1.ReloadRequest, dotfilesdv1.ReloadResponse](
-			httpClient,
-			baseURL+ConfigServiceReloadProcedure,
-			connect.WithSchema(configServiceMethods.ByName("Reload")),
-			connect.WithClientOptions(opts...),
-		),
 		reconfigure: connect.NewClient[dotfilesdv1.ReconfigureRequest, dotfilesdv1.ReconfigureResponse](
 			httpClient,
 			baseURL+ConfigServiceReconfigureProcedure,
@@ -83,14 +74,8 @@ func NewConfigServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // configServiceClient implements ConfigServiceClient.
 type configServiceClient struct {
-	reload      *connect.Client[dotfilesdv1.ReloadRequest, dotfilesdv1.ReloadResponse]
 	reconfigure *connect.Client[dotfilesdv1.ReconfigureRequest, dotfilesdv1.ReconfigureResponse]
 	restart     *connect.Client[dotfilesdv1.RestartRequest, dotfilesdv1.RestartResponse]
-}
-
-// Reload calls dotfilesd.v1.ConfigService.Reload.
-func (c *configServiceClient) Reload(ctx context.Context, req *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
-	return c.reload.CallUnary(ctx, req)
 }
 
 // Reconfigure calls dotfilesd.v1.ConfigService.Reconfigure.
@@ -105,7 +90,6 @@ func (c *configServiceClient) Restart(ctx context.Context, req *connect.Request[
 
 // ConfigServiceHandler is an implementation of the dotfilesd.v1.ConfigService service.
 type ConfigServiceHandler interface {
-	Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error)
 	Reconfigure(context.Context, *connect.Request[dotfilesdv1.ReconfigureRequest]) (*connect.Response[dotfilesdv1.ReconfigureResponse], error)
 	Restart(context.Context, *connect.Request[dotfilesdv1.RestartRequest]) (*connect.Response[dotfilesdv1.RestartResponse], error)
 }
@@ -117,12 +101,6 @@ type ConfigServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	configServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_config_proto.Services().ByName("ConfigService").Methods()
-	configServiceReloadHandler := connect.NewUnaryHandler(
-		ConfigServiceReloadProcedure,
-		svc.Reload,
-		connect.WithSchema(configServiceMethods.ByName("Reload")),
-		connect.WithHandlerOptions(opts...),
-	)
 	configServiceReconfigureHandler := connect.NewUnaryHandler(
 		ConfigServiceReconfigureProcedure,
 		svc.Reconfigure,
@@ -137,8 +115,6 @@ func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/dotfilesd.v1.ConfigService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case ConfigServiceReloadProcedure:
-			configServiceReloadHandler.ServeHTTP(w, r)
 		case ConfigServiceReconfigureProcedure:
 			configServiceReconfigureHandler.ServeHTTP(w, r)
 		case ConfigServiceRestartProcedure:
@@ -151,10 +127,6 @@ func NewConfigServiceHandler(svc ConfigServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedConfigServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedConfigServiceHandler struct{}
-
-func (UnimplementedConfigServiceHandler) Reload(context.Context, *connect.Request[dotfilesdv1.ReloadRequest]) (*connect.Response[dotfilesdv1.ReloadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ConfigService.Reload is not implemented"))
-}
 
 func (UnimplementedConfigServiceHandler) Reconfigure(context.Context, *connect.Request[dotfilesdv1.ReconfigureRequest]) (*connect.Response[dotfilesdv1.ReconfigureResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ConfigService.Reconfigure is not implemented"))

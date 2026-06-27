@@ -35,14 +35,11 @@ const (
 const (
 	// DotfilesServiceStatusProcedure is the fully-qualified name of the DotfilesService's Status RPC.
 	DotfilesServiceStatusProcedure = "/dotfilesd.v1.DotfilesService/Status"
-	// DotfilesServiceGitProcedure is the fully-qualified name of the DotfilesService's Git RPC.
-	DotfilesServiceGitProcedure = "/dotfilesd.v1.DotfilesService/Git"
 )
 
 // DotfilesServiceClient is a client for the dotfilesd.v1.DotfilesService service.
 type DotfilesServiceClient interface {
 	Status(context.Context, *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error)
-	Git(context.Context, *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error)
 }
 
 // NewDotfilesServiceClient constructs a client for the dotfilesd.v1.DotfilesService service. By
@@ -62,19 +59,12 @@ func NewDotfilesServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(dotfilesServiceMethods.ByName("Status")),
 			connect.WithClientOptions(opts...),
 		),
-		git: connect.NewClient[dotfilesdv1.GitRequest, dotfilesdv1.GitResponse](
-			httpClient,
-			baseURL+DotfilesServiceGitProcedure,
-			connect.WithSchema(dotfilesServiceMethods.ByName("Git")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // dotfilesServiceClient implements DotfilesServiceClient.
 type dotfilesServiceClient struct {
 	status *connect.Client[dotfilesdv1.StatusRequest, dotfilesdv1.StatusResponse]
-	git    *connect.Client[dotfilesdv1.GitRequest, dotfilesdv1.GitResponse]
 }
 
 // Status calls dotfilesd.v1.DotfilesService.Status.
@@ -82,15 +72,9 @@ func (c *dotfilesServiceClient) Status(ctx context.Context, req *connect.Request
 	return c.status.CallUnary(ctx, req)
 }
 
-// Git calls dotfilesd.v1.DotfilesService.Git.
-func (c *dotfilesServiceClient) Git(ctx context.Context, req *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error) {
-	return c.git.CallUnary(ctx, req)
-}
-
 // DotfilesServiceHandler is an implementation of the dotfilesd.v1.DotfilesService service.
 type DotfilesServiceHandler interface {
 	Status(context.Context, *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error)
-	Git(context.Context, *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error)
 }
 
 // NewDotfilesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -106,18 +90,10 @@ func NewDotfilesServiceHandler(svc DotfilesServiceHandler, opts ...connect.Handl
 		connect.WithSchema(dotfilesServiceMethods.ByName("Status")),
 		connect.WithHandlerOptions(opts...),
 	)
-	dotfilesServiceGitHandler := connect.NewUnaryHandler(
-		DotfilesServiceGitProcedure,
-		svc.Git,
-		connect.WithSchema(dotfilesServiceMethods.ByName("Git")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/dotfilesd.v1.DotfilesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DotfilesServiceStatusProcedure:
 			dotfilesServiceStatusHandler.ServeHTTP(w, r)
-		case DotfilesServiceGitProcedure:
-			dotfilesServiceGitHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -129,8 +105,4 @@ type UnimplementedDotfilesServiceHandler struct{}
 
 func (UnimplementedDotfilesServiceHandler) Status(context.Context, *connect.Request[dotfilesdv1.StatusRequest]) (*connect.Response[dotfilesdv1.StatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.Status is not implemented"))
-}
-
-func (UnimplementedDotfilesServiceHandler) Git(context.Context, *connect.Request[dotfilesdv1.GitRequest]) (*connect.Response[dotfilesdv1.GitResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.DotfilesService.Git is not implemented"))
 }
