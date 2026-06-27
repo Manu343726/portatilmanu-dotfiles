@@ -19,6 +19,7 @@
 /.vscode/*
 !/.vscode/launch.json
 !/.vscode/mcp.json
+!/.vscode/tasks.json
 !/.bashrc
 !/.profile
 !/.xprofile
