@@ -815,15 +815,24 @@ type PluginInfo struct {
    → Build dependency graph: map[pluginName][]depNames
 3. Topological sort (dependencies first)
 4. For each plugin in build order:
-   a. `go build -o <cache>/<name>/<name> .`
-   b. Launch subprocess with:
+   a. GENERATE PROTO: if the plugin directory contains a `proto/<name>/` subdirectory
+      with `.proto` files, compile them:
+      ```sh
+      protoc --proto_path=<plugin_dir> --go_out=<plugin_dir> \
+        --connect-go_out=<plugin_dir> \
+        <plugin_dir>/proto/<name>/*.proto
+      ```
+      This generates `<name>.pb.go` and `weatherconnect/<name>.connect.go` inside
+      the plugin's `proto/<name>/` directory. These files are consumed by `go build`.
+   b. `go build -o <cache>/<name>/<name> .`
+   c. Launch subprocess with:
       EXECUTION_CONTEXT_URL=http://127.0.0.1:9105
       EXECUTION_CONTEXT_TOKEN=<token>
       SESSION_ID=plugin-<name>
-   c. Read handshake JSON from stdout (name, version, description, URL)
-   d. grpcreflect.NewClient(httpClient, URL).ListServices() → ALL service names
-   e. If DocumentationService is among services, call GetDocumentation() → cache docs
-   f. Store PluginInfo in plugins map
+   d. Read handshake JSON from stdout (name, version, description, URL)
+   e. grpcreflect.NewClient(httpClient, URL).NewStream(ctx).ListServices() → ALL service names
+   f. If DocumentationService is among services, call GetDocumentation() → cache docs
+   g. Store PluginInfo in plugins map
 5. Done
 ```
 
@@ -991,6 +1000,22 @@ Topological sort ensures `weather` is built before `dashboard`.
 
 ## 12. Build Dependency Graph
 
+The plugin build system handles ALL compilation steps in-order: proto generation first, then Go binary compilation. Plugins that depend on other plugins will have those plugins' protos compiled and binaries built before them.
+
+### Build Algorithm
+
+For each plugin in topological order:
+1. **Proto compilation**: If the plugin has custom proto files (e.g. `proto/weather/weather.proto`), compile them using `protoc`:
+   ```sh
+   protoc --proto_path=<plugin_dir> --go_out=<plugin_dir> \
+     --connect-go_out=<plugin_dir> \
+     <plugin_dir>/proto/<name>/*.proto
+   ```
+   This produces the `.pb.go` and `.connect.go` files in the plugin's `proto/` tree that `go build` will consume.
+2. **Go compilation**: Run `go build -o <cache>/<name>/<name> .` in the plugin directory.
+
+### Dependency Graph Extraction
+
 ```go
 func parsePluginDeps(sourceDir, pluginsDir string) ([]string, error) {
     data, _ := os.ReadFile(filepath.Join(sourceDir, "go.mod"))
@@ -1007,6 +1032,57 @@ func parsePluginDeps(sourceDir, pluginsDir string) ([]string, error) {
     return deps, nil
 }
 ```
+
+Since dependencies are in topological order, when plugin B depends on plugin A,
+plugin A's proto files are compiled and its binary is built BEFORE plugin B.
+Plugin B can then import plugin A's generated Go code.
+
+For example:
+
+```
+plugins/weather/          (no deps — protos compiled, binary built first)
+plugins/dashboard/        (depends on weather — can import weatherconnect)
+```
+
+The Makefile `plugin-build-all` target wraps this whole process:
+```makefile
+# Proto compilation for a single plugin.
+# Usage: make plugin-proto PLUGIN=weather
+plugin-proto:
+    @if [ -z "$(PLUGIN)" ]; then \
+        echo "Usage: make plugin-proto PLUGIN=<name>"; \
+        exit 1; \
+    fi
+    @if [ -d "$(PLUGIN_DIR)/$(PLUGIN)/proto/$(PLUGIN)" ]; then \
+        cd $(PLUGIN_DIR)/$(PLUGIN) && \
+        protoc --proto_path=. --go_out=. --go_opt=paths=source_relative \
+            --connect-go_out=. --connect-go_opt=paths=source_relative \
+            proto/$(PLUGIN)/*.proto; \
+        echo "plugin '$(PLUGIN)' protos compiled."; \
+    fi
+
+# Build a single plugin (proto + Go).
+plugin-build: plugin-proto
+    @if [ -z "$(PLUGIN)" ]; then \
+        echo "Usage: make plugin-build PLUGIN=<name>"; \
+        exit 1; \
+    fi
+    @mkdir -p $(PLUGIN_CACHE_DIR)/$(PLUGIN)
+    cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
+    @echo "plugin '$(PLUGIN)' built."
+
+# Build all plugins in dependency order (proto + Go).
+plugin-build-all:
+    @echo "building plugins in dependency order..."
+    # 1. Resolve dependency order from go.mod files
+    # 2. For each plugin in order:
+    #    a. "cd plugins/<name> && protoc ..."   (if proto/ exists)
+    #    b. "cd plugins/<name> && go build ..."
+```
+
+This ensures that when plugin B depends on plugin A, plugin A's proto files are
+compiled and its Go binary is built first — making the generated client code
+available for plugin B to import at compile time.
 
 ---
 
@@ -1147,9 +1223,9 @@ No `streamingContext` — no ExtensionService to support.
 | `internal/pkg/cli/plugin.go` | Use PluginRegistryService |
 | `internal/pkg/cli/client.go` | Add Registry client |
 | `internal/pkg/cli/mcp.go` | Discover via Registry + DocumentationService |
-| `Makefile` | Update proto targets |
-| `plugins/weather/main.go` | Custom RPC service |
-| `plugins/resources/main.go` | Custom RPC service |
+| `Makefile` | Update proto targets: add `documentation.proto`, add `plugin-proto` target for per-plugin proto compilation |
+| `plugins/weather/main.go` | Custom RPC service (proto + generated code + handler) |
+| `plugins/resources/main.go` | Custom RPC service (proto + generated code + handler) |
 
 ---
 
@@ -1163,7 +1239,7 @@ No `streamingContext` — no ExtensionService to support.
 6. **Rewrite `plugin/context.go`**: Remove streamingContext, pluginClient, CallPlugin
 7. **Create `plugin/docs.go`**: Default DocumentationService implementation
 8. **Build SDK**: `go build ./plugin/...`
-9. **Rewrite `internal/pkg/plugin/manager.go`**: grpcreflect-based discovery, handshake identity
+9. **Rewrite `internal/pkg/plugin/manager.go`**: grpcreflect-based discovery, handshake identity, proto compilation step
 10. **Rewrite `internal/pkg/daemon/plugin.go`** and **`server.go`**
 11. **Rewrite `internal/pkg/daemon/registry_svc.go`**
 12. **Update `internal/pkg/cli/`**: Registry instead of PluginService
