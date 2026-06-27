@@ -299,7 +299,7 @@ background goroutine is launched by plugin.Serve().
 
 ## [CLI] — Proto-Based Dynamic Command Generation
 
-**Commit:** `307dbd6`
+**Commit:** `934d68e`
 **Date:** 2026-06-28
 
 ### Changes
