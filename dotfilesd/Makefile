@@ -155,7 +155,7 @@ PLUGIN_DIR ?= $(HOME)/.config/dotfilesd/plugins
 PLUGIN_CACHE_DIR ?= $(HOME)/.cache/dotfilesd/plugins
 
 # Build a specific plugin: make plugin-build PLUGIN=weather
-plugin-build:
+plugin-build: plugin-proto
 	@if [ -z "$(PLUGIN)" ]; then \
 		echo "Usage: make plugin-build PLUGIN=<name>"; \
 		exit 1; \
@@ -163,6 +163,22 @@ plugin-build:
 	@mkdir -p $(PLUGIN_CACHE_DIR)/$(PLUGIN)
 	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
 	@echo "plugin '$(PLUGIN)' built."
+
+# Compile proto files for a specific plugin: make plugin-proto PLUGIN=weather
+plugin-proto:
+	@if [ -z "$(PLUGIN)" ]; then \
+		echo "Usage: make plugin-proto PLUGIN=<name>"; \
+		exit 1; \
+	fi
+	@if [ -d "$(PLUGIN_DIR)/$(PLUGIN)/proto/$(PLUGIN)" ]; then \
+		cd $(PLUGIN_DIR)/$(PLUGIN) && \
+		PATH="$(HOME)/go/bin:$(PATH)" protoc \
+			--proto_path=. \
+			--go_out=. --go_opt=paths=source_relative \
+			--connect-go_out=. --connect-go_opt=paths=source_relative \
+			proto/$(PLUGIN)/*.proto; \
+		echo "plugin '$(PLUGIN)' protos compiled."; \
+	fi
 
 # Build all plugins found in the plugins directory, respecting dependency order.
 # Dependencies are inferred from go.mod `require` directives: if plugin A's
@@ -195,9 +211,7 @@ plugin-build-all:
 				fi; \
 			done; \
 			if [ $$satisfied -eq 1 ]; then \
-				echo "  building: $$name..."; \
-				mkdir -p $(PLUGIN_CACHE_DIR)/$$name; \
-				cd $(PLUGIN_DIR)/$$name && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/$$name .; \
+				$(MAKE) plugin-build PLUGIN=$$name; \
 				ordered="$$ordered $$name"; \
 				changed=1; \
 				sed -i "/^$$name$$/d" /tmp/plugin-build-order.txt 2>/dev/null || true; \
@@ -206,9 +220,7 @@ plugin-build-all:
 		if [ $$changed -eq 0 ]; then \
 			echo "  WARNING: circular or unsatisfied dependencies, building remaining as-is"; \
 			for name in $$(cat /tmp/plugin-build-order.txt); do \
-				echo "  building: $$name..."; \
-				mkdir -p $(PLUGIN_CACHE_DIR)/$$name; \
-				cd $(PLUGIN_DIR)/$$name && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/$$name .; \
+				$(MAKE) plugin-build PLUGIN=$$name; \
 			done; \
 			break; \
 		fi; \

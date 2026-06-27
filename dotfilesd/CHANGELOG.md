@@ -274,6 +274,26 @@ resources plugin at runtime (discovers it via registry). The resources
 plugin background collector requires daemon context (ctx.Exec) to work
 — it will only start collecting after the plugin server starts and the
 background goroutine is launched by plugin.Serve().
+
+---
+
+## [Step 16] — Update Makefile
+
+**Commit:** `pending`
+**Date:** 2026-06-28
+
+### Changes
+- `dotfilesd/Makefile`:
+  - Added `plugin-proto` target for per-plugin proto compilation.
+  - Made `plugin-build` depend on `plugin-proto`.
+  - Updated `plugin-build-all` to use `$(MAKE) plugin-build` (which
+    includes proto compilation) instead of direct `go build` calls.
+
+### State
+- [x] Daemon builds
+- [x] CLI builds
+- [x] All plugins build
+- [ ] Daemon starts and loads plugins (not yet tested)
 **Date:** 2026-06-27
 
 ### Changes
