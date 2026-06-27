@@ -65,6 +65,7 @@ type Clients struct {
 	Session   dotfilesdv1connect.SessionServiceClient
 	Script    dotfilesdv1connect.ScriptServiceClient
 	Plugin    dotfilesdv1connect.PluginServiceClient
+	Registry  dotfilesdv1connect.PluginRegistryServiceClient
 	Feedback  *FeedbackServer
 	SessionID string
 	mu        sync.Mutex
@@ -74,13 +75,14 @@ type Clients struct {
 func NewClients(port string) *Clients {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%s", port)
 	return &Clients{
-		Sys:     dotfilesdv1connect.NewSystemServiceClient(http.DefaultClient, baseURL),
-		Dot:     dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, baseURL),
-		Exec:    dotfilesdv1connect.NewExecServiceClient(http.DefaultClient, baseURL),
-		Cfg:     dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL),
-		Session: dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
-		Script:  dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
-		Plugin:  dotfilesdv1connect.NewPluginServiceClient(http.DefaultClient, baseURL),
+		Sys:      dotfilesdv1connect.NewSystemServiceClient(http.DefaultClient, baseURL),
+		Dot:      dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, baseURL),
+		Exec:     dotfilesdv1connect.NewExecServiceClient(http.DefaultClient, baseURL),
+		Cfg:      dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL),
+		Session:  dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
+		Script:   dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
+		Plugin:   dotfilesdv1connect.NewPluginServiceClient(http.DefaultClient, baseURL),
+		Registry: dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, baseURL),
 	}
 }
 

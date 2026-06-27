@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package weather;
+
+option go_package = "plugins/weather/proto/weather";
+
+// WeatherService is the type-safe RPC service exposed by the weather plugin.
+// Other plugins can import this package and call Forecast directly.
+service WeatherService {
+  // Forecast returns the weather forecast for a location.
+  rpc Forecast(ForecastRequest) returns (ForecastResponse);
+}
+
+message ForecastRequest {
+  string location = 1;
+  string format = 2; // "brief", "full", "json"
+}
+
+message ForecastResponse {
+  string report = 1;
+  int32 exit_code = 2;
+  string error_message = 3;
+}

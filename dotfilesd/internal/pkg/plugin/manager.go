@@ -10,13 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
+	"connectrpc.com/connect"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
-
-	"connectrpc.com/connect"
 )
 
 // PluginInfo holds metadata for a loaded plugin.
@@ -30,7 +30,7 @@ type PluginInfo struct {
 	CacheDir  string
 }
 
-// Manager orchestrates plugin lifecycle.
+// Manager orchestrates plugin lifecycle with dependency-aware builds.
 type Manager struct {
 	PluginsDir string
 	CacheDir   string
@@ -52,7 +52,7 @@ func NewManager(pluginsDir, cacheDir, ctxURL, ctxToken string) *Manager {
 	}
 }
 
-// LoadPlugins discovers, builds, launches, and registers all plugins.
+// LoadPlugins discovers, builds (in dependency order), launches, and registers all plugins.
 func (m *Manager) LoadPlugins(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -62,21 +62,18 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 
 	slog.Info("loading plugins", "dir", pluginsDir)
 
-	entries, err := os.ReadDir(pluginsDir)
+	// Discover plugin directories and build dependency graph.
+	pluginDeps, err := m.discoverPlugins(pluginsDir)
 	if err != nil {
-		return fmt.Errorf("read plugins dir: %w", err)
+		return fmt.Errorf("discover plugins: %w", err)
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		sourceDir := filepath.Join(pluginsDir, name)
+	// Topological sort for build order.
+	buildOrder := topologicalSort(pluginDeps)
+	slog.Info("plugin build order", "order", buildOrder)
 
-		if !isGoPlugin(sourceDir) {
-			continue
-		}
+	for _, name := range buildOrder {
+		sourceDir := filepath.Join(pluginsDir, name)
 
 		slog.Info("building plugin", "name", name)
 		binaryPath := filepath.Join(cacheDir, name, name)
@@ -131,6 +128,7 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 
 		slog.Info("plugin launched", "name", name, "url", hs.URL, "pid", procCmd.Process.Pid)
 
+		// Call PluginBaseService.GetInfo and ListServices.
 		httpClient := &http.Client{}
 		baseClient := dotfilesdv1connect.NewPluginBaseServiceClient(httpClient, hs.URL)
 
@@ -164,6 +162,114 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 
 	slog.Info("plugins loaded", "count", len(m.plugins))
 	return nil
+}
+
+// discoverPlugins scans the plugins directory and builds a dependency graph.
+// Returns a map of plugin name -> list of plugin names it depends on.
+func (m *Manager) discoverPlugins(pluginsDir string) (map[string][]string, error) {
+	entries, err := os.ReadDir(pluginsDir)
+	if err != nil {
+		return nil, err
+	}
+
+	deps := make(map[string][]string)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		sourceDir := filepath.Join(pluginsDir, name)
+
+		if !isGoPlugin(sourceDir) {
+			continue
+		}
+
+		// Parse go.mod for plugin dependencies.
+		pluginDeps, err := parsePluginDeps(sourceDir, pluginsDir)
+		if err != nil {
+			slog.Warn("parse deps failed", "name", name, "error", err)
+			pluginDeps = []string{}
+		}
+		deps[name] = pluginDeps
+		slog.Debug("plugin dependencies", "name", name, "deps", pluginDeps)
+	}
+	return deps, nil
+}
+
+// parsePluginDeps reads go.mod and extracts dependencies on other plugins.
+func parsePluginDeps(sourceDir, pluginsDir string) ([]string, error) {
+	goModPath := filepath.Join(sourceDir, "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var deps []string
+	lines := strings.Split(string(data), "\n")
+	inRequire := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "require (" {
+			inRequire = true
+			continue
+		}
+		if line == ")" {
+			inRequire = false
+			continue
+		}
+		if inRequire || strings.HasPrefix(line, "require ") {
+			// Format: "module/path v1.2.3" or "module/path v1.2.3 // indirect"
+			parts := strings.Fields(strings.TrimPrefix(line, "require "))
+			if len(parts) < 2 {
+				continue
+			}
+			modulePath := parts[0]
+			// Check if this module path matches a plugin directory.
+			pluginName := filepath.Base(modulePath)
+			pluginDir := filepath.Join(pluginsDir, pluginName)
+			if _, err := os.Stat(pluginDir); err == nil {
+				// This is a local plugin dependency.
+				deps = append(deps, pluginName)
+			}
+		}
+	}
+	return deps, nil
+}
+
+// topologicalSort returns plugins in dependency order (dependencies first).
+func topologicalSort(deps map[string][]string) []string {
+	var result []string
+	visited := make(map[string]bool)
+	tempMark := make(map[string]bool)
+
+	var visit func(string)
+	visit = func(n string) {
+		if tempMark[n] {
+			return // cycle detected, skip
+		}
+		if visited[n] {
+			return
+		}
+		tempMark[n] = true
+		for _, dep := range deps[n] {
+			visit(dep)
+		}
+		tempMark[n] = false
+		visited[n] = true
+		result = append(result, n)
+	}
+
+	// Sort keys for deterministic order.
+	keys := make([]string, 0, len(deps))
+	for k := range deps {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		visit(k)
+	}
+	return result
 }
 
 // GetPlugin returns info for a named plugin.

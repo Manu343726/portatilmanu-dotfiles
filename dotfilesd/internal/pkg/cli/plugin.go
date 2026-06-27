@@ -15,8 +15,8 @@ import (
 // RunListPlugins lists all loaded plugins and their tools.
 func RunListPlugins(clients *Clients, sessionID string, verbose bool) error {
 	slog.Debug("list plugins requested", "session_id", sessionID)
-	req := connect.NewRequest(&dotfilesdv1.ListPluginsRequest{Session: sessionProto(sessionID)})
-	resp, err := clients.Plugin.ListPlugins(context.Background(), req)
+	req := connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{Session: sessionProto(sessionID)})
+	resp, err := clients.Registry.ListPlugins(context.Background(), req)
 	if err != nil {
 		slog.Error("list plugins failed", "error", err)
 		return fmt.Errorf("list plugins failed: %w", err)
@@ -33,32 +33,27 @@ func RunListPlugins(clients *Clients, sessionID string, verbose bool) error {
 			fmt.Println("---")
 		}
 		fmt.Printf("Name:        %s\n", p.Name)
-		fmt.Printf("Display:     %s\n", p.DisplayName)
-		fmt.Printf("Version:     %s\n", p.Version)
-		fmt.Printf("Description: %s\n", p.Description)
+		fmt.Printf("Display:     %s\n", p.Info.DisplayName)
+		fmt.Printf("Version:     %s\n", p.Info.Version)
+		fmt.Printf("Description: %s\n", p.Info.Description)
 		if verbose {
-			for _, t := range p.Tools {
-				fmt.Printf("  Tool: %s - %s\n", t.Name, t.Description)
-				if t.Input != nil {
-					for name, prop := range t.Input.Properties {
-						req := propertyTypeToString(prop.Type)
-						if containsString(t.Input.Required, name) {
-							req += " (required)"
-						}
-						fmt.Printf("    Arg: %s (%s)\n", name, req)
-						if prop.Description != "" {
-							fmt.Printf("         %s\n", prop.Description)
-						}
-					}
+			if len(p.Services) > 0 {
+				fmt.Println("  Services:")
+				for _, svc := range p.Services {
+					fmt.Printf("    %s - %s\n", svc.Name, svc.Description)
 				}
+			} else {
+				fmt.Println("  No custom services (uses legacy tools)")
 			}
 		} else {
-			names := make([]string, len(p.Tools))
-			for j, t := range p.Tools {
-				names[j] = t.Name
-			}
-			if len(names) > 0 {
-				fmt.Printf("Tools:       %s\n", strings.Join(names, ", "))
+			if len(p.Services) > 0 {
+				names := make([]string, len(p.Services))
+				for j, svc := range p.Services {
+					names[j] = svc.Name
+				}
+				fmt.Printf("Services:    %s\n", strings.Join(names, ", "))
+			} else {
+				fmt.Println("Services:    (legacy tools)")
 			}
 		}
 	}

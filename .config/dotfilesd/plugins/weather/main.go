@@ -1,57 +1,28 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"dotfilesd/plugin"
-	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	pb "plugins/weather/proto/weather"
+	"plugins/weather/proto/weather/weatherconnect"
+
+	"connectrpc.com/connect"
 )
 
-func main() {
-	plugin.Serve(plugin.Config{
-		Name:        "weather",
-		DisplayName: "Weather",
-		Version:     "1.0.0",
-		Description: "Weather forecast plugin using wttr.in",
-		Tools: []plugin.Tool{
-			plugin.NewTool("forecast", "Get weather forecast for a location",
-				&dotfilesdv1.ToolInputSchema{
-					Properties: map[string]*dotfilesdv1.PropertySchema{
-						"location": {
-							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-							Description: "Location to get weather for (city name, ZIP code, IP address, etc.)",
-						},
-						"format": {
-							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-							Description: "Output format (brief, full, json)",
-							Default:     "brief",
-						},
-					},
-					Required: []string{"location"},
-				},
-				&dotfilesdv1.CLIHints{
-					CommandPath: "weather forecast",
-					Category:    "utilities",
-				},
-				forecastFn,
-			),
-		},
-	})
-}
+// weatherServer implements the type-safe WeatherService.
+type weatherServer struct{}
 
-func forecastFn(ctx plugin.Context, args map[string]string) error {
-	location := args["location"]
-	if location == "" {
-		return fmt.Errorf("location is required")
-	}
+func (s *weatherServer) Forecast(
+	ctx context.Context,
+	req *connect.Request[pb.ForecastRequest],
+) (*connect.Response[pb.ForecastResponse], error) {
+	location := req.Msg.Location
+	format := req.Msg.Format
 
-	format := args["format"]
-	if format == "" {
-		format = "brief"
-	}
-
-	ctx.Log().Info("forecasting weather", "location", location, "format", format)
+	pc := plugin.ExtractContext(ctx)
 
 	var url string
 	switch format {
@@ -63,30 +34,59 @@ func forecastFn(ctx plugin.Context, args map[string]string) error {
 		url = fmt.Sprintf("wttr.in/%s?0", location)
 	}
 
-	ctx.Log().Debug("fetching weather", "url", url)
-
-	result, err := ctx.Exec(fmt.Sprintf("curl -s --max-time 10 '%s'", url))
-	if err != nil {
-		ctx.Log().Error("failed to fetch weather", "error", err, "location", location)
-		return fmt.Errorf("failed to fetch weather: %w", err)
+	if pc != nil {
+		pc.Log().Info("forecasting weather via custom RPC", "location", location, "format", format, "url", url)
 	}
 
-	if result.ExitCode != 0 {
-		stderr := strings.TrimSpace(result.Stderr)
-		if stderr == "" {
-			stderr = fmt.Sprintf("curl exited with code %d", result.ExitCode)
+	cmd := fmt.Sprintf("curl -s --max-time 10 '%s'", url)
+
+	if pc != nil {
+		result, err := pc.Exec(cmd)
+		if err != nil {
+			return connect.NewResponse(&pb.ForecastResponse{
+				ErrorMessage: err.Error(),
+				ExitCode:     -1,
+			}), nil
 		}
-		ctx.Log().Warn("curl returned non-zero exit", "exit_code", result.ExitCode, "stderr", stderr)
-		return fmt.Errorf("failed to fetch weather: %s", stderr)
+		if result.ExitCode != 0 {
+			errMsg := strings.TrimSpace(result.Stderr)
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("curl exited with code %d", result.ExitCode)
+			}
+			return connect.NewResponse(&pb.ForecastResponse{
+				ExitCode:     int32(result.ExitCode),
+				ErrorMessage: errMsg,
+			}), nil
+		}
+		return connect.NewResponse(&pb.ForecastResponse{
+			Report:   strings.TrimSpace(result.Stdout),
+			ExitCode: 0,
+		}), nil
 	}
 
-	output := strings.TrimSpace(result.Stdout)
-	if output == "" {
-		ctx.Log().Warn("empty weather response", "location", location)
-		return fmt.Errorf("no weather data returned")
-	}
+	return connect.NewResponse(&pb.ForecastResponse{
+		ErrorMessage: "no daemon context available",
+		ExitCode:     -1,
+	}), nil
+}
 
-	ctx.Log().Debug("weather fetched successfully", "location", location, "output_size", len(output))
-	fmt.Fprintln(ctx.Stdout(), output)
-	return nil
+func main() {
+	svc := &weatherServer{}
+	path, handler := weatherconnect.NewWeatherServiceHandler(svc)
+
+	plugin.Serve(plugin.Config{
+		Name:        "weather",
+		DisplayName: "Weather",
+		Version:     "1.0.0",
+		Description: "Weather forecast plugin using wttr.in",
+		Services: []plugin.Service{
+			{
+				Name:             "weather.WeatherService",
+				Description:      "Type-safe weather forecast API for plugin-to-plugin calls",
+				Path:             path,
+				Handler:          handler,
+				PluginAccessible: true,
+			},
+		},
+	})
 }

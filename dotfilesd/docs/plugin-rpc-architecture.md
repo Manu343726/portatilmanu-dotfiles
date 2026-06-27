@@ -4,6 +4,25 @@
 > **Date:** 2026-06-27
 > **Purpose:** Reference for implementing type-safe Connect RPC for plugins
 
+> **⚠️ COMPLETE REWRITE — ZERO BACKWARDS COMPATIBILITY**
+>
+> This document describes a **from-scratch rewrite** of the entire plugin
+> architecture. The old `Tool`-based system, `plugin.proto`, `extension.proto`,
+> `plugin_base.proto`, stringly-typed dispatch, and all existing plugin code
+> are **deleted and replaced**. Nothing from the v1 plugin system survives.
+>
+> - Old plugins **will not work** — every existing plugin (weather, resources)
+>   must be rewritten from scratch as a Connect RPC service.
+> - The old SDK (`plugin.NewTool`, `plugin.RegisterTool`, etc.) is **gone** —
+>   replaced by `plugin.Serve()` with Connect RPC handlers and protobuf.
+> - There is **no migration path, no compatibility shim, no adapter layer.**
+> - This is a clean break: the new system is designed as if the old one never
+>   existed.
+>
+> All existing plugin code in `~/.config/dotfilesd/plugins/` will be replaced
+> in a single coordinated commit that also updates the daemon, SDK, CLI, and
+> build system.
+
 ## Table of Contents
 
 1. [Overview](#1-overview)
@@ -27,6 +46,11 @@
 ---
 
 ## 1. Overview
+
+> This is a **clean-sheet redesign**. The old plugin system (Tool-based, stringly-typed
+> dispatch, `extension.proto`, `plugin.proto`, `plugin_base.proto`) is entirely deleted.
+> Nothing carries over — not a single line of plugin code, not a single proto message,
+> not a single SDK function. The system below is designed as if from scratch.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -69,7 +93,8 @@
 
 ### Key Principles
 
-1. **Plugins serve Connect RPC services.** That's it. No "tool" abstraction.
+1. **Plugins serve Connect RPC services.** The old `Tool` abstraction is gone.
+   Plugins are just Connect RPC servers with protobuf schemas.
 2. **grpcreflect** is used BOTH server-side (plugin mounts reflection handlers)
    and client-side (daemon calls `ListServices()` to discover everything).
 3. **Plugin identity** comes from the handshake JSON on stdout (name, version, etc.)
@@ -77,6 +102,8 @@
    everything at runtime via grpcreflect.
 5. **DocumentationService** is a standard proto compiled into both daemon and SDK.
    Plugins get a default implementation; they can override for richer docs.
+6. **No backwards compatibility.** The old plugin system is deleted in its entirety.
+   No migration path, no adapter layer, no compatibility shim.
 
 ---
 
@@ -1231,9 +1258,14 @@ No `streamingContext` — no ExtensionService to support.
 
 ## 16. Implementation Order
 
-1. **Delete old proto files**: `extension.proto`, `plugin.proto`, `plugin_base.proto`
+> This is a **coordinated rewrite**. Steps 1-4 tear out the old architecture;
+> steps 5-13 build the new daemon & SDK; steps 14-15 build the new plugins.
+> Nothing is additive — every change is a replacement or deletion.
+
+0. **Scaffold new plugin directories**: Create `plugins/weather/proto/`, `plugins/resources/proto/`, `plugins/tmuxbar/` with fresh `go.mod` files
+1. **Delete ALL old plugin code**: `extension.proto`, `plugin.proto`, `plugin_base.proto`, old `plugins/weather/main.go` (Tool-based), old `plugins/resources/main.go` (Tool-based), old `plugin/serve.go` Tool stubs
 2. **Create `documentation.proto`** with DocumentationService
-3. **Keep `plugin_registry.proto`** (already exists)
+3. **Keep `plugin_registry.proto`** (already exists, no changes needed)
 4. **Run `make proto`** to regenerate
 5. **Rewrite `plugin/serve.go`**: Remove Tool/Tools, mount grpcreflect handlers + DocumentationService
 6. **Rewrite `plugin/context.go`**: Remove streamingContext, pluginClient, CallPlugin
@@ -1244,7 +1276,253 @@ No `streamingContext` — no ExtensionService to support.
 11. **Rewrite `internal/pkg/daemon/registry_svc.go`**
 12. **Update `internal/pkg/cli/`**: Registry instead of PluginService
 13. **Build daemon**: `go build ./...`
-14. **Rewrite plugins**: weather → proto + code, resources → proto + code
+14. **Rewrite plugins from scratch**: weather → proto + code, resources → proto + code
 15. **Update `Makefile`**: proto targets, plugin-build-all with deps
 16. **Build all**: `make build && make plugin-build-all`
 17. **Install, test, commit**
+
+---
+
+## 17. Current Plugins: Feature Inventory & Rewrite Plan
+
+> **⚠️ This is NOT a migration.** Every plugin listed here is deleted and
+> **rewritten from scratch** as a Connect RPC service. The old Tool-based
+> implementation is discarded entirely — we keep only the *concept* of what
+> the plugin does. The new plugin shares the same purpose but has zero code
+> in common with the old version.
+
+This section inventories ALL current plugin features and defines the rewrite
+plan for the new RPC-based architecture. Each plugin is built anew to expose
+its own Connect RPC services with type-safe generated clients.
+
+### 17.1 Weather Plugin (Forecast)
+
+**Current state (DELETED):** Tool-based plugin using `plugin.NewTool()`.
+
+**Rewrite:**
+
+**RPC Service (new architecture):**
+```protobuf
+service WeatherService {
+  rpc Forecast(ForecastRequest) returns (ForecastResponse);
+}
+
+message ForecastRequest {
+  string location = 1;
+  string format = 2;  // "brief", "full", "json"
+}
+
+message ForecastResponse {
+  string report = 1;
+  int32 exit_code = 2;
+  string error_message = 3;
+}
+```
+
+**Behavior:**
+- Fetches weather from wttr.in via `ctx.Exec("curl ...")`
+- When `RenderOutput=true` (CLI): prints formatted weather report to `Stdout()`
+- When `RenderOutput=false` (plugin-to-plugin): returns raw report string
+
+### 17.2 Resources Plugin (System Monitoring)
+
+**Current state (DELETED):** Tool-based plugin with background collector goroutine and 4 tools (current, top, ps, history).
+
+**Rewrite:**
+```protobuf
+service ResourcesService {
+  rpc Current(CurrentRequest) returns (CurrentResponse);
+  rpc Top(TopRequest) returns (TopResponse);
+  rpc PS(PSRequest) returns (PSResponse);
+  rpc History(HistoryRequest) returns (HistoryResponse);
+}
+```
+
+**Data model** (shared types used by all RPCs):
+```protobuf
+message RAMSnapshot {
+  double total_mb = 1;
+  double used_mb = 2;
+  double available_mb = 3;
+  double percent = 4;
+}
+
+message CPUSnapshot {
+  double total_percent = 1;
+  double user_percent = 2;
+  double system_percent = 3;
+  double iowait_percent = 4;
+  int32 num_cores = 5;
+}
+
+message DiskSnapshot {
+  string mount_point = 1;
+  double total_gb = 2;
+  double used_gb = 3;
+  double avail_gb = 4;
+  double percent = 5;
+}
+
+message DiskIOSnapshot {
+  string device = 1;
+  double reads_per_sec = 2;
+  double writes_per_sec = 3;
+  double read_bytes_per_sec = 4;
+  double write_bytes_per_sec = 5;
+}
+```
+
+**Background collector** remains via `Config.Background`:
+- Collects RAM, CPU, disk, disk I/O every 3 seconds
+- Stores snapshots in a ring buffer (100 entries)
+- All RPCs read from the shared state (instant responses)
+
+### 17.3 TmuxBar Plugin (NEW — Proof of Concept)
+
+A new plugin (no old version to delete) that implements tmux status bar widgets
+using the `resources` plugin for data. This demonstrates **plugin-to-plugin
+dependency**: `tmuxbar` imports `resources`'s generated client and calls its
+RPCs for data, handling only presentation/formatting.
+
+**Dependency setup:**
+```go
+// plugins/tmuxbar/go.mod
+module plugins/tmuxbar
+go 1.26.3
+replace (
+    dotfilesd => /home/manu343726/dotfilesd
+    plugins/resources => ../resources
+)
+require (
+    dotfilesd v0.0.0
+    plugins/resources v0.0.0
+)
+```
+
+**RPC Service:**
+```protobuf
+service TmuxBarService {
+  // RAM usage widget: "RAM 6.2/15.9 GB 39%"
+  rpc RAMWidget(RAMWidgetRequest) returns (RAMWidgetResponse);
+
+  // CPU usage widget: "CPU 24% ▁▃▅▇▆▄▃"
+  rpc CPUWidget(CPUWidgetRequest) returns (CPUWidgetResponse);
+
+  // CPU temperature widget: "🌡 65°C"
+  rpc CPUTempWidget(CPUTempWidgetRequest) returns (CPUTempWidgetResponse);
+
+  // Battery widget: "🔋 85%" or "⚡charging"
+  rpc BatteryWidget(BatteryWidgetRequest) returns (BatteryWidgetResponse);
+
+  // Combined compact status: "CPU 24% | RAM 39% | 65°C"
+  rpc StatusBar(StatusBarRequest) returns (StatusBarResponse);
+}
+
+message RAMWidgetRequest {
+  // Optional: override default format string
+  string format = 1;
+}
+message RAMWidgetResponse {
+  string text = 1;        // e.g. "RAM 6.2/15.9 GB 39%"
+  double percent = 2;     // raw percentage for bar rendering
+}
+
+message CPUWidgetRequest {}
+message CPUWidgetResponse {
+  string text = 1;        // e.g. "CPU 24%"
+  double percent = 2;     // raw percentage
+}
+
+message CPUTempWidgetRequest {
+  string unit = 1;        // "celsius" or "fahrenheit"
+}
+message CPUTempWidgetResponse {
+  string text = 1;        // e.g. "🌡 65°C"
+  double temperature = 2; // raw value
+}
+
+message BatteryWidgetRequest {}
+message BatteryWidgetResponse {
+  string text = 1;        // e.g. "🔋 85%" or "⚡charging"
+  double percent = 2;
+  bool charging = 3;
+}
+
+message StatusBarRequest {}
+message StatusBarResponse {
+  string text = 1;        // e.g. "CPU 24% | RAM 39% | 65°C"
+}
+```
+
+**Implementation pattern — each widget calls `resources` plugin:**
+
+```go
+type tmuxBarServer struct {
+    resourcesClient resourcesconnect.ResourcesServiceClient
+}
+
+func (s *tmuxBarServer) RAMWidget(ctx context.Context, req *connect.Request[pb.RAMWidgetRequest]) (*connect.Response[pb.RAMWidgetResponse], error) {
+    // Get data from resources plugin via type-safe RPC.
+    r, _ := s.resourcesClient.Current(ctx, &connect.Request{
+        Msg: &resourcespb.CurrentRequest{},
+    })
+    ram := r.Msg.Ram
+    text := fmt.Sprintf("RAM %.1f/%.1f GB %.0f%%", ram.UsedMb/1024, ram.TotalMb/1024, ram.Percent)
+    return connect.NewResponse(&pb.RAMWidgetResponse{Text: text, Percent: ram.Percent}), nil
+}
+
+func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.CPUWidgetRequest]) (*connect.Response[pb.CPUWidgetResponse], error) {
+    r, _ := s.resourcesClient.Current(ctx, &connect.Request{
+        Msg: &resourcespb.CurrentRequest{},
+    })
+    cpu := r.Msg.Cpu
+    bar := renderSparkline(cpu.TotalPercent)
+    text := fmt.Sprintf("CPU %.0f%% %s", cpu.TotalPercent, bar)
+    return connect.NewResponse(&pb.CPUWidgetResponse{Text: text, Percent: cpu.TotalPercent}), nil
+}
+```
+
+**How discovery works at runtime:**
+
+```go
+func initResourcesClient(daemonURL string) resourcesconnect.ResourcesServiceClient {
+    // 1. Discover resources plugin via daemon's registry.
+    reg := dotfilesdv1connect.NewPluginRegistryServiceClient(&http.Client{}, daemonURL)
+    info, _ := reg.GetPlugin(context.Background(), &connect.Request{
+        Msg: &dotfilesdv1.RegistryGetPluginRequest{PluginName: "resources"},
+    })
+
+    // 2. Build type-safe client to resources plugin.
+    return resourcesconnect.NewResourcesServiceClient(&http.Client{}, info.Msg.Url)
+}
+```
+
+**Tmux integration:**
+
+The tmux config uses `run-shell` to call the plugin:
+```sh
+# In ~/.tmux.conf.local:
+set -g status-right "... #(dotfilesctl tmuxbar cpu-widget) #(dotfilesctl tmuxbar ram-widget) ..."
+```
+
+Or better, via the CLI's `--format=json` for structured output that a tmux script
+can parse and format with oh-my-tmux compatible symbols.
+
+### 17.4 Plugin Dependency Graph (Build Order)
+
+```
+plugins/weather/          (no deps)
+plugins/resources/        (no deps)
+plugins/tmuxbar/          (depends on resources -> resources built first)
+plugins/dashboard/        (depends on resources + weather -> both built first)
+```
+
+The daemon's `LoadPlugins()` function resolves this automatically from `go.mod`.
+
+### 17.5 Summary of Plugin RPC Services
+
+| Plugin | Service Name | RPCs | Depends On |
+|--------|-------------|------|------------|
+| weather | `weather.WeatherService` | Forecast | — |
+| resources | `resources.ResourcesService` | Current, Top, PS, History | — |
+| tmuxbar | `tmuxbar.TmuxBarService` | RAMWidget, CPUWidget, CPUTempWidget, BatteryWidget, StatusBar | resources |

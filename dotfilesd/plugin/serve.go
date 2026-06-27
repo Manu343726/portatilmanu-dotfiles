@@ -68,6 +68,10 @@ func Serve(cfg Config) {
 	ctxClient := newContextClient(ctxURL, ctxToken, sessionID, cfg.Name)
 
 	mux := http.NewServeMux()
+	ctxWrappedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(WithContext(r.Context(), ctxClient))
+		mux.ServeHTTP(w, r)
+	})
 
 	// 1. PluginBaseService — standard protocol, always served.
 	baseSvc := &pluginBaseServiceServer{
@@ -124,7 +128,7 @@ func Serve(cfg Config) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: ctxWrappedMux}
 	go func() {
 		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "plugin: serve error: %v\n", err)
