@@ -39,7 +39,9 @@ type PluginTreeEntry struct {
 	// Child entries (only for directories).
 	Children []*PluginTreeEntry `protobuf:"bytes,6,rep,name=children,proto3" json:"children,omitempty"`
 	// The plugin descriptor, set only for leaf (loaded) entries.
-	Plugin        *ExtensionDescriptor `protobuf:"bytes,7,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	Plugin *ExtensionDescriptor `protobuf:"bytes,7,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	// Plugin type: "server" (supervised) or "command" (ephemeral).
+	Type          string `protobuf:"bytes,8,opt,name=type,proto3" json:"type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,6 +123,13 @@ func (x *PluginTreeEntry) GetPlugin() *ExtensionDescriptor {
 		return x.Plugin
 	}
 	return nil
+}
+
+func (x *PluginTreeEntry) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
 }
 
 type ListPluginTreeRequest struct {
@@ -215,7 +224,7 @@ var File_proto_dotfilesd_v1_dotfilesdv1_plugin_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/plugin.proto\x12\fdotfilesd.v1\x1a.proto/dotfilesd/v1/dotfilesdv1/extension.proto\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"\x8e\x02\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/plugin.proto\x12\fdotfilesd.v1\x1a.proto/dotfilesd/v1/dotfilesdv1/extension.proto\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"\xa2\x02\n" +
 	"\x0fPluginTreeEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
@@ -223,7 +232,8 @@ const file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDesc = "" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x129\n" +
 	"\bchildren\x18\x06 \x03(\v2\x1d.dotfilesd.v1.PluginTreeEntryR\bchildren\x129\n" +
-	"\x06plugin\x18\a \x01(\v2!.dotfilesd.v1.ExtensionDescriptorR\x06plugin\"H\n" +
+	"\x06plugin\x18\a \x01(\v2!.dotfilesd.v1.ExtensionDescriptorR\x06plugin\x12\x12\n" +
+	"\x04type\x18\b \x01(\tR\x04type\"H\n" +
 	"\x15ListPluginTreeRequest\x12/\n" +
 	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"Q\n" +
 	"\x16ListPluginTreeResponse\x127\n" +

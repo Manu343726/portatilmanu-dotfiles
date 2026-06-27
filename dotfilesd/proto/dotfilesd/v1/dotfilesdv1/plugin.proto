@@ -25,6 +25,8 @@ message PluginTreeEntry {
   repeated PluginTreeEntry children = 6;
   // The plugin descriptor, set only for leaf (loaded) entries.
   ExtensionDescriptor plugin = 7;
+  // Plugin type: "server" (supervised) or "command" (ephemeral).
+  string type = 8;
 }
 
 message ListPluginTreeRequest {

@@ -34,7 +34,14 @@ type DirFrontMatter struct {
 	Description string   `yaml:"description"`
 	Enabled     bool     `yaml:"enabled"`
 	Exclude     []string `yaml:"exclude"`
+	Type        string   `yaml:"type"` // "server" (supervised, default) or "command" (ephemeral)
 }
+
+// PluginType constants.
+const (
+	PluginTypeServer  = "server"  // Persistent server with crash supervision (default)
+	PluginTypeCommand = "command" // Ephemeral, launched per invocation
+)
 
 // PluginTreeEntry represents a node in the plugin directory hierarchy.
 // Directories are category groups; leaf entries are loaded Go plugins.
@@ -44,6 +51,7 @@ type PluginTreeEntry struct {
 	IsDirectory bool
 	Description string
 	Enabled     bool
+	Type        string // plugin type: "server" or "command"
 	Children    []PluginTreeEntry
 	Plugin      *dotfilesdv1.ExtensionDescriptor // set only for loaded leaf plugins
 }
@@ -52,30 +60,38 @@ type PluginTreeEntry struct {
 // Manager
 // ---------------------------------------------------------------------------
 
-// Manager orchestrates plugin lifecycle: discovery, build, launch, and
-// communication. One Manager per daemon instance.
+// Manager orchestrates plugin lifecycle: discovery, build, launch,
+// supervision (auto-restart on crash), and communication.
+// One Manager per daemon instance.
 type Manager struct {
 	PluginsDir string
 	CacheDir   string
 	CtxURL     string // Execution Context URL the daemon exposes
 	CtxToken   string // shared secret for Execution Context auth
 
-	registry *Registry
-	builder  *Builder
-	mu       sync.Mutex
-	loaded   bool
-	tree     []PluginTreeEntry // cached tree from last LoadPlugins
+	registry        *Registry
+	builder         *Builder
+	mu              sync.Mutex
+	loaded          bool
+	tree            []PluginTreeEntry // cached tree from last LoadPlugins
+	supervisorCtx   context.Context
+	supervisorCancel context.CancelFunc
+	// wg tracks all supervisor goroutines; Wait() blocks until they finish.
+	supervisorWg sync.WaitGroup
 }
 
 // NewManager creates a new plugin manager.
 func NewManager(pluginsDir, cacheDir, ctxURL, ctxToken string) *Manager {
+	superCtx, superCancel := context.WithCancel(context.Background())
 	return &Manager{
-		PluginsDir: pluginsDir,
-		CacheDir:   cacheDir,
-		CtxURL:     ctxURL,
-		CtxToken:   ctxToken,
-		registry:   NewRegistry(),
-		builder:    &Builder{CacheDir: cacheDir},
+		PluginsDir:       pluginsDir,
+		CacheDir:         cacheDir,
+		CtxURL:           ctxURL,
+		CtxToken:         ctxToken,
+		registry:         NewRegistry(),
+		builder:          &Builder{CacheDir: cacheDir},
+		supervisorCtx:    superCtx,
+		supervisorCancel: superCancel,
 	}
 }
 
@@ -195,13 +211,17 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 		if isGoPlugin(fullDir) {
 			// Leaf Go plugin directory.
 			desc := ""
+			pluginType := PluginTypeServer
 			if dirFM != nil {
 				desc = dirFM.Description
+				if dirFM.Type != "" {
+					pluginType = dirFM.Type
+				}
 			}
 
 			if enabled {
-				slog.Debug("loading plugin", "name", d, "source_dir", fullDir, "path", childPath)
-				if err := m.loadPlugin(ctx, d, fullDir, cacheDir); err != nil {
+				slog.Debug("loading plugin", "name", d, "source_dir", fullDir, "path", childPath, "type", pluginType)
+				if err := m.loadPlugin(ctx, d, fullDir, cacheDir, pluginType); err != nil {
 					slog.Error("plugin load failed", "name", d, "path", childPath, "error", err)
 					// Still include a disabled entry in the tree for visibility.
 					result = append(result, PluginTreeEntry{
@@ -210,6 +230,7 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 						IsDirectory: false,
 						Description: fmt.Sprintf("%s (load failed: %v)", d, err),
 						Enabled:     false,
+						Type:        pluginType,
 					})
 					continue
 				}
@@ -227,6 +248,7 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 						IsDirectory: false,
 						Description: desc,
 						Enabled:     true,
+						Type:        pluginType,
 						Plugin:      info.Descriptor,
 					})
 				} else {
@@ -236,6 +258,7 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 						IsDirectory: false,
 						Description: d,
 						Enabled:     true,
+						Type:        pluginType,
 					})
 				}
 			} else {
@@ -246,6 +269,7 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 					IsDirectory: false,
 					Description: desc,
 					Enabled:     false,
+					Type:        pluginType,
 				})
 			}
 		} else {
@@ -260,8 +284,12 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 			}
 
 			desc := ""
+			pluginType := PluginTypeServer
 			if dirFM != nil {
 				desc = dirFM.Description
+				if dirFM.Type != "" {
+					pluginType = dirFM.Type
+				}
 			}
 
 			result = append(result, PluginTreeEntry{
@@ -270,6 +298,7 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 				IsDirectory: true,
 				Description: desc,
 				Enabled:     enabled,
+				Type:        pluginType,
 				Children:    children,
 			})
 		}
@@ -279,7 +308,7 @@ func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeC
 }
 
 // loadPlugin builds, launches, and registers a single plugin.
-func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir string) error {
+func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir, pluginType string) error {
 	slog.Debug("loading plugin step: build", "name", name)
 	result, err := m.builder.Build(name, sourceDir)
 	if err != nil {
@@ -311,14 +340,30 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 	}
 
 	slog.Debug("registering plugin", "name", name)
-	if err := m.registry.Register(name, &PluginInfo{
+	info := &PluginInfo{
 		Descriptor: desc,
 		Client:     client,
 		Process:    proc,
-	}); err != nil {
+		SourceDir:  sourceDir,
+		CacheDir:   cacheDir,
+	}
+	if err := m.registry.Register(name, info); err != nil {
 		proc.Kill()
 		return fmt.Errorf("register: %w", err)
 	}
+
+	// Start process supervision (auto-restart on crash) for server-type plugins.
+	if pluginType == PluginTypeServer {
+		m.supervisorWg.Add(1)
+		go func() {
+			defer m.supervisorWg.Done()
+			supervisePlugin(m.supervisorCtx, name, proc, sourceDir, cacheDir,
+				m.CtxURL, m.CtxToken, m.reRegister)
+		}()
+	} else {
+		slog.Debug("plugin type is command, skipping crash supervision", "name", name)
+	}
+
 	slog.Debug("plugin registered successfully", "name", name)
 	return nil
 }
@@ -376,6 +421,7 @@ func ToProtoPluginTree(entry *PluginTreeEntry) *dotfilesdv1.PluginTreeEntry {
 		IsDirectory: entry.IsDirectory,
 		Description: entry.Description,
 		Enabled:     entry.Enabled,
+		Type:        entry.Type,
 	}
 	if entry.Plugin != nil {
 		pe.Plugin = entry.Plugin
@@ -386,9 +432,23 @@ func ToProtoPluginTree(entry *PluginTreeEntry) *dotfilesdv1.PluginTreeEntry {
 	return pe
 }
 
-// Shutdown kills all running plugins and clears the registry.
+// reRegister is the callback passed to supervisePlugin for atomic registry
+// replacement after a restart. It satisfies the reRegister type alias.
+func (m *Manager) reRegister(name string, info *PluginInfo) *PluginInfo {
+	return m.registry.Replace(name, info)
+}
+
+// Shutdown cancels all supervisors, kills all running plugins, and clears
+// the registry. It blocks until all supervisor goroutines have exited.
 func (m *Manager) Shutdown() {
-	slog.Debug("manager Shutdown: killing all plugins and clearing registry")
+	slog.Debug("manager Shutdown: stopping supervisors and killing plugins")
+
+	// Signal all supervisors to stop.
+	m.supervisorCancel()
+
+	// Wait for supervisors to exit.
+	m.supervisorWg.Wait()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.registry.Clear()

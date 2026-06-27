@@ -13,6 +13,8 @@ type PluginInfo struct {
 	Descriptor *dotfilesdv1.ExtensionDescriptor // plugin capabilities
 	Client     *Client                         // RPC client for calling the plugin
 	Process    *Process                        // running plugin subprocess
+	SourceDir  string                          // source directory for rebuild on restart
+	CacheDir   string                          // cache directory for build artifacts
 }
 
 // Registry maintains a thread-safe map of loaded plugins.
@@ -72,7 +74,23 @@ func (r *Registry) List() []PluginInfo {
 	return result
 }
 
-// Len returns the number of registered plugins.
+// Replace atomically replaces an existing plugin entry (or inserts if not
+// found). This is used by the supervisor to update PluginInfo after a
+// restart without dropping concurrent tool calls. Returns the old info
+// (or nil if no previous entry existed).
+func (r *Registry) Replace(name string, info *PluginInfo) *PluginInfo {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	old := r.plugins[name]
+	r.plugins[name] = info
+	if old == nil {
+		slog.Debug("registry: inserted plugin", "name", name, "tools", len(info.Descriptor.Tools))
+	} else {
+		slog.Debug("registry: replaced plugin", "name", name, "tools", len(info.Descriptor.Tools))
+	}
+	return old
+}
 func (r *Registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -133,3 +133,10 @@ func (p *Process) Alive() bool {
 		return true
 	}
 }
+
+// Done returns a channel that is closed when the plugin process exits.
+// This allows the daemon to wait for or detect process termination
+// without polling.
+func (p *Process) Done() <-chan struct{} {
+	return p.done
+}
