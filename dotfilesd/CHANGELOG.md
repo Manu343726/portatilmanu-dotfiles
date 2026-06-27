@@ -44,3 +44,63 @@ foundation but are not tracked here since the changelog didn't exist yet.
 Weather plugin directory was already scaffolded (proto/ and go.mod existed from
 earlier work). Resources plugin had go.mod but no proto/ — created it. Tmuxbar
 is entirely new. Empty proto dirs use `.gitkeep` so git tracks the structure.
+
+---
+
+## [Step 1] — Delete ALL Old Plugin Code
+
+**Commit:** `pending`
+**Date:** 2026-06-27
+
+### Changes
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/plugin_base.proto`: Deleted (old
+  PluginBaseService proto).
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/plugin_base.pb.go`: Deleted (generated).
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/plugin_base.connect.go`: Deleted (generated).
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/extension.pb.go`: Deleted (generated
+  from extension.proto, which was already deleted).
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/extension.connect.go`: Deleted (generated).
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/plugin.pb.go`: Deleted (generated
+  from plugin.proto, which was already deleted).
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/plugin.connect.go`: Deleted (generated).
+- `.config/dotfilesd/plugins/resources/main.go`: Deleted (old Tool-based plugin).
+- `dotfilesd/plugin/serve.go`: Removed Tool interface, NewTool, simpleTool,
+  extensionServiceServer, pluginBaseServiceServer, streamWriter, Config.Tools
+  field, and all PluginBaseService/ExtensionService mounting code.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/plugin_registry.proto`: Updated —
+  removed import of plugin_base.proto, flattened GetInfoResponse fields into
+  RegistryGetPluginResponse, changed `repeated ServiceDescriptor services` to
+  `repeated string services`.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/plugin_registry.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/plugin_registry.connect.go`: Regenerated.
+
+### State
+- [x] Plugin SDK (`plugin/...`) builds
+- [x] Proto package (`proto/...`) builds
+- [ ] Full daemon (`./...`) builds — expected to fail, manager.go and CLI files
+      reference deleted types and are scheduled for rewrite in steps 9-13.
+
+### Notes
+The daemon's `internal/pkg/plugin/manager.go` and `internal/pkg/cli/` packages
+still compile against deleted types. They will be fully rewritten in steps 9-13.
+The weather plugin main.go was NOT deleted — it already uses the new RPC
+architecture with `plugin.Serve()` and Connect handlers, not the old Tool API.
+**Date:** 2026-06-27
+
+### Changes
+- `.config/dotfilesd/plugins/resources/proto/resources/.gitkeep`: Created proto
+  directory for resources plugin.
+- `.config/dotfilesd/plugins/tmuxbar/`: Created new plugin directory.
+- `.config/dotfilesd/plugins/tmuxbar/go.mod`: Module `plugins/tmuxbar` with
+  replace directives for `dotfilesd` and `plugins/resources`.
+- `.config/dotfilesd/plugins/tmuxbar/proto/tmuxbar/.gitkeep`: Created proto
+  directory for tmuxbar plugin.
+
+### State
+- [ ] Build passes (N/A — no code yet, directories only)
+- [ ] Daemon starts (N/A)
+
+### Notes
+Weather plugin directory was already scaffolded (proto/ and go.mod existed from
+earlier work). Resources plugin had go.mod but no proto/ — created it. Tmuxbar
+is entirely new. Empty proto dirs use `.gitkeep` so git tracks the structure.

@@ -5,7 +5,6 @@ package dotfilesd.v1;
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
-import "proto/dotfilesd/v1/dotfilesdv1/plugin_base.proto";
 
 // PluginRegistryService is exposed by the daemon so plugins can discover
 // and connect to each other's custom RPC services.
@@ -31,12 +30,13 @@ message RegistryGetPluginRequest {
 
 message RegistryGetPluginResponse {
   string name = 1;
+  string display_name = 2;
+  string version = 3;
+  string description = 4;
   // Base URL of the plugin's RPC server (e.g. "http://127.0.0.1:12345").
-  string url = 2;
-  // Plugin metadata.
-  GetInfoResponse info = 3;
-  // Custom RPC services exposed by this plugin.
-  repeated ServiceDescriptor services = 4;
+  string url = 5;
+  // Names of custom RPC services exposed by this plugin.
+  repeated string services = 6;
 }
 
 message RegistryListPluginsRequest {
