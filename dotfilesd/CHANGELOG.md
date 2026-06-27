@@ -231,6 +231,49 @@ is NOT yet implemented — plugins are registered as simple info-only
 commands. The full proto-based flag generation will come in a later
 phase. The MCP tool dispatch for plugins now shows plugins as
 individual tools rather than exposing individual tool commands.
+
+---
+
+## [Steps 14-15] — Rewrite Plugins (resources + tmuxbar)
+
+**Commit:** `pending`
+**Date:** 2026-06-28
+
+### Changes
+- `.config/dotfilesd/plugins/resources/proto/resources/resources.proto`: Created
+  with ResourcesService (Current, Top, PS, History) and shared data types
+  (RAMSapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, ProcessInfo).
+- `.config/dotfilesd/plugins/resources/proto/resources/resources.pb.go`: Generated.
+- `.config/dotfilesd/plugins/resources/proto/resources/resourcesconnect/resources.connect.go`: Generated.
+- `.config/dotfilesd/plugins/resources/main.go`: Created from scratch with
+  background collector (RAM, CPU, disk, disk I/O every 3s), ring buffer
+  history, and RPC handlers reading from shared state.
+- `.config/dotfilesd/plugins/resources/go.mod` / `go.sum`: Updated.
+- `.config/dotfilesd/plugins/tmuxbar/proto/tmuxbar/tmuxbar.proto`: Created
+  with TmuxBarService (RAMWidget, CPUWidget, CPUTempWidget, BatteryWidget,
+  StatusBar).
+- `.config/dotfilesd/plugins/tmuxbar/proto/tmuxbar/tmuxbar.pb.go`: Generated.
+- `.config/dotfilesd/plugins/tmuxbar/proto/tmuxbar/tmuxbarconnect/tmuxbar.connect.go`: Generated.
+- `.config/dotfilesd/plugins/tmuxbar/main.go`: Created with widget RPCs
+  that call resources plugin's ResourcesService.Current for data.
+- `.config/dotfilesd/plugins/tmuxbar/go.mod` / `go.sum`: Updated.
+
+### State
+- [x] Daemon builds
+- [x] CLI builds
+- [x] Weather plugin builds
+- [x] Resources plugin builds
+- [x] Tmuxbar plugin builds
+- [ ] Daemon starts and loads plugins (not yet tested)
+- [ ] Plugin RPCs work (not yet tested)
+
+### Notes
+The weather plugin proto and main.go already existed from earlier work
+and was not modified in this step. The tmuxbar plugin depends on the
+resources plugin at runtime (discovers it via registry). The resources
+plugin background collector requires daemon context (ctx.Exec) to work
+— it will only start collecting after the plugin server starts and the
+background goroutine is launched by plugin.Serve().
 **Date:** 2026-06-27
 
 ### Changes

@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package resources;
+
+option go_package = "plugins/resources/proto/resources";
+
+// ResourcesService provides system resource monitoring data.
+// The plugin runs a background collector that samples RAM, CPU, disk,
+// and disk I/O every 3 seconds, storing snapshots in a ring buffer.
+// All RPCs read from this shared state for instant responses.
+service ResourcesService {
+  // Current returns the latest snapshot of all resources.
+  rpc Current(CurrentRequest) returns (CurrentResponse);
+  // Top returns the top N processes by CPU or memory usage.
+  rpc Top(TopRequest) returns (TopResponse);
+  // PS returns detailed per-process metrics.
+  rpc PS(PSRequest) returns (PSResponse);
+  // History returns historical resource usage data points.
+  rpc History(HistoryRequest) returns (HistoryResponse);
+}
+
+message CurrentRequest {}
+message CurrentResponse {
+  RAMSnapshot ram = 1;
+  CPUSnapshot cpu = 2;
+  DiskSnapshot disk = 3;
+  DiskIOSnapshot disk_io = 4;
+}
+
+message TopRequest {
+  int32 count = 1;   // Number of processes (default: 10)
+  string sort = 2;   // "cpu" or "mem" (default: cpu)
+}
+message TopResponse {
+  repeated ProcessInfo processes = 1;
+}
+
+message PSRequest {
+  int32 pid = 1;       // Filter to a specific PID (optional)
+  int32 count = 2;     // Number of processes (default: 20)
+  string sort = 3;     // "cpu" or "mem" (default: cpu)
+}
+message PSResponse {
+  repeated ProcessInfo processes = 1;
+}
+
+message HistoryRequest {
+  string resource = 1; // "ram", "cpu", or "disk" (default: ram)
+  int32 count = 2;     // Number of data points (default: 20)
+}
+message HistoryResponse {
+  repeated double values = 1;
+  string resource = 2;
+  string unit = 3;
+}
+
+// Shared data types
+
+message RAMSnapshot {
+  double total_mb = 1;
+  double used_mb = 2;
+  double available_mb = 3;
+  double percent = 4;
+}
+
+message CPUSnapshot {
+  double total_percent = 1;
+  double user_percent = 2;
+  double system_percent = 3;
+  double iowait_percent = 4;
+  int32 num_cores = 5;
+}
+
+message DiskSnapshot {
+  string mount_point = 1;
+  double total_gb = 2;
+  double used_gb = 3;
+  double avail_gb = 4;
+  double percent = 5;
+}
+
+message DiskIOSnapshot {
+  string device = 1;
+  double reads_per_sec = 2;
+  double writes_per_sec = 3;
+  double read_bytes_per_sec = 4;
+  double write_bytes_per_sec = 5;
+}
+
+message ProcessInfo {
+  int32 pid = 1;
+  string name = 2;
+  double cpu_percent = 3;
+  double mem_percent = 4;
+  double mem_mb = 5;
+  string state = 6;
+}

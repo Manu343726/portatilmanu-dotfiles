@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package tmuxbar;
+
+option go_package = "plugins/tmuxbar/proto/tmuxbar";
+
+// TmuxBarService provides formatted tmux status bar widgets.
+// It depends on the resources plugin for system data.
+service TmuxBarService {
+  // RAM usage widget: "RAM 6.2/15.9 GB 39%"
+  rpc RAMWidget(RAMWidgetRequest) returns (RAMWidgetResponse);
+  // CPU usage widget: "CPU 24% ▁▃▅▇▆▄▃"
+  rpc CPUWidget(CPUWidgetRequest) returns (CPUWidgetResponse);
+  // CPU temperature widget: "🌡 65°C"
+  rpc CPUTempWidget(CPUTempWidgetRequest) returns (CPUTempWidgetResponse);
+  // Battery widget: "🔋 85%" or "⚡charging"
+  rpc BatteryWidget(BatteryWidgetRequest) returns (BatteryWidgetResponse);
+  // Combined compact status: "CPU 24% | RAM 39% | 65°C"
+  rpc StatusBar(StatusBarRequest) returns (StatusBarResponse);
+}
+
+message RAMWidgetRequest {
+  string format = 1; // Optional format override
+}
+message RAMWidgetResponse {
+  string text = 1;   // e.g. "RAM 6.2/15.9 GB 39%"
+  double percent = 2;
+}
+
+message CPUWidgetRequest {}
+message CPUWidgetResponse {
+  string text = 1;   // e.g. "CPU 24%"
+  double percent = 2;
+}
+
+message CPUTempWidgetRequest {
+  string unit = 1;   // "celsius" or "fahrenheit"
+}
+message CPUTempWidgetResponse {
+  string text = 1;        // e.g. "🌡 65°C"
+  double temperature = 2;
+}
+
+message BatteryWidgetRequest {}
+message BatteryWidgetResponse {
+  string text = 1;   // e.g. "🔋 85%" or "⚡charging"
+  double percent = 2;
+  bool charging = 3;
+}
+
+message StatusBarRequest {}
+message StatusBarResponse {
+  string text = 1;   // e.g. "CPU 24% | RAM 39% | 65°C"
+}
