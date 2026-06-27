@@ -33,6 +33,8 @@ type Service struct {
 
 // Config configures a plugin.
 type Config struct {
+	// Legacy tools (deprecated).
+	Tools []Tool
 	// Plugin metadata.
 	Name, DisplayName, Version, Description, Author string
 	// Plugin type: "server" (long-lived) or "command" (ephemeral).
@@ -79,6 +81,17 @@ func Serve(cfg Config) {
 	}
 	bPath, bHandler := dotfilesdv1connect.NewPluginBaseServiceHandler(baseSvc)
 	mux.Handle(bPath, bHandler)
+
+	// 2. ExtensionService for legacy tools (if any).
+	if len(cfg.Tools) > 0 {
+		extSvc := &extensionServiceServer{
+			name:      cfg.Name,
+			tools:     cfg.Tools,
+			ctxClient: ctxClient,
+		}
+		ePath, eHandler := dotfilesdv1connect.NewExtensionServiceHandler(extSvc)
+		mux.Handle(ePath, eHandler)
+	}
 
 	// 2. Custom services (type-safe plugin-to-plugin RPC).
 	for _, svc := range cfg.Services {
@@ -173,4 +186,106 @@ func (s *pluginBaseServiceServer) GetDocumentation(
 ) (*connect.Response[dotfilesdv1.GetDocumentationResponse], error) {
 	// Default: return not implemented. Plugins can override this.
 	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("documentation not implemented"))
+}
+
+// Tool is a legacy generic tool wrapper for backward compatibility.
+// New plugins should define their own protobuf services instead.
+type Tool interface {
+	Name() string
+	Description() string
+	Input() interface{}
+	CLI() interface{}
+	Run(ctx Context, args map[string]string) error
+}
+
+// simpleTool wraps a function as a Tool.
+type simpleTool struct {
+	name, description string
+	input, cli        interface{}
+	fn                func(Context, map[string]string) error
+}
+
+func (t *simpleTool) Name() string        { return t.name }
+func (t *simpleTool) Description() string { return t.description }
+func (t *simpleTool) Input() interface{}  { return t.input }
+func (t *simpleTool) CLI() interface{}    { return t.cli }
+func (t *simpleTool) Run(ctx Context, args map[string]string) error {
+	return t.fn(ctx, args)
+}
+
+// NewTool creates a legacy Tool wrapper.
+// Deprecated: Define your own protobuf services instead.
+func NewTool(name, description string, input, cli interface{}, fn func(Context, map[string]string) error) Tool {
+	return &simpleTool{name, description, input, cli, fn}
+}
+
+// extensionServiceServer implements the legacy ExtensionService for backward compat.
+type extensionServiceServer struct {
+	name      string
+	tools     []Tool
+	ctxClient *contextClient
+}
+
+func (s *extensionServiceServer) GetDescriptor(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.GetDescriptorRequest],
+) (*connect.Response[dotfilesdv1.GetDescriptorResponse], error) {
+	toolsPB := make([]*dotfilesdv1.ToolDescriptor, len(s.tools))
+	for i, t := range s.tools {
+		toolsPB[i] = &dotfilesdv1.ToolDescriptor{
+			Name:        t.Name(),
+			Description: t.Description(),
+		}
+	}
+	return connect.NewResponse(&dotfilesdv1.GetDescriptorResponse{
+		Descriptor_: &dotfilesdv1.ExtensionDescriptor{
+			Name:  s.name,
+			Tools: toolsPB,
+		},
+	}), nil
+}
+
+func (s *extensionServiceServer) CallTool(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.CallToolRequest],
+	stream *connect.ServerStream[dotfilesdv1.CallToolResponse],
+) error {
+	for _, t := range s.tools {
+		if t.Name() == req.Msg.ToolName {
+			stdout := &streamWriter{stream: stream}
+			stderr := &streamWriter{stream: stream, isStderr: true}
+			toolCtx := &streamingContext{
+				Context: s.ctxClient,
+				client:  s.ctxClient,
+				stdout:  stdout,
+				stderr:  stderr,
+			}
+			err := t.Run(toolCtx, req.Msg.Arguments)
+			doneMsg := &dotfilesdv1.CallToolResponse{Done: true}
+			if err != nil {
+				doneMsg.ErrorMessage = err.Error()
+			}
+			return stream.Send(doneMsg)
+		}
+	}
+	return connect.NewError(connect.CodeNotFound, fmt.Errorf("tool %q not found", req.Msg.ToolName))
+}
+
+// streamWriter implements io.Writer by sending each Write as a chunk.
+type streamWriter struct {
+	stream   *connect.ServerStream[dotfilesdv1.CallToolResponse]
+	isStderr bool
+}
+
+func (w *streamWriter) Write(p []byte) (int, error) {
+	msg := &dotfilesdv1.CallToolResponse{}
+	if w.isStderr {
+		msg.StderrChunk = p
+	} else {
+		msg.StdoutChunk = p
+	}
+	if err := w.stream.Send(msg); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
