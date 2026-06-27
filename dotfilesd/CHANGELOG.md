@@ -90,7 +90,7 @@ architecture with `plugin.Serve()` and Connect handlers, not the old Tool API.
 
 ## [Steps 2-4] — Documentation Proto + Regenerate
 
-**Commit:** `293a910`
+**Commit:** `f8b57c2`
 **Date:** 2026-06-27
 
 ### Changes
