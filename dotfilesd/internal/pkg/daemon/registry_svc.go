@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -10,7 +9,7 @@ import (
 	"connectrpc.com/connect"
 )
 
-// registryServer implements PluginRegistryService for plugin-to-plugin discovery.
+// registryServer implements PluginRegistryService.
 type registryServer struct {
 	sessions *SessionStore
 	daemon   *Daemon
@@ -22,60 +21,53 @@ func newRegistryServer(sessions *SessionStore, daemon *Daemon) *registryServer {
 
 func (s *registryServer) GetPlugin(
 	ctx context.Context,
-	req *connect.Request[dotfilesdv1.GetPluginRequest],
-) (*connect.Response[dotfilesdv1.GetPluginResponse], error) {
+	req *connect.Request[dotfilesdv1.RegistryGetPluginRequest],
+) (*connect.Response[dotfilesdv1.RegistryGetPluginResponse], error) {
 	slog.Log(ctx, levelTrace, "Registry.GetPlugin", "plugin", req.Msg.PluginName)
 	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	if s.daemon.pluginMgr == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("plugin system not initialized"))
+		return nil, connect.NewError(connect.CodeUnavailable, nil)
 	}
 
-	name := req.Msg.PluginName
-	desc, ok := s.daemon.pluginMgr.GetDescriptor(name)
+	info, ok := s.daemon.pluginMgr.GetPlugin(req.Msg.PluginName)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plugin %q not found", name))
+		return nil, connect.NewError(connect.CodeNotFound, nil)
 	}
-	url, _ := s.daemon.pluginMgr.PluginURL(name)
-	services, _ := s.daemon.pluginMgr.PluginServices(name)
 
-	resp := connect.NewResponse(&dotfilesdv1.GetPluginResponse{
-		Name:       name,
-		Url:        url,
-		Descriptor_: desc,
-		Services:   services,
+	resp := connect.NewResponse(&dotfilesdv1.RegistryGetPluginResponse{
+		Name:     info.Name,
+		Url:      info.URL,
+		Info:     info.Info,
+		Services: info.Services,
 	})
-	slog.Log(ctx, levelTrace, "Registry.GetPlugin done", "plugin", name, "url", url, "services", len(services))
+	slog.Log(ctx, levelTrace, "Registry.GetPlugin done", "plugin", req.Msg.PluginName, "url", info.URL)
 	return resp, nil
 }
 
 func (s *registryServer) ListPlugins(
 	ctx context.Context,
-	req *connect.Request[dotfilesdv1.ListPluginsForRegistryRequest],
-) (*connect.Response[dotfilesdv1.ListPluginsForRegistryResponse], error) {
+	req *connect.Request[dotfilesdv1.RegistryListPluginsRequest],
+) (*connect.Response[dotfilesdv1.RegistryListPluginsResponse], error) {
 	slog.Log(ctx, levelTrace, "Registry.ListPlugins")
 	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	if s.daemon.pluginMgr == nil {
-		return connect.NewResponse(&dotfilesdv1.ListPluginsForRegistryResponse{}), nil
+		return connect.NewResponse(&dotfilesdv1.RegistryListPluginsResponse{}), nil
 	}
 
-	infos := s.daemon.pluginMgr.ListPluginInfos()
-	plugins := make([]*dotfilesdv1.GetPluginResponse, 0, len(infos))
+	infos := s.daemon.pluginMgr.ListPlugins()
+	plugins := make([]*dotfilesdv1.RegistryGetPluginResponse, 0, len(infos))
 	for _, info := range infos {
-		url := ""
-		if info.Process != nil {
-			url = info.Process.URL
-		}
-		plugins = append(plugins, &dotfilesdv1.GetPluginResponse{
-			Name:       info.Descriptor.Name,
-			Url:        url,
-			Descriptor_: info.Descriptor,
-			Services:   info.Services,
+		plugins = append(plugins, &dotfilesdv1.RegistryGetPluginResponse{
+			Name:     info.Name,
+			Url:      info.URL,
+			Info:     info.Info,
+			Services: info.Services,
 		})
 	}
 
-	resp := connect.NewResponse(&dotfilesdv1.ListPluginsForRegistryResponse{
+	resp := connect.NewResponse(&dotfilesdv1.RegistryListPluginsResponse{
 		Plugins: plugins,
 	})
 	slog.Log(ctx, levelTrace, "Registry.ListPlugins done", "count", len(plugins))

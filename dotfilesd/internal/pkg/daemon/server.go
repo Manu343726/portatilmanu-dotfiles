@@ -117,10 +117,6 @@ func (d *Daemon) Start() error {
 		mux.Handle(p, h)
 	}
 	{
-		p, h := dotfilesdv1connect.NewPluginServiceHandler(newPluginServiceServer(d.sessions, d))
-		mux.Handle(p, h)
-	}
-	{
 		p, h := dotfilesdv1connect.NewPluginRegistryServiceHandler(newRegistryServer(d.sessions, d))
 		mux.Handle(p, h)
 	}
@@ -146,7 +142,7 @@ func (d *Daemon) Start() error {
 	case <-sig:
 		slog.Info("shutting down")
 		if d.pluginMgr != nil {
-			d.pluginMgr.Shutdown()
+			d.ShutdownPlugins()
 		}
 		return d.server.Close()
 	case err := <-errCh:

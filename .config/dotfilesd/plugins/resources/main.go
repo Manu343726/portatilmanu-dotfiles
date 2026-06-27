@@ -993,85 +993,90 @@ func main() {
 		prevDiskIO: make(map[string]diskIORaw),
 	}
 
-	plugin.ServeWithBackground("resources", "System Resources", "1.0.0",
-		"Monitor system resources: RAM, CPU, disk usage, disk I/O, and processes",
-		m.collect,
-		plugin.NewTool("current", "Show current system resource usage snapshot",
-			&dotfilesdv1.ToolInputSchema{
-				Properties: map[string]*dotfilesdv1.PropertySchema{},
-			},
-			&dotfilesdv1.CLIHints{
-				CommandPath: "resources current",
-				Category:    "system",
-			},
-			m.currentTool,
-		),
-		plugin.NewTool("top", "Show top N processes by CPU or memory usage",
-			&dotfilesdv1.ToolInputSchema{
-				Properties: map[string]*dotfilesdv1.PropertySchema{
-					"count": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Number of processes to show (default: 10)",
-						Default:     "10",
-					},
-					"sort": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Sort by 'cpu' or 'mem' (default: cpu)",
-						Default:     "cpu",
+	plugin.Serve(plugin.Config{
+		Name:        "resources",
+		DisplayName: "System Resources",
+		Version:     "1.0.0",
+		Description: "Monitor system resources: RAM, CPU, disk usage, disk I/O, and processes",
+		Background:  m.collect,
+		Tools: []plugin.Tool{
+			plugin.NewTool("current", "Show current system resource usage snapshot",
+				&dotfilesdv1.ToolInputSchema{
+					Properties: map[string]*dotfilesdv1.PropertySchema{},
+				},
+				&dotfilesdv1.CLIHints{
+					CommandPath: "resources current",
+					Category:    "system",
+				},
+				m.currentTool,
+			),
+			plugin.NewTool("top", "Show top N processes by CPU or memory usage",
+				&dotfilesdv1.ToolInputSchema{
+					Properties: map[string]*dotfilesdv1.PropertySchema{
+						"count": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Number of processes to show (default: 10)",
+							Default:     "10",
+						},
+						"sort": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Sort by 'cpu' or 'mem' (default: cpu)",
+							Default:     "cpu",
+						},
 					},
 				},
-			},
-			&dotfilesdv1.CLIHints{
-				CommandPath: "resources top",
-				Category:    "system",
-			},
-			m.topTool,
-		),
-		plugin.NewTool("ps", "List processes with detailed per-process metrics and percent of total",
-			&dotfilesdv1.ToolInputSchema{
-				Properties: map[string]*dotfilesdv1.PropertySchema{
-					"pid": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Show details for a specific PID (optional)",
-					},
-					"count": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Number of processes to show (default: 20)",
-						Default:     "20",
-					},
-					"sort": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Sort by 'cpu' or 'mem' (default: cpu)",
-						Default:     "cpu",
+				&dotfilesdv1.CLIHints{
+					CommandPath: "resources top",
+					Category:    "system",
+				},
+				m.topTool,
+			),
+			plugin.NewTool("ps", "List processes with detailed per-process metrics and percent of total",
+				&dotfilesdv1.ToolInputSchema{
+					Properties: map[string]*dotfilesdv1.PropertySchema{
+						"pid": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Show details for a specific PID (optional)",
+						},
+						"count": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Number of processes to show (default: 20)",
+							Default:     "20",
+						},
+						"sort": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Sort by 'cpu' or 'mem' (default: cpu)",
+							Default:     "cpu",
+						},
 					},
 				},
-			},
-			&dotfilesdv1.CLIHints{
-				CommandPath: "resources ps",
-				Category:    "system",
-			},
-			m.psTool,
-		),
-		plugin.NewTool("history", "Show historical resource usage as sparkline graphs",
-			&dotfilesdv1.ToolInputSchema{
-				Properties: map[string]*dotfilesdv1.PropertySchema{
-					"resource": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Resource to graph: ram, cpu, or disk (default: ram)",
-						Default:     "ram",
-					},
-					"count": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Number of data points to show (default: 20)",
-						Default:     "20",
+				&dotfilesdv1.CLIHints{
+					CommandPath: "resources ps",
+					Category:    "system",
+				},
+				m.psTool,
+			),
+			plugin.NewTool("history", "Show historical resource usage as sparkline graphs",
+				&dotfilesdv1.ToolInputSchema{
+					Properties: map[string]*dotfilesdv1.PropertySchema{
+						"resource": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Resource to graph: ram, cpu, or disk (default: ram)",
+							Default:     "ram",
+						},
+						"count": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Number of data points to show (default: 20)",
+							Default:     "20",
+						},
 					},
 				},
-			},
-			&dotfilesdv1.CLIHints{
-				CommandPath: "resources history",
-				Category:    "system",
-			},
-			m.historyTool,
-		),
-	)
+				&dotfilesdv1.CLIHints{
+					CommandPath: "resources history",
+					Category:    "system",
+				},
+				m.historyTool,
+			),
+		},
+	})
 }

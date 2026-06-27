@@ -1,15 +1,15 @@
-// Package plugin provides the daemon-side plugin management: building,
-// launching, and communicating with extension plugins.
 package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
@@ -17,504 +17,174 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
-	"gopkg.in/yaml.v3"
 )
 
-// DefaultPluginsDir is the default directory where user-installed plugin
-// sources are stored. Controlled via config.
-const DefaultPluginsDir = "~/.config/dotfilesd/plugins"
-
-// DefaultCacheDir is the default directory for compiled plugin binaries.
-const DefaultCacheDir = "~/.cache/dotfilesd/plugins"
-
-// ---------------------------------------------------------------------------
-// Front matter types (same structure as scripts — README.md YAML front matter)
-// ---------------------------------------------------------------------------
-
-// DirFrontMatter is YAML front matter from a README.md in a plugin directory.
-type DirFrontMatter struct {
-	Description string   `yaml:"description"`
-	Enabled     bool     `yaml:"enabled"`
-	Exclude     []string `yaml:"exclude"`
-	Type        string   `yaml:"type"` // "server" (supervised, default) or "command" (ephemeral)
+// PluginInfo holds metadata for a loaded plugin.
+type PluginInfo struct {
+	Name      string
+	URL       string
+	Info      *dotfilesdv1.GetInfoResponse
+	Services  []*dotfilesdv1.ServiceDescriptor
+	Process   *os.Process
+	SourceDir string
+	CacheDir  string
 }
 
-// PluginType constants.
-const (
-	PluginTypeServer  = "server"  // Persistent server with crash supervision (default)
-	PluginTypeCommand = "command" // Ephemeral, launched per invocation
-)
-
-// PluginTreeEntry represents a node in the plugin directory hierarchy.
-// Directories are category groups; leaf entries are loaded Go plugins.
-type PluginTreeEntry struct {
-	Name        string
-	Path        string
-	IsDirectory bool
-	Description string
-	Enabled     bool
-	Type        string // plugin type: "server" or "command"
-	Children    []PluginTreeEntry
-	Plugin      *dotfilesdv1.ExtensionDescriptor // set only for loaded leaf plugins
-}
-
-// ---------------------------------------------------------------------------
-// Manager
-// ---------------------------------------------------------------------------
-
-// Manager orchestrates plugin lifecycle: discovery, build, launch,
-// supervision (auto-restart on crash), and communication.
-// One Manager per daemon instance.
+// Manager orchestrates plugin lifecycle.
 type Manager struct {
 	PluginsDir string
 	CacheDir   string
-	CtxURL     string // Execution Context URL the daemon exposes
-	CtxToken   string // shared secret for Execution Context auth
+	CtxURL     string
+	CtxToken   string
 
-	registry         *Registry
-	builder          *Builder
-	mu               sync.Mutex
-	loaded           bool
-	tree             []PluginTreeEntry // cached tree from last LoadPlugins
-	supervisorCtx    context.Context
-	supervisorCancel context.CancelFunc
-	// wg tracks all supervisor goroutines; Wait() blocks until they finish.
-	supervisorWg sync.WaitGroup
+	mu      sync.RWMutex
+	plugins map[string]*PluginInfo
 }
 
 // NewManager creates a new plugin manager.
 func NewManager(pluginsDir, cacheDir, ctxURL, ctxToken string) *Manager {
-	superCtx, superCancel := context.WithCancel(context.Background())
 	return &Manager{
-		PluginsDir:       pluginsDir,
-		CacheDir:         cacheDir,
-		CtxURL:           ctxURL,
-		CtxToken:         ctxToken,
-		registry:         NewRegistry(),
-		builder:          &Builder{CacheDir: cacheDir},
-		supervisorCtx:    superCtx,
-		supervisorCancel: superCancel,
+		PluginsDir: pluginsDir,
+		CacheDir:   cacheDir,
+		CtxURL:     ctxURL,
+		CtxToken:   ctxToken,
+		plugins:    make(map[string]*PluginInfo),
 	}
 }
 
-// LoadPlugins discovers plugin source directories recursively, builds them,
-// launches the resulting binaries, and registers their capabilities.
-//
-// Directories that are themselves Go plugin sources (contain go.mod or main.go)
-// are treated as leaf plugins. Subdirectories that are not Go plugins are
-// treated as category groups. Each directory may contain a README.md with
-// YAML front matter for descriptions, enable/disable, and exclude lists.
-//
-// Only called once at daemon startup. Idempotent on consecutive calls.
+// LoadPlugins discovers, builds, launches, and registers all plugins.
 func (m *Manager) LoadPlugins(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.loaded {
-		slog.Debug("plugins already loaded, skipping")
-		return nil
-	}
-
 	pluginsDir := expandHome(m.PluginsDir)
 	cacheDir := expandHome(m.CacheDir)
 
-	slog.Debug("loading plugins", "plugins_dir", pluginsDir, "cache_dir", cacheDir)
-
-	// Ensure directories exist.
-	os.MkdirAll(cacheDir, 0o755)
+	slog.Info("loading plugins", "dir", pluginsDir)
 
 	entries, err := os.ReadDir(pluginsDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			slog.Debug("plugins directory does not exist, skipping", "dir", pluginsDir)
-			m.loaded = true
-			return nil
-		}
 		return fmt.Errorf("read plugins dir: %w", err)
 	}
 
-	// Read root README.md first.
-	var rootFM *DirFrontMatter
-	if rm := findReadme(entries); rm != nil {
-		dfm, err := parseDirFrontMatter(filepath.Join(pluginsDir, rm.Name()))
-		if err != nil {
-			slog.Warn("parse root README front matter", "error", err)
-		} else {
-			rootFM = dfm
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
 		}
-	}
+		name := entry.Name()
+		sourceDir := filepath.Join(pluginsDir, name)
 
-	// Recursive scan.
-	tree, err := m.scanPluginDir(ctx, pluginsDir, "", rootFM, cacheDir)
-	if err != nil {
-		slog.Error("plugin directory scan failed", "error", err)
-		// Partial results are still usable.
-	}
-	m.tree = tree
-
-	slog.Debug("plugin loading complete", "loaded", m.loaded, "count", m.registry.Len())
-	m.loaded = true
-	return nil
-}
-
-// scanPluginDir recursively scans a plugin directory, building and loading
-// any Go plugin leaf directories it finds. Returns the directory's tree
-// entries. readmeConfig carries the parent README's exclude/enabled settings.
-func (m *Manager) scanPluginDir(ctx context.Context, dir, prefix string, readmeConfig *DirFrontMatter, cacheDir string) ([]PluginTreeEntry, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read dir %s: %w", dir, err)
-	}
-
-	// Check for README.md in this directory.
-	dirFM := readmeConfig
-	if rm := findReadme(entries); rm != nil {
-		dfm, err := parseDirFrontMatter(filepath.Join(dir, rm.Name()))
-		if err != nil {
-			slog.Warn("parse README front matter", "path", rm.Name(), "error", err)
-		} else {
-			dirFM = dfm
-		}
-	}
-
-	var result []PluginTreeEntry
-
-	// Subdirectories (sorted).
-	var subDirs []string
-	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-			subDirs = append(subDirs, e.Name())
-		}
-	}
-	sort.Strings(subDirs)
-
-	for _, d := range subDirs {
-		childPath := d
-		if prefix != "" {
-			childPath = prefix + "/" + d
-		}
-		fullDir := filepath.Join(dir, d)
-
-		// Check exclusion list from README front matter.
-		if dirFM != nil && stringInSlice(d, dirFM.Exclude) {
-			slog.Debug("plugin excluded by README front matter", "name", d)
+		if !isGoPlugin(sourceDir) {
 			continue
 		}
 
-		// Determine enabled status.
-		enabled := true
-		if dirFM != nil {
-			enabled = dirFM.Enabled
+		slog.Info("building plugin", "name", name)
+		binaryPath := filepath.Join(cacheDir, name, name)
+		if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
+			slog.Error("mkdir failed", "name", name, "error", err)
+			continue
 		}
 
-		if isGoPlugin(fullDir) {
-			// Leaf Go plugin directory.
-			desc := ""
-			pluginType := PluginTypeServer
-			if dirFM != nil {
-				desc = dirFM.Description
-				if dirFM.Type != "" {
-					pluginType = dirFM.Type
-				}
-			}
-
-			if enabled {
-				slog.Debug("loading plugin", "name", d, "source_dir", fullDir, "path", childPath, "type", pluginType)
-				if err := m.loadPlugin(ctx, d, fullDir, cacheDir, pluginType); err != nil {
-					slog.Error("plugin load failed", "name", d, "path", childPath, "error", err)
-					// Still include a disabled entry in the tree for visibility.
-					result = append(result, PluginTreeEntry{
-						Name:        d,
-						Path:        childPath,
-						IsDirectory: false,
-						Description: fmt.Sprintf("%s (load failed: %v)", d, err),
-						Enabled:     false,
-						Type:        pluginType,
-					})
-					continue
-				}
-
-				// Get descriptor from registry to include in tree entry.
-				info, ok := m.registry.Get(d)
-				if ok && info.Descriptor != nil {
-					desc = info.Descriptor.Description
-					if desc == "" {
-						desc = info.Descriptor.DisplayName
-					}
-					result = append(result, PluginTreeEntry{
-						Name:        d,
-						Path:        childPath,
-						IsDirectory: false,
-						Description: desc,
-						Enabled:     true,
-						Type:        pluginType,
-						Plugin:      info.Descriptor,
-					})
-				} else {
-					result = append(result, PluginTreeEntry{
-						Name:        d,
-						Path:        childPath,
-						IsDirectory: false,
-						Description: d,
-						Enabled:     true,
-						Type:        pluginType,
-					})
-				}
-			} else {
-				// Disabled — don't load but include in tree.
-				result = append(result, PluginTreeEntry{
-					Name:        d,
-					Path:        childPath,
-					IsDirectory: false,
-					Description: desc,
-					Enabled:     false,
-					Type:        pluginType,
-				})
-			}
-		} else {
-			// Category directory — recurse.
-			children, err := m.scanPluginDir(ctx, fullDir, childPath, dirFM, cacheDir)
-			if err != nil {
-				slog.Warn("scan plugin subdir", "dir", d, "error", err)
-				continue
-			}
-			if children == nil {
-				children = []PluginTreeEntry{}
-			}
-
-			desc := ""
-			pluginType := PluginTypeServer
-			if dirFM != nil {
-				desc = dirFM.Description
-				if dirFM.Type != "" {
-					pluginType = dirFM.Type
-				}
-			}
-
-			result = append(result, PluginTreeEntry{
-				Name:        d,
-				Path:        childPath,
-				IsDirectory: true,
-				Description: desc,
-				Enabled:     enabled,
-				Type:        pluginType,
-				Children:    children,
-			})
+		cmd := exec.Command("go", "build", "-o", binaryPath, ".")
+		cmd.Dir = sourceDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			slog.Error("build failed", "name", name, "error", err, "output", string(out))
+			continue
 		}
-	}
 
-	return result, nil
-}
+		sessionID := fmt.Sprintf("plugin-%s", name)
+		procCmd := exec.Command(binaryPath)
+		procCmd.Env = append(os.Environ(),
+			"EXECUTION_CONTEXT_URL="+m.CtxURL,
+			"EXECUTION_CONTEXT_TOKEN="+m.CtxToken,
+			"SESSION_ID="+sessionID,
+		)
 
-// loadPlugin builds, launches, and registers a single plugin.
-func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir, pluginType string) error {
-	slog.Debug("loading plugin step: build", "name", name)
-	result, err := m.builder.Build(name, sourceDir)
-	if err != nil {
-		return fmt.Errorf("build: %w", err)
-	}
-	slog.Debug("plugin build result", "name", name, "binary", result.BinaryPath, "from_cache", result.FromCache)
-
-	sessionID := fmt.Sprintf("plugin-%s", name)
-
-	slog.Debug("launching plugin process", "name", name, "binary", result.BinaryPath, "ctx_url", m.CtxURL, "session_id", sessionID)
-	proc, err := Launch(result.BinaryPath, m.CtxURL, m.CtxToken, sessionID, nil)
-	if err != nil {
-		return fmt.Errorf("launch: %w", err)
-	}
-	slog.Debug("plugin process launched", "name", name, "url", proc.URL, "pid", proc.Cmd.Process.Pid)
-
-	client := NewClient(proc.URL)
-	slog.Debug("connected to plugin extension API", "name", name, "url", proc.URL)
-
-	slog.Debug("fetching plugin descriptor", "name", name)
-	desc, err := client.GetDescriptor(ctx)
-	if err != nil {
-		proc.Kill()
-		return fmt.Errorf("get descriptor: %w", err)
-	}
-	slog.Debug("plugin descriptor received", "name", name, "display_name", desc.DisplayName, "version", desc.Version, "tools", len(desc.Tools))
-	for _, t := range desc.Tools {
-		slog.Debug("  plugin tool", "name", name, "tool", t.Name, "description", t.Description)
-	}
-
-	// Call DescriptorService (daemon-known protocol) to discover custom services.
-	httpClient := &http.Client{}
-	descClient := dotfilesdv1connect.NewDescriptorServiceClient(httpClient, proc.URL)
-	var services []*dotfilesdv1.ServiceInfo
-	listResp, listErr := descClient.ListServices(ctx, connect.NewRequest(&dotfilesdv1.ListServicesRequest{}))
-	if listErr == nil && listResp.Msg.Services != nil {
-		services = listResp.Msg.Services
-		slog.Debug("plugin services discovered", "name", name, "count", len(services))
-		for _, svc := range services {
-			slog.Debug("  service", "name", svc.Name, "accessible", svc.PluginAccessible)
+		stdout, err := procCmd.StdoutPipe()
+		if err != nil {
+			slog.Error("stdout pipe failed", "name", name, "error", err)
+			continue
 		}
-	} else {
-		slog.Debug("plugin has no custom services or no DescriptorService", "name", name, "err", listErr)
+		procCmd.Stderr = os.Stderr
+
+		if err := procCmd.Start(); err != nil {
+			slog.Error("start failed", "name", name, "error", err)
+			continue
+		}
+
+		var hs struct {
+			Protocol string `json:"protocol"`
+			URL      string `json:"url"`
+			Session  string `json:"session_id"`
+		}
+		if err := readJSONLine(stdout, &hs); err != nil {
+			procCmd.Process.Kill()
+			slog.Error("handshake failed", "name", name, "error", err)
+			continue
+		}
+
+		if hs.Protocol != "dotfilesd-plugin-v1" {
+			procCmd.Process.Kill()
+			slog.Error("unknown protocol", "name", name, "protocol", hs.Protocol)
+			continue
+		}
+
+		slog.Info("plugin launched", "name", name, "url", hs.URL, "pid", procCmd.Process.Pid)
+
+		httpClient := &http.Client{}
+		baseClient := dotfilesdv1connect.NewPluginBaseServiceClient(httpClient, hs.URL)
+
+		infoResp, err := baseClient.GetInfo(ctx, connect.NewRequest(&dotfilesdv1.GetInfoRequest{}))
+		if err != nil {
+			procCmd.Process.Kill()
+			slog.Error("GetInfo failed", "name", name, "error", err)
+			continue
+		}
+
+		svcResp, err := baseClient.ListServices(ctx, connect.NewRequest(&dotfilesdv1.ListServicesRequest{}))
+		if err != nil {
+			procCmd.Process.Kill()
+			slog.Error("ListServices failed", "name", name, "error", err)
+			continue
+		}
+
+		info := &PluginInfo{
+			Name:      name,
+			URL:       hs.URL,
+			Info:      infoResp.Msg,
+			Services:  svcResp.Msg.Services,
+			Process:   procCmd.Process,
+			SourceDir: sourceDir,
+			CacheDir:  cacheDir,
+		}
+
+		m.plugins[name] = info
+		slog.Info("plugin registered", "name", name, "services", len(info.Services))
 	}
 
-	slog.Debug("registering plugin", "name", name)
-	info := &PluginInfo{
-		Descriptor:       desc,
-		Client:           client,
-		Process:          proc,
-		SourceDir:        sourceDir,
-		CacheDir:         cacheDir,
-		DescriptorClient: descClient,
-		Services:         services,
-	}
-	if err := m.registry.Register(name, info); err != nil {
-		proc.Kill()
-		return fmt.Errorf("register: %w", err)
-	}
-
-	// Start process supervision (auto-restart on crash) for server-type plugins.
-	if pluginType == PluginTypeServer {
-		m.supervisorWg.Add(1)
-		go func() {
-			defer m.supervisorWg.Done()
-			supervisePlugin(m.supervisorCtx, name, proc, sourceDir, cacheDir,
-				m.CtxURL, m.CtxToken, m.reRegister)
-		}()
-	} else {
-		slog.Debug("plugin type is command, skipping crash supervision", "name", name)
-	}
-
-	slog.Debug("plugin registered successfully", "name", name)
+	slog.Info("plugins loaded", "count", len(m.plugins))
 	return nil
 }
 
-// CallTool invokes a tool on a loaded plugin and returns a streaming
-// response that the caller can iterate over for stdout/stderr chunks.
-func (m *Manager) CallTool(ctx context.Context, pluginName, toolName string, args map[string]string) (*connect.ServerStreamForClient[dotfilesdv1.CallToolResponse], error) {
-	slog.Debug("manager CallTool", "plugin", pluginName, "tool", toolName, "args", args)
-	info, ok := m.registry.Get(pluginName)
-	if !ok {
-		return nil, fmt.Errorf("plugin %q not loaded", pluginName)
-	}
-	slog.Debug("found plugin in registry, opening stream", "plugin", pluginName, "url", info.Process.URL)
-	return info.Client.CallTool(ctx, toolName, args)
+// GetPlugin returns info for a named plugin.
+func (m *Manager) GetPlugin(name string) (*PluginInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	info, ok := m.plugins[name]
+	return info, ok
 }
 
-// GetDescriptor returns the cached descriptor for a plugin.
-func (m *Manager) GetDescriptor(pluginName string) (*dotfilesdv1.ExtensionDescriptor, bool) {
-	slog.Debug("manager GetDescriptor", "plugin", pluginName)
-	info, ok := m.registry.Get(pluginName)
-	if !ok {
-		slog.Debug("plugin not found in registry", "plugin", pluginName)
-		return nil, false
-	}
-	return info.Descriptor, true
-}
-
-// ListPlugins returns all loaded plugin descriptors (flat list).
-func (m *Manager) ListPlugins() []dotfilesdv1.ExtensionDescriptor {
-	slog.Debug("manager ListPlugins")
-	infos := m.registry.List()
-	slog.Debug("registry returned plugins", "count", len(infos))
-	result := make([]dotfilesdv1.ExtensionDescriptor, len(infos))
-	for i, info := range infos {
-		if info.Descriptor != nil {
-			result[i] = *info.Descriptor
-		}
+// ListPlugins returns all loaded plugins.
+func (m *Manager) ListPlugins() []*PluginInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]*PluginInfo, 0, len(m.plugins))
+	for _, info := range m.plugins {
+		result = append(result, info)
 	}
 	return result
 }
 
-// ListPluginInfos returns full plugin info entries including URLs and services.
-func (m *Manager) ListPluginInfos() []PluginInfo {
-	return m.registry.List()
-}
-
-// PluginURL returns the RPC URL for a loaded plugin.
-func (m *Manager) PluginURL(name string) (string, bool) {
-	info, ok := m.registry.Get(name)
-	if !ok {
-		return "", false
-	}
-	return info.Process.URL, true
-}
-
-// PluginServices returns the custom services exposed by a plugin.
-func (m *Manager) PluginServices(name string) ([]*dotfilesdv1.ServiceInfo, bool) {
-	info, ok := m.registry.Get(name)
-	if !ok {
-		return nil, false
-	}
-	return info.Services, true
-}
-
-// ListPluginTree returns the tree of plugin directory entries from the
-// last LoadPlugins call.
-func (m *Manager) ListPluginTree() []PluginTreeEntry {
-	slog.Debug("manager ListPluginTree", "entries", len(m.tree))
-	return m.tree
-}
-
-// ToProtoPluginTree converts a PluginTreeEntry (internal) to a protobuf
-// PluginTreeEntry.
-func ToProtoPluginTree(entry *PluginTreeEntry) *dotfilesdv1.PluginTreeEntry {
-	pe := &dotfilesdv1.PluginTreeEntry{
-		Name:        entry.Name,
-		Path:        entry.Path,
-		IsDirectory: entry.IsDirectory,
-		Description: entry.Description,
-		Enabled:     entry.Enabled,
-		Type:        entry.Type,
-	}
-	if entry.Plugin != nil {
-		pe.Plugin = entry.Plugin
-	}
-	for i := range entry.Children {
-		pe.Children = append(pe.Children, ToProtoPluginTree(&entry.Children[i]))
-	}
-	return pe
-}
-
-// reRegister is the callback passed to supervisePlugin for atomic registry
-// replacement after a restart. It satisfies the reRegister type alias.
-func (m *Manager) reRegister(name string, info *PluginInfo) *PluginInfo {
-	return m.registry.Replace(name, info)
-}
-
-// Shutdown cancels all supervisors, kills all running plugins, and clears
-// the registry. It blocks until all supervisor goroutines have exited.
-func (m *Manager) Shutdown() {
-	slog.Debug("manager Shutdown: stopping supervisors and killing plugins")
-
-	// Signal all supervisors to stop.
-	m.supervisorCancel()
-
-	// Wait for supervisors to exit.
-	m.supervisorWg.Wait()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.registry.Clear()
-	m.loaded = false
-	m.tree = nil
-	slog.Debug("manager shutdown complete")
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// expandHome replaces "~" with the user's home directory.
-func expandHome(path string) string {
-	if len(path) > 0 && path[0] == '~' {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Join(home, path[1:])
-		}
-	}
-	return path
-}
-
-// isGoPlugin checks if a directory contains a Go plugin (go.mod or main.go).
 func isGoPlugin(dir string) bool {
 	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 		return true
@@ -525,55 +195,19 @@ func isGoPlugin(dir string) bool {
 	return false
 }
 
-// splitFrontMatter splits raw text into (bodyWithoutFrontMatter, yamlString).
-func splitFrontMatter(text string) (body string, frontMatter string) {
-	text = strings.TrimLeft(text, "\n\r\t ")
-	if !strings.HasPrefix(text, "---") {
-		return text, ""
+func expandHome(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, path[2:])
 	}
-	rest := text[3:]
-	idx := strings.Index(rest, "\n---")
-	if idx < 0 {
-		return text, ""
-	}
-	frontMatter = strings.TrimSpace(rest[:idx])
-	body = strings.TrimLeft(rest[idx+4:], "\n\r")
-	return body, frontMatter
+	return path
 }
 
-// parseDirFrontMatter reads a README.md and extracts its YAML front matter.
-func parseDirFrontMatter(path string) (*DirFrontMatter, error) {
-	data, err := os.ReadFile(path)
+func readJSONLine(r io.Reader, v interface{}) error {
+	buf := make([]byte, 4096)
+	n, err := r.Read(buf)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_, yamlStr := splitFrontMatter(string(data))
-	if yamlStr == "" {
-		return &DirFrontMatter{Enabled: true, Exclude: nil}, nil
-	}
-	var fm DirFrontMatter
-	if err := yaml.Unmarshal([]byte(yamlStr), &fm); err != nil {
-		return nil, err
-	}
-	return &fm, nil
-}
-
-// findReadme looks for a README.md entry in a directory listing.
-func findReadme(entries []os.DirEntry) os.DirEntry {
-	for _, e := range entries {
-		if !e.IsDir() && strings.EqualFold(e.Name(), "README.md") {
-			return e
-		}
-	}
-	return nil
-}
-
-// stringInSlice checks if a string is in a slice.
-func stringInSlice(s string, slice []string) bool {
-	for _, v := range slice {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return json.Unmarshal(buf[:n], v)
 }

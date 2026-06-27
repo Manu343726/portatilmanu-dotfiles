@@ -1,17 +1,6 @@
-// Weather plugin — demonstrates the dotfilesd plugin SDK.
-//
-// Provides a "forecast" tool that fetches weather data for a given location
-// by using the daemon's exec context to call out to wttr.in via curl.
-//
-// This plugin showcases all major SDK features:
-//   - Tool definition with input schema (proto-generated types)
-//   - Real-time streaming output via ctx.Stdout() / ctx.Stderr()
-//   - Shell command execution via Context.Exec()
-//   - Error handling
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -20,32 +9,37 @@ import (
 )
 
 func main() {
-	plugin.Serve("weather", "Weather", "1.0.0", "Weather forecast plugin using wttr.in",
-		plugin.NewTool("forecast", "Get weather forecast for a location",
-			&dotfilesdv1.ToolInputSchema{
-				Properties: map[string]*dotfilesdv1.PropertySchema{
-					"location": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Location to get weather for (city name, ZIP code, IP address, etc.)",
+	plugin.Serve(plugin.Config{
+		Name:        "weather",
+		DisplayName: "Weather",
+		Version:     "1.0.0",
+		Description: "Weather forecast plugin using wttr.in",
+		Tools: []plugin.Tool{
+			plugin.NewTool("forecast", "Get weather forecast for a location",
+				&dotfilesdv1.ToolInputSchema{
+					Properties: map[string]*dotfilesdv1.PropertySchema{
+						"location": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Location to get weather for (city name, ZIP code, IP address, etc.)",
+						},
+						"format": {
+							Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
+							Description: "Output format (brief, full, json)",
+							Default:     "brief",
+						},
 					},
-					"format": {
-						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-						Description: "Output format (brief, full, json)",
-						Default:     "brief",
-					},
+					Required: []string{"location"},
 				},
-				Required: []string{"location"},
-			},
-			&dotfilesdv1.CLIHints{
-				CommandPath: "weather forecast",
-				Category:    "utilities",
-			},
-			forecastFn,
-		),
-	)
+				&dotfilesdv1.CLIHints{
+					CommandPath: "weather forecast",
+					Category:    "utilities",
+				},
+				forecastFn,
+			),
+		},
+	})
 }
 
-// forecastFn is the tool implementation for the "forecast" tool.
 func forecastFn(ctx plugin.Context, args map[string]string) error {
 	location := args["location"]
 	if location == "" {
@@ -59,10 +53,6 @@ func forecastFn(ctx plugin.Context, args map[string]string) error {
 
 	ctx.Log().Info("forecasting weather", "location", location, "format", format)
 
-	// Build the wttr.in URL.
-	// - "brief" uses the default short format (curl wttr.in/Location?0)
-	// - "full" uses the full format (curl wttr.in/Location)
-	// - "json" returns JSON data (curl wttr.in/Location?format=j1)
 	var url string
 	switch format {
 	case "json":
@@ -75,7 +65,6 @@ func forecastFn(ctx plugin.Context, args map[string]string) error {
 
 	ctx.Log().Debug("fetching weather", "url", url)
 
-	// Fetch weather data via curl using the daemon's exec context.
 	result, err := ctx.Exec(fmt.Sprintf("curl -s --max-time 10 '%s'", url))
 	if err != nil {
 		ctx.Log().Error("failed to fetch weather", "error", err, "location", location)
@@ -98,18 +87,6 @@ func forecastFn(ctx plugin.Context, args map[string]string) error {
 	}
 
 	ctx.Log().Debug("weather fetched successfully", "location", location, "output_size", len(output))
-
-	// For JSON format, pretty-print and also write structured data.
-	if format == "json" {
-		var data any
-		if err := json.Unmarshal([]byte(output), &data); err == nil {
-			pretty, _ := json.MarshalIndent(data, "", "  ")
-			fmt.Fprintln(ctx.Stdout(), string(pretty))
-			ctx.Log().Trace("weather JSON parsed successfully", "location", location)
-			return nil
-		}
-	}
-
 	fmt.Fprintln(ctx.Stdout(), output)
 	return nil
 }

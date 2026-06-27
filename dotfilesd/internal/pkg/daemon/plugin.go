@@ -11,12 +11,7 @@ import (
 	"dotfilesd/internal/pkg/plugin"
 )
 
-// ------------------------------------------------
-// Plugin system initialization
-// ------------------------------------------------
-
 // InitPlugins creates the plugin manager and loads plugins.
-// Called during daemon startup.
 func (d *Daemon) InitPlugins() error {
 	pluginsDir := d.config.PluginsDir
 	if pluginsDir == "" {
@@ -42,7 +37,6 @@ func (d *Daemon) InitPlugins() error {
 
 	d.pluginMgr = plugin.NewManager(pluginsDir, cacheDir, ctxURL, ctxToken)
 
-	slog.Info("loading plugins", "dir", pluginsDir)
 	if err := d.pluginMgr.LoadPlugins(context.Background()); err != nil {
 		return fmt.Errorf("load plugins: %w", err)
 	}
@@ -50,19 +44,27 @@ func (d *Daemon) InitPlugins() error {
 	plugins := d.pluginMgr.ListPlugins()
 	slog.Info("plugins loaded", "count", len(plugins))
 	for _, p := range plugins {
-		slog.Info("  plugin", "name", p.Name, "version", p.Version, "tools", len(p.Tools))
-		// Create a session for this plugin so its RPC calls resolve
-		// to a real session (no ephemeral fallback warnings).
-		sessionID := fmt.Sprintf("plugin-%s", p.Name)
-		d.sessions.CreateNamed(sessionID)
+		slog.Info("  plugin", "name", p.Name, "version", p.Info.Version, "services", len(p.Services))
 	}
 
 	return nil
 }
 
-// generatePluginToken creates a random hex token for the Execution Context.
+// generatePluginToken creates a random hex token.
 func generatePluginToken() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// Shutdown shuts down the plugin manager.
+func (d *Daemon) ShutdownPlugins() {
+	if d.pluginMgr != nil {
+		// Kill all plugin processes.
+		for _, info := range d.pluginMgr.ListPlugins() {
+			if info.Process != nil {
+				info.Process.Kill()
+			}
+		}
+	}
 }

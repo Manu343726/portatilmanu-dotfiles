@@ -13,50 +13,12 @@ import (
 )
 
 // BackgroundTask represents a long-running command executing on the daemon.
-// It provides io-based access to the command's stdin, stdout, and stderr,
-// plus cancellation and wait-for-completion.
-//
-// Usage:
-//
-//	task, err := ctx.BackgroundExec("pacman -Syu --noconfirm", true)
-//	if err != nil { ... }
-//
-//	// Tee: stream output to the plugin's own writers AND get readers
-//	// for the plugin to process the output programmatically.
-//	stdoutR, stderrR := task.Tee()
-//	go processStdout(stdoutR)
-//	go processStderr(stderrR)
-//
-//	// Wait for completion.
-//	exitCode, err := task.Wait()
 type BackgroundTask interface {
-	// Stdin returns a writer connected to the command's stdin.
-	// Close it to send EOF (or the command may hang waiting for input).
 	Stdin() io.WriteCloser
-
-	// Stdout returns a reader for the command's merged stdout+stderr.
-	// Read from it to consume output as it's produced. If the task
-	// completes, the reader returns EOF after all buffered data.
 	Stdout() io.Reader
-
-	// Tee pipes the command's stdout and stderr to the plugin's
-	// Stdout()/Stderr() writers in real time AND returns independent
-	// readers for each stream. The plugin can read from the returned
-	// readers to process output programmatically while it also appears
-	// in the plugin's output.
-	//
-	// Tee may only be called once. Subsequent calls return the same
-	// readers. If Tee is not called, output only goes to Stdout().
-	Tee() (stdout, stderr io.Reader)
-
-	// Cancel kills the running command. Subsequent calls to Wait() will
-	// return with the killed exit code.
 	Cancel() error
-
-	// Wait blocks until the command exits. Returns the exit code.
-	// If the command could not be started, err is non-nil with the
-	// daemon's error message.
 	Wait() (exitCode int, err error)
+	Tee() (stdout, stderr io.Reader)
 }
 
 // backgroundTaskClient implements BackgroundTask over a Connect bidi stream.
@@ -70,18 +32,12 @@ type backgroundTaskClient struct {
 	stdoutR *io.PipeReader
 	stdoutW *io.PipeWriter
 
-	// Writers for the plugin's output channels (set at construction).
-	// When Tee() is called, chunks are also written here.
-	ctxStdout io.Writer
-	ctxStderr io.Writer
-
-	// Tee state.
-	teeMu      sync.Mutex
-	teeStdoutR *io.PipeReader
-	teeStdoutW *io.PipeWriter
-	teeStderrR *io.PipeReader
-	teeStderrW *io.PipeWriter
-	teeActive  bool
+	teeMu       sync.Mutex
+	teeStdoutR  *io.PipeReader
+	teeStdoutW  *io.PipeWriter
+	teeStderrR  *io.PipeReader
+	teeStderrW  *io.PipeWriter
+	teeActive   bool
 
 	taskID     string
 	cancelSent bool
@@ -90,14 +46,7 @@ type backgroundTaskClient struct {
 	done       chan struct{}
 }
 
-// BackgroundExec starts a command in the background on the daemon and
-// returns a BackgroundTask for controlling and monitoring it.
-func (c *contextClient) BackgroundExec(cmd string, sudo bool) (BackgroundTask, error) {
-	return startBackgroundTask(c.execClient, c.token, c.buildSession(), c.Stdout(), c.Stderr(), cmd, sudo)
-}
-
-// startBackgroundTask is the shared implementation. It is also called
-// by streamingContext with real stdout/stderr writers.
+// startBackgroundTask is the shared implementation.
 func startBackgroundTask(
 	execClient dotfilesdv1connect.ExecServiceClient,
 	token string,
@@ -141,22 +90,18 @@ func startBackgroundTask(
 		stream:    stream,
 		stdoutR:   stdoutR,
 		stdoutW:   stdoutW,
-		ctxStdout: ctxStdout,
-		ctxStderr: ctxStderr,
 		taskID:    started.TaskId,
 		done:      make(chan struct{}),
 	}
 
 	// Start goroutine to read server→client messages.
-	go task.readLoop()
+	go task.readLoop(ctxStdout, ctxStderr)
 
 	return task, nil
 }
 
-// readLoop reads messages from the server stream and fans them out:
-//   - Always to mergedW (for Stdout()).
-//   - If Tee() has been called, also to ctx writers and tee pipes.
-func (t *backgroundTaskClient) readLoop() {
+// readLoop reads messages from the server stream and fans them out.
+func (t *backgroundTaskClient) readLoop(ctxStdout, ctxStderr io.Writer) {
 	defer close(t.done)
 	defer t.stdoutW.Close()
 	defer func() {
@@ -179,9 +124,9 @@ func (t *backgroundTaskClient) readLoop() {
 
 		switch ev := msg.Event.(type) {
 		case *dotfilesdv1.BackgroundExecResponse_StdoutChunk:
-			t.fanOut(ev.StdoutChunk, true)
+			t.fanOut(ev.StdoutChunk, true, ctxStdout, ctxStderr)
 		case *dotfilesdv1.BackgroundExecResponse_StderrChunk:
-			t.fanOut(ev.StderrChunk, false)
+			t.fanOut(ev.StderrChunk, false, ctxStdout, ctxStderr)
 		case *dotfilesdv1.BackgroundExecResponse_Exit:
 			t.exitCode = int(ev.Exit.ExitCode)
 			if ev.Exit.ErrorMessage != "" {
@@ -194,7 +139,7 @@ func (t *backgroundTaskClient) readLoop() {
 
 // fanOut writes a chunk to the merged pipe and, if tee is active, to the
 // context writer and tee pipe.
-func (t *backgroundTaskClient) fanOut(chunk []byte, isStdout bool) {
+func (t *backgroundTaskClient) fanOut(chunk []byte, isStdout bool, ctxStdout, ctxStderr io.Writer) {
 	if len(chunk) == 0 {
 		return
 	}
@@ -210,10 +155,10 @@ func (t *backgroundTaskClient) fanOut(chunk []byte, isStdout bool) {
 	var ctxW io.Writer
 	var teeW *io.PipeWriter
 	if isStdout {
-		ctxW = t.ctxStdout
+		ctxW = ctxStdout
 		teeW = t.teeStdoutW
 	} else {
-		ctxW = t.ctxStderr
+		ctxW = ctxStderr
 		teeW = t.teeStderrW
 	}
 	t.teeMu.Unlock()
@@ -259,8 +204,7 @@ func (t *backgroundTaskClient) Stdout() io.Reader {
 }
 
 // Tee pipes stdout and stderr to both the plugin's output writers and
-// independent readers. May only be called once; subsequent calls return
-// the same readers.
+// independent readers. May only be called once.
 func (t *backgroundTaskClient) Tee() (io.Reader, io.Reader) {
 	t.teeMu.Lock()
 	defer t.teeMu.Unlock()

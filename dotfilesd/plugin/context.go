@@ -14,132 +14,71 @@ import (
 	"connectrpc.com/connect"
 )
 
-// Context provides a plugin tool with controlled access to the daemon's
-// capabilities: shell execution (with or without sudo), user input prompts,
-// confirmations, and choice selection. It also provides stdout and stderr
-// writers that tunnel output back to the caller in real time via RPC
-// streaming.
-//
-// This is the ONLY way a plugin tool should interact with the host system.
-// Plugins never call the daemon's core RPCs directly.
-//
-// Tools write their output to Stdout() and Stderr() writers (for human-
-// readable progress and results). The Run() method returns a Go error:
-// nil means success, non-nil means the tool failed.
+// Context is the interface plugins use to interact with the daemon.
+// Plugins call each other DIRECTLY via generated Connect clients,
+// NOT through this Context.
 type Context interface {
-	// Stdout returns a writer that tunnels stdout output back to the
-	// CLI/MCP caller in real time via RPC streaming.
 	Stdout() io.Writer
-
-	// Stderr returns a writer that tunnels stderr output back to the
-	// CLI/MCP caller in real time via RPC streaming.
 	Stderr() io.Writer
-
-	// Log returns a structured logger that sends log entries to the
-	// daemon's logging system. The plugin name is automatically attached
-	// so entries appear under a "plugins.<name>" hierarchy.
 	Log() logging.Logger
 
-	// Exec runs a shell command without privilege escalation.
+	// Shell execution
 	Exec(cmd string) (ExecResult, error)
-
-	// SudoExec runs a shell command with sudo. The daemon handles password
-	// elicitation internally.
 	SudoExec(cmd string) (ExecResult, error)
-
-	// ExecStream runs a command and pipes stdout/stderr chunks directly
-	// to this plugin's Stdout()/Stderr() writers in real time. Use this
-	// for long-running commands (e.g. package updates, builds) where you
-	// want to see output as it's produced. Returns the exit code.
 	ExecStream(cmd string, sudo bool) (int, error)
-
-	// BackgroundExec starts a command in the background on the daemon and
-	// returns a BackgroundTask for controlling it. The task provides
-	// io.Reader/io.WriteCloser access to the command's stdout and stdin,
-	// plus Cancel() and Wait(). Use this for interactive commands or
-	// long-running daemon-like processes that the plugin needs to control
-	// asynchronously.
 	BackgroundExec(cmd string, sudo bool) (BackgroundTask, error)
 
-	// RequestInput prompts the user for arbitrary text input.
+	// User interaction
 	RequestInput(prompt, defaultVal string, sensitive bool) (string, error)
-
-	// RequestConfirm prompts the user for a yes/no confirmation.
 	RequestConfirm(msg string, defaultConfirm bool) (bool, error)
-
-	// RequestChoose prompts the user to pick from a list of options.
-	// Returns the selected index and option text (index = -1 if cancelled).
 	RequestChoose(prompt string, options []string, defaultIndex int) (int, string, error)
 
-	// CallPlugin invokes a tool on another loaded plugin and returns the
-	// buffered result. Use CallPluginStream to pipe output in real time
-	// through this plugin's Stdout()/Stderr().
-	CallPlugin(pluginName, toolName string, args map[string]string) (ExecResult, error)
-
-	// CallPluginStream invokes a tool on another loaded plugin and pipes
-	// its stdout/stderr chunks directly to this plugin's Stdout()/Stderr()
-	// writers in real time. Returns an error if the call failed or the
-	// target tool returned a non-nil Go error.
-	CallPluginStream(pluginName, toolName string, args map[string]string) error
-
-	// RunScript runs a registered script by name (e.g. "git/commit").
-	// The script executes on the daemon host and may include feedback
-	// steps (confirm, input, choose).
+	// Scripts
 	RunScript(name string) (ScriptResult, error)
 }
 
-// ExecResult contains the result of a shell command execution.
+// ExecResult is the result of a shell command.
 type ExecResult struct {
 	ExitCode int
 	Stdout   string
 	Stderr   string
 }
 
-// ScriptResult contains the result of a script execution.
+// ScriptResult is the result of a script execution.
 type ScriptResult struct {
 	AllSucceeded bool
 	Steps        []ScriptStepResult
 	Error        string
 }
 
-// ScriptStepResult contains the result of a single script step.
+// ScriptStepResult is the result of a single script step.
 type ScriptStepResult struct {
 	StepNumber    int
 	SourceLine    string
-	StepKind      string // "exec", "confirm", "input", "choose"
+	StepKind      string
 	ExitCode      int
 	Stdout        string
 	Stderr        string
 	FeedbackValue string
 }
 
-// contextClient implements the Context interface by calling the daemon's
-// usage-level services over Connect RPC. Each domain has its own service
-// client (ExecService, FeedbackService, LogService, PluginService,
-// ScriptService). All requests carry the X-Dotfiles-Context-Token header
-// for authentication.
+// contextClient implements Context by calling daemon usage services.
 type contextClient struct {
 	execClient     dotfilesdv1connect.ExecServiceClient
 	feedbackClient dotfilesdv1connect.FeedbackServiceClient
 	logClient      dotfilesdv1connect.LogServiceClient
-	pluginClient   dotfilesdv1connect.PluginServiceClient
 	scriptClient   dotfilesdv1connect.ScriptServiceClient
 
-	token      string
-	sessionID  string
-	pluginName string
-	log        logging.Logger
+	token, sessionID, pluginName string
+	log                          logging.Logger
 }
 
-// newContextClient creates a new Context client connected to the daemon's
-// usage-level services.
 func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 	httpClient := &http.Client{}
 	c := &contextClient{
 		execClient:     dotfilesdv1connect.NewExecServiceClient(httpClient, url),
 		feedbackClient: dotfilesdv1connect.NewFeedbackServiceClient(httpClient, url),
 		logClient:      dotfilesdv1connect.NewLogServiceClient(httpClient, url),
-		pluginClient:   dotfilesdv1connect.NewPluginServiceClient(httpClient, url),
 		scriptClient:   dotfilesdv1connect.NewScriptServiceClient(httpClient, url),
 		token:          token,
 		sessionID:      sessionID,
@@ -149,15 +88,12 @@ func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 	return c
 }
 
-// Log returns a structured logger that sends entries to the daemon.
 func (c *contextClient) Log() logging.Logger { return c.log }
 
-// buildSession creates a Session message for use in context requests.
 func (c *contextClient) buildSession() *dotfilesdv1.Session {
 	return &dotfilesdv1.Session{Id: c.sessionID}
 }
 
-// setTokenHeader sets the X-Dotfiles-Context-Token header on a request.
 func (c *contextClient) setTokenHeader(req connect.AnyRequest) {
 	if c.token != "" {
 		req.Header().Set("X-Dotfiles-Context-Token", c.token)
@@ -207,7 +143,6 @@ func (c *contextClient) ExecStream(cmd string, sudo bool) (int, error) {
 	return execStreamWithWriters(c, c.Stdout(), c.Stderr(), cmd, sudo)
 }
 
-// execStreamWithWriters is the shared implementation for ExecStream.
 func execStreamWithWriters(c *contextClient, stdout, stderr io.Writer, cmd string, sudo bool) (int, error) {
 	req := connect.NewRequest(&dotfilesdv1.ExecStreamRequest{
 		Session: c.buildSession(),
@@ -294,93 +229,6 @@ func (c *contextClient) RequestChoose(prompt string, options []string, defaultIn
 	return int(resp.Msg.SelectedIndex), resp.Msg.SelectedOption, nil
 }
 
-func (c *contextClient) CallPlugin(pluginName, toolName string, args map[string]string) (ExecResult, error) {
-	req := connect.NewRequest(&dotfilesdv1.CallPluginToolRequest{
-		Session:    c.buildSession(),
-		PluginName: pluginName,
-		ToolName:   toolName,
-		Arguments:  args,
-	})
-	c.setTokenHeader(req)
-
-	stream, err := c.pluginClient.CallPluginTool(context.Background(), req)
-	if err != nil {
-		return ExecResult{}, fmt.Errorf("call plugin: %w", err)
-	}
-
-	var stdoutBuf, stderrBuf string
-	var errMsg string
-	for stream.Receive() {
-		chunk := stream.Msg()
-		if len(chunk.StdoutChunk) > 0 {
-			stdoutBuf += string(chunk.StdoutChunk)
-		}
-		if len(chunk.StderrChunk) > 0 {
-			stderrBuf += string(chunk.StderrChunk)
-		}
-		if chunk.Done {
-			errMsg = chunk.ErrorMessage
-			break
-		}
-	}
-	if err := stream.Err(); err != nil {
-		return ExecResult{}, fmt.Errorf("call plugin stream: %w", err)
-	}
-
-	exitCode := 0
-	if errMsg != "" {
-		exitCode = 1
-	}
-
-	return ExecResult{
-		ExitCode: exitCode,
-		Stdout:   stdoutBuf,
-		Stderr:   stderrBuf,
-	}, nil
-}
-
-func (c *contextClient) CallPluginStream(pluginName, toolName string, args map[string]string) error {
-	return callPluginStreamWithWriters(c, c.Stdout(), c.Stderr(), pluginName, toolName, args)
-}
-
-// callPluginStreamWithWriters is the shared implementation for
-// CallPluginStream. It opens a CallPluginTool stream and pipes chunks
-// to the given stdout/stderr writers.
-func callPluginStreamWithWriters(c *contextClient, stdout, stderr io.Writer, pluginName, toolName string, args map[string]string) error {
-	req := connect.NewRequest(&dotfilesdv1.CallPluginToolRequest{
-		Session:    c.buildSession(),
-		PluginName: pluginName,
-		ToolName:   toolName,
-		Arguments:  args,
-	})
-	c.setTokenHeader(req)
-
-	stream, err := c.pluginClient.CallPluginTool(context.Background(), req)
-	if err != nil {
-		return fmt.Errorf("call plugin: %w", err)
-	}
-
-	for stream.Receive() {
-		chunk := stream.Msg()
-		if len(chunk.StdoutChunk) > 0 {
-			stdout.Write(chunk.StdoutChunk)
-		}
-		if len(chunk.StderrChunk) > 0 {
-			stderr.Write(chunk.StderrChunk)
-		}
-		if chunk.Done {
-			if chunk.ErrorMessage != "" {
-				return fmt.Errorf("%s", chunk.ErrorMessage)
-			}
-			return nil
-		}
-	}
-	if err := stream.Err(); err != nil {
-		return fmt.Errorf("call plugin stream: %w", err)
-	}
-	return nil
-}
-
 func (c *contextClient) RunScript(name string) (ScriptResult, error) {
 	req := connect.NewRequest(&dotfilesdv1.RunScriptRequest{
 		Session: c.buildSession(),
@@ -415,22 +263,13 @@ func (c *contextClient) RunScript(name string) (ScriptResult, error) {
 	}, nil
 }
 
-// Stdout returns a no-op writer (no streaming outside a tool call context).
-// During tool execution, the plugin server wraps context with a
-// streamingContext that provides real stdout/stderr writers.
 func (c *contextClient) Stdout() io.Writer { return &nopWriter{} }
-
-// Stderr returns a no-op writer (no streaming outside a tool call context).
 func (c *contextClient) Stderr() io.Writer { return &nopWriter{} }
 
-// nopWriter is an io.Writer that discards all data.
 type nopWriter struct{}
-
 func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
-// streamingContext wraps a Context with real stdout/stderr writers that
-// tunnel output via the RPC stream. Used by the plugin server during tool
-// execution.
+// streamingContext wraps Context with real stdout/stderr writers for tool execution.
 type streamingContext struct {
 	Context
 	client *contextClient
@@ -442,31 +281,15 @@ func (c *streamingContext) Stdout() io.Writer   { return c.stdout }
 func (c *streamingContext) Stderr() io.Writer   { return c.stderr }
 func (c *streamingContext) Log() logging.Logger { return c.Context.Log() }
 
-// CallPluginStream overrides the embedded contextClient.CallPluginStream
-// to pipe chunks through the streaming writers instead of the no-op writers.
-func (c *streamingContext) CallPluginStream(pluginName, toolName string, args map[string]string) error {
-	return callPluginStreamWithWriters(c.client, c.stdout, c.stderr, pluginName, toolName, args)
-}
-
-// ExecStream overrides the embedded contextClient.ExecStream to pipe chunks
-// through the streaming writers instead of the no-op writers.
 func (c *streamingContext) ExecStream(cmd string, sudo bool) (int, error) {
 	return execStreamWithWriters(c.client, c.stdout, c.stderr, cmd, sudo)
 }
 
-// BackgroundExec overrides the embedded contextClient.BackgroundExec to
-// use the real streaming writers for Tee() instead of no-op writers.
 func (c *streamingContext) BackgroundExec(cmd string, sudo bool) (BackgroundTask, error) {
 	return startBackgroundTask(c.client.execClient, c.client.token, c.client.buildSession(), c.stdout, c.stderr, cmd, sudo)
 }
 
-// ---------------------------------------------------------------------------
-// pluginLogger — sends log entries to the daemon via the Log RPC
-// ---------------------------------------------------------------------------
-
 // pluginLogger implements logging.Logger by calling the daemon's Log RPC.
-// Each log call sends a separate RPC. The daemon routes entries through
-// its logging system with the plugin name as the logger module.
 type pluginLogger struct {
 	client     *contextClient
 	pluginName string
@@ -474,7 +297,6 @@ type pluginLogger struct {
 }
 
 func (l *pluginLogger) log(level dotfilesdv1.LogLevel, msg string, attrs ...any) {
-	// Merge fixed attrs with call attrs (call attrs take precedence).
 	merged := make(map[string]string)
 	for i := 0; i < len(l.fixedAttrs)-1; i += 2 {
 		k := fmt.Sprintf("%v", l.fixedAttrs[i])
@@ -497,25 +319,14 @@ func (l *pluginLogger) log(level dotfilesdv1.LogLevel, msg string, attrs ...any)
 		},
 	})
 	l.client.setTokenHeader(req)
-
 	_, _ = l.client.logClient.Log(context.Background(), req)
 }
 
-func (l *pluginLogger) Trace(msg string, attrs ...any) {
-	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_TRACE, msg, attrs...)
-}
-func (l *pluginLogger) Debug(msg string, attrs ...any) {
-	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_DEBUG, msg, attrs...)
-}
-func (l *pluginLogger) Info(msg string, attrs ...any) {
-	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_INFO, msg, attrs...)
-}
-func (l *pluginLogger) Warn(msg string, attrs ...any) {
-	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_WARN, msg, attrs...)
-}
-func (l *pluginLogger) Error(msg string, attrs ...any) {
-	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...)
-}
+func (l *pluginLogger) Trace(msg string, attrs ...any) { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_TRACE, msg, attrs...) }
+func (l *pluginLogger) Debug(msg string, attrs ...any) { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_DEBUG, msg, attrs...) }
+func (l *pluginLogger) Info(msg string, attrs ...any)  { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_INFO, msg, attrs...) }
+func (l *pluginLogger) Warn(msg string, attrs ...any)  { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_WARN, msg, attrs...) }
+func (l *pluginLogger) Error(msg string, attrs ...any) { l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...) }
 func (l *pluginLogger) Fatal(msg string, attrs ...any) {
 	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...)
 	os.Exit(1)
@@ -540,8 +351,8 @@ func (l *pluginLogger) WithAttrs(attrs ...any) logging.Logger {
 	}
 }
 
-func (l *pluginLogger) Enabled(level logging.Level) bool {
-	// Plugin logger always reports as enabled at every level. The daemon
-	// decides whether to actually record the entry based on its own config.
-	return true
+func (l *pluginLogger) Enabled(level logging.Level) bool { return true }
+
+func (c *contextClient) BackgroundExec(cmd string, sudo bool) (BackgroundTask, error) {
+	return startBackgroundTask(c.execClient, c.token, c.buildSession(), c.Stdout(), c.Stderr(), cmd, sudo)
 }
