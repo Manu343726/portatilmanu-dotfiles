@@ -40,6 +40,32 @@ dotfilesctl info
 # → I3:      i3 version 4.24
 ```
 
+### `session`
+
+Create and manage sessions. Sessions group related requests that share a persistent
+shell process (bash) and can receive user feedback via callback URL.
+
+```sh
+# Create a new session (returns a session ID)
+dotfilesctl session create
+# → Session created: abc123...
+
+# Use a session (pass --session flag to any command)
+dotfilesctl --session abc123 exec 'ls -la'
+dotfilesctl --session abc123 exec 'pwd'       # same shell, same CWD
+
+# Get session details
+dotfilesctl session get abc123
+
+# List all active sessions
+dotfilesctl session list
+# → ID       Age  Requests  Last Active
+# → abc123   5m   2         5m ago
+
+# Finalize a session (close the shell and mark complete)
+dotfilesctl session finalize abc123
+```
+
 ### `exec`
 
 Run arbitrary shell commands. Supports `--sudo` for privileged operations via `pkexec`.
@@ -58,6 +84,30 @@ dotfilesctl reload         # reload all
 dotfilesctl reload tmux    # reload tmux config only
 dotfilesctl reload i3      # reload i3 config only
 dotfilesctl reload kitty   # reload kitty config only
+```
+
+### `config reload`
+
+Alias for `reload`. Reloads configuration files.
+
+```sh
+dotfilesctl config reload tmux
+```
+
+### `config reconfigure`
+
+Change daemon runtime configuration (e.g., log level) without restarting.
+
+```sh
+dotfilesctl config reconfigure --log-level debug
+```
+
+### `config restart`
+
+Gracefully restart the dotfilesd daemon.
+
+```sh
+dotfilesctl config restart
 ```
 
 ### `git`
@@ -208,14 +258,27 @@ dotfilesctl plugin list -v    # verbose: show input schemas
 
 # Invoke a tool on a plugin
 dotfilesctl plugin call <plugin> <tool> key=value...
+
+# Show plugin hierarchy (parent/child relationships)
+dotfilesctl plugin tree
 ```
 
-Example:
+Examples:
 
 ```sh
 dotfilesctl plugin call weather forecast location=Madrid
 # → Weather for Madrid, Spain
 #    ⛅  +22°C
+
+dotfilesctl plugin call resources current
+# → Memory:  7.8 GiB / 15.4 GiB (51%)
+#    CPU:     12.5%
+#    Disk:    42% / 234 GiB
+
+dotfilesctl plugin call resources top
+# →  PID  %CPU  MEM    COMMAND
+#    1234 45.2  2.1%   chromium
+#    5678 12.3  8.4%   code
 
 dotfilesctl plugin list
 # → Name:        weather
@@ -224,7 +287,23 @@ dotfilesctl plugin list
 #    Description: Weather forecast plugin using wttr.in
 #    Tools:       forecast
 #
-#    1 plugin(s) loaded.
+#    Name:        resources
+#    Display:     Resources
+#    Version:     1.0.0
+#    Description: System resource monitor
+#    Tools:       current, top, ps, history
+#
+#    2 plugin(s) loaded.
+
+dotfilesctl plugin tree
+# → plugins/
+# →   weather/    Weather forecast
+# →     forecast  Get weather forecast for a location
+# →   resources/  System resource monitor
+# →     current   System resource snapshot
+# →     top       Top processes by CPU or memory
+# →     ps        Detailed process list with sparklines
+# →     history   Historical sparkline graphs
 ```
 
 ## MCP tools (for AI agents)
@@ -252,11 +331,21 @@ Available when opencode launches `dotfilesctl mcp` as a stdio subprocess.
 When plugins are loaded, their tools are automatically available as MCP tools
 qualified with the plugin name: `<plugin>_<tool>`.
 
-Example with the weather plugin loaded:
+With the weather and resources plugins loaded:
 
 | Tool | Description |
 |------|-------------|
 | `weather_forecast` | Get weather forecast for a location |
+| `resources_current` | System resource snapshot |
+| `resources_top` | Top processes by CPU or memory |
+| `resources_ps` | Detailed process list with sparklines |
+| `resources_history` | Historical sparkline graphs |
+
+### App-only tools (MCP Apps runtime)
+
+| Tool | Description |
+|------|-------------|
+| `_sudo_submit_password` | Submit sudo password from MCP Apps webview (visibility: app) |
 
 ### Detailed reference
 

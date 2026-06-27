@@ -17,6 +17,13 @@
 - Protocol Buffers compiler (`protoc --version`)
 - `protoc-gen-go` + `protoc-gen-connect-go`
 
+### Proto tool versions (as used in `Makefile`)
+
+```makefile
+PROTOC_GEN_GO_VERSION = v1.36.6
+PROTOC_GEN_CONNECT_GO_VERSION = v1.20.0
+```
+
 Install proto tools:
 
 ```sh
@@ -80,10 +87,43 @@ make proto
 
 Requires `protoc`, `protoc-gen-go`, and `protoc-gen-connect-go` on `$PATH`.
 
+### Proto files
+
+Service definitions are split by domain in `proto/dotfilesd/v1/dotfilesdv1/`:
+
+| File | Services defined |
+|------|-----------------|
+| `system.proto` | `SystemService` (Ping, Info, SudoMethods, ListPlugins, ListPluginTree, CallPluginTool) |
+| `dotfiles.proto` | `DotfilesService` (Status, Git) |
+| `exec.proto` | `ExecService` (Exec, SudoExec) |
+| `config.proto` | `ConfigService` (Reload, Reconfigure, Restart) |
+| `session.proto` | `SessionService` (CreateSession, Connect, FinalizeSession, GetSession, ListSessions) |
+| `script.proto` | `ScriptService` (RunScript, ListScripts) |
+| `extension.proto` | `ExtensionService` (GetDescriptor, CallTool) — daemon ↔ plugin |
+| `execution_context.proto` | `ExecutionContext` (Exec, SudoExec, RequestInput, RequestConfirm, RequestChoose) — plugin ↔ daemon |
+
+Generated output:
+- `*.pb.go` — protoc-gen-go type stubs
+- `dotfilesdv1connect/*.connect.go` — protoc-gen-connect-go client/server stubs
+
 ## Managing dependencies
 
 ```sh
 make deps           # go mod tidy + go mod download
+```
+
+## Testing
+
+```sh
+make test           # run all tests
+make test-verbose   # run with -v flag
+make test-short     # run with -short flag (skips integration tests)
+```
+
+All build and test targets support a clean build cache:
+
+```sh
+make clean          # remove binary cache, force rebuild
 ```
 
 ## Code layout
@@ -95,9 +135,11 @@ make deps           # go mod tidy + go mod download
 | `cmd/dotfilesctl/root.go` | `main` | Root command, persistent flags, MCP entry |
 | `internal/pkg/daemon/` | `daemon` | Daemon business logic (servers, session, exec, plugin) |
 | `internal/pkg/cli/` | `cli` | CLI business logic (clients, MCP dispatch, feedback, plugin) |
-| `internal/pkg/plugin/` | `plugin` | Plugin manager, builder, runtime, registry |
-| `plugin/` | `plugin` | Public plugin SDK (Serve, Tool, Context) |
-| `plugins/` | - | Example plugins |
+| `internal/pkg/plugin/` | `plugin` | Plugin manager, builder, runtime, registry, supervisor |
+| `internal/pkg/shared/` | `shared` | Build hash checking |
+| `plugin/` | `plugin` | Public plugin SDK (Serve, ServeWithBackground, Tool, Context) |
+| `plugins/` | - | Example plugins (weather, resources) |
+| `scripts/` | - | Dotfiles scripts (.dsh files with YAML front matter) |
 | `proto/dotfilesd/v1/dotfilesdv1/*.proto` | `dotfilesdv1` | Protobuf service definitions (split by domain) |
 | `proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/` | `dotfilesdv1connect` | Generated Connect-RPC clients |
 
@@ -121,11 +163,31 @@ make deps           # go mod tidy + go mod download
    ```
 3. Define tools with `plugin.NewTool()` specifying input schemas and handler functions
 4. Use `ctx.Exec()`, `ctx.SudoExec()`, etc. to interact with the host through the daemon
+
+   For plugins that need background work (data collection, polling, watching), use
+   `plugin.ServeWithBackground()` instead of `plugin.Serve()`:
+   ```go
+   func main() {
+       plugin.ServeWithBackground("resources", "Resources", "1.0.0",
+           "System resource monitor",
+           func(ctx context.Context, pCtx plugin.Context, started chan<- struct{}) {
+               // Background collector goroutine — runs for the plugin's lifetime
+               started <- struct{}{}  // signal that background init is done
+               collectPeriodically(ctx, pCtx)
+           },
+           tools...,
+       )
+   }
+   ```
+   `ServeWithBackground` starts the background goroutine **before** the handshake,
+   so the daemon only marks the plugin as ready after the background init completes.
+
 5. Add a `replace dotfilesd => /home/manu343726/dotfilesd` directive in the plugin's `go.mod`
 6. Run `go mod tidy` in the plugin directory
 7. Verify with `go build .`
 8. Restart the daemon to load the plugin: `systemctl --user restart dotfilesd`
 9. Verify with `dotfilesctl plugin list`
+10. To build all plugins at once: `make plugin-build-all`
 
 For detailed plugin documentation, see `docs/plugins.md`.
 

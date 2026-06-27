@@ -84,12 +84,30 @@ journalctl --user -u dotfilesd -f
 
 ## Configuration
 
-The daemon reads these environment variables:
+The daemon reads configuration from `~/.config/dotfilesd/config.yaml` (YAML) and
+environment variables. Environment variables take precedence over config file values.
+
+### Config file (`~/.config/dotfilesd/config.yaml`)
+
+```yaml
+port: 9105
+log_dir: ~/dotfilesd/logs
+log_level: info
+plugins_dir: ~/.config/dotfilesd/plugins
+plugin_cache_dir: ~/.cache/dotfilesd/plugins
+scripts_dir: ~/.config/dotfilesd/scripts
+```
+
+### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DOTFILESD_PORT` | `9105` | Connect RPC port |
 | `DOTFILESD_LOG_DIR` | `~/dotfilesd/logs` | Log output directory |
+| `DOTFILESD_LOG_LEVEL` | `info` | Log level (trace/debug/info/warn/error) |
+| `DOTFILESD_PLUGINS_DIR` | `~/.config/dotfilesd/plugins` | Plugin sources directory |
+| `DOTFILESD_PLUGIN_CACHE_DIR` | `~/.cache/dotfilesd/plugins` | Compiled plugin binary cache |
+| `DOTFILESD_SCRIPTS_DIR` | `~/.config/dotfilesd/scripts` | Scripts directory (.dsh files) |
 
 ## Running without systemd
 
