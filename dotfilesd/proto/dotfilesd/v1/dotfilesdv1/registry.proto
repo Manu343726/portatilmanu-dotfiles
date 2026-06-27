@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/descriptor.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/extension.proto";
+
+// PluginRegistryService is exposed by the daemon so plugins can discover
+// other plugins and their type-safe RPC services. Plugins call this service
+// to get the address and descriptor of another plugin, then connect their
+// own generated Connect clients directly.
+//
+// This is the read-only (usage-level) service. Administrative operations
+// (reload, rebuild) are not exposed here.
+service PluginRegistryService {
+  // GetPlugin returns the connection info and descriptor for a plugin.
+  rpc GetPlugin(GetPluginRequest) returns (GetPluginResponse);
+  // ListPlugins returns all registered plugins.
+  rpc ListPlugins(ListPluginsForRegistryRequest) returns (ListPluginsForRegistryResponse);
+}
+
+message GetPluginRequest {
+  Session session = 100;
+  string plugin_name = 1;
+}
+
+message GetPluginResponse {
+  string name = 1;
+  // Base URL of the plugin's RPC server.
+  string url = 2;
+  // The plugin's extension descriptor (name, version, tools, etc.).
+  ExtensionDescriptor descriptor = 3;
+  // Additional type-safe RPC services exposed by this plugin.
+  repeated ServiceInfo services = 4;
+}
+
+message ListPluginsForRegistryRequest {
+  Session session = 100;
+}
+
+message ListPluginsForRegistryResponse {
+  repeated GetPluginResponse plugins = 1;
+}

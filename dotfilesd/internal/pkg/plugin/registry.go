@@ -6,15 +6,20 @@ import (
 	"sync"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 )
 
 // PluginInfo holds the metadata and client for a loaded plugin.
 type PluginInfo struct {
 	Descriptor *dotfilesdv1.ExtensionDescriptor // plugin capabilities
-	Client     *Client                          // RPC client for calling the plugin
+	Client     *Client                          // ExtensionService RPC client (legacy)
 	Process    *Process                         // running plugin subprocess
 	SourceDir  string                           // source directory for rebuild on restart
 	CacheDir   string                           // cache directory for build artifacts
+
+	// Type-safe plugin-to-plugin service info.
+	DescriptorClient dotfilesdv1connect.DescriptorServiceClient // DescriptorService (daemon-known)
+	Services         []*dotfilesdv1.ServiceInfo                  // custom RPC services for plugin-to-plugin
 }
 
 // Registry maintains a thread-safe map of loaded plugins.

@@ -120,6 +120,10 @@ func (d *Daemon) Start() error {
 		p, h := dotfilesdv1connect.NewPluginServiceHandler(newPluginServiceServer(d.sessions, d))
 		mux.Handle(p, h)
 	}
+	{
+		p, h := dotfilesdv1connect.NewPluginRegistryServiceHandler(newRegistryServer(d.sessions, d))
+		mux.Handle(p, h)
+	}
 
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)
 	d.server = &http.Server{

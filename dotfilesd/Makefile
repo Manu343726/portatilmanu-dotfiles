@@ -164,13 +164,54 @@ plugin-build:
 	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
 	@echo "plugin '$(PLUGIN)' built."
 
-# Build all plugins found in the plugins directory
+# Build all plugins found in the plugins directory, respecting dependency order.
+# Dependencies are inferred from go.mod `require` directives: if plugin A's
+# go.mod has a `require` line pointing to another plugin directory, plugin A
+# depends on that plugin and it will be built first.
 plugin-build-all:
-	@for dir in $(PLUGIN_DIR)/*/; do \
+	@echo "building plugins in dependency order..."
+	@rm -f /tmp/plugin-build-order.txt; \
+	for dir in $(PLUGIN_DIR)/*/; do \
 		name=$$(basename $$dir); \
-		echo "building plugin: $$name..."; \
-		mkdir -p $(PLUGIN_CACHE_DIR)/$$name; \
-		cd $$dir && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/$$name .; \
+		if [ -f "$$dir/go.mod" ]; then \
+			echo "$$name" >> /tmp/plugin-build-order.txt; \
+		fi; \
+	done; \
+	ordered=""; \
+	while [ -s /tmp/plugin-build-order.txt ]; do \
+		changed=0; \
+		for name in $$(cat /tmp/plugin-build-order.txt); do \
+			deps=""; \
+			if [ -f "$(PLUGIN_DIR)/$$name/go.mod" ]; then \
+				deps=$$(grep "^require\|^.*require" "$(PLUGIN_DIR)/$$name/go.mod" 2>/dev/null | grep -v "dotfilesd" | grep -v "^require (" | grep -v "^)" | sed 's/.*"\(.*\)".*/\1/' | xargs -I{} basename {} 2>/dev/null || true); \
+			fi; \
+			satisfied=1; \
+			for dep in $$deps; do \
+				dep_name=$$(basename $$dep); \
+				if echo " $$ordered " | grep -qv " $$dep_name "; then \
+					if echo " $$ordered " | grep -qv " $$dep_name$$"; then \
+						satisfied=0; \
+					fi; \
+				fi; \
+			done; \
+			if [ $$satisfied -eq 1 ]; then \
+				echo "  building: $$name..."; \
+				mkdir -p $(PLUGIN_CACHE_DIR)/$$name; \
+				cd $(PLUGIN_DIR)/$$name && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/$$name .; \
+				ordered="$$ordered $$name"; \
+				changed=1; \
+				sed -i "/^$$name$$/d" /tmp/plugin-build-order.txt 2>/dev/null || true; \
+			fi; \
+		done; \
+		if [ $$changed -eq 0 ]; then \
+			echo "  WARNING: circular or unsatisfied dependencies, building remaining as-is"; \
+			for name in $$(cat /tmp/plugin-build-order.txt); do \
+				echo "  building: $$name..."; \
+				mkdir -p $(PLUGIN_CACHE_DIR)/$$name; \
+				cd $(PLUGIN_DIR)/$$name && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/$$name .; \
+			done; \
+			break; \
+		fi; \
 	done
 	@echo "all plugins built."
 

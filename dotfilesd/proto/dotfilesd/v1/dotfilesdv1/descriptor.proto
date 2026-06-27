@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+import "proto/dotfilesd/v1/dotfilesdv1/extension.proto";
+
+// DescriptorService is the standard service that EVERY plugin exposes.
+// The daemon has this protocol at compile time and calls GetDescriptor
+// after the handshake to learn the plugin's metadata. This replaces
+// the old ExtensionService for discovery — though ExtensionService.CallTool
+// is still supported for backward-compatible tool dispatch.
+//
+// Plugins implement this service automatically via the SDK's Serve().
+// The daemon can also use grpcreflect to discover additional custom
+// Connect services the plugin exposes for type-safe plugin-to-plugin calls.
+service DescriptorService {
+  // GetDescriptor returns the plugin's metadata (name, version, tools, etc.).
+  // Uses the standard GetDescriptorRequest/GetDescriptorResponse messages
+  // defined in extension.proto.
+  rpc GetDescriptor(GetDescriptorRequest) returns (GetDescriptorResponse);
+
+  // ListServices returns the RPC services exposed by this plugin.
+  // The daemon uses this (along with grpcreflect) to populate the
+  // plugin registry so other plugins can discover and call them.
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+}
+
+message ListServicesRequest {}
+
+message ServiceInfo {
+  // Fully-qualified service name, e.g. "dotfilesd.v1.WeatherService".
+  string name = 1;
+  // Human-readable description of what this service does.
+  string description = 2;
+  // Whether this service is exposed for plugin-to-plugin calls.
+  // If false, it's an internal/system service.
+  bool plugin_accessible = 3;
+  // Method names for quick reference.
+  repeated string methods = 4;
+}
+
+message ListServicesResponse {
+  repeated ServiceInfo services = 1;
+}

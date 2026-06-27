@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"sync"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
 	"gopkg.in/yaml.v3"
@@ -339,13 +341,30 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir, plu
 		slog.Debug("  plugin tool", "name", name, "tool", t.Name, "description", t.Description)
 	}
 
+	// Call DescriptorService (daemon-known protocol) to discover custom services.
+	httpClient := &http.Client{}
+	descClient := dotfilesdv1connect.NewDescriptorServiceClient(httpClient, proc.URL)
+	var services []*dotfilesdv1.ServiceInfo
+	listResp, listErr := descClient.ListServices(ctx, connect.NewRequest(&dotfilesdv1.ListServicesRequest{}))
+	if listErr == nil && listResp.Msg.Services != nil {
+		services = listResp.Msg.Services
+		slog.Debug("plugin services discovered", "name", name, "count", len(services))
+		for _, svc := range services {
+			slog.Debug("  service", "name", svc.Name, "accessible", svc.PluginAccessible)
+		}
+	} else {
+		slog.Debug("plugin has no custom services or no DescriptorService", "name", name, "err", listErr)
+	}
+
 	slog.Debug("registering plugin", "name", name)
 	info := &PluginInfo{
-		Descriptor: desc,
-		Client:     client,
-		Process:    proc,
-		SourceDir:  sourceDir,
-		CacheDir:   cacheDir,
+		Descriptor:       desc,
+		Client:           client,
+		Process:          proc,
+		SourceDir:        sourceDir,
+		CacheDir:         cacheDir,
+		DescriptorClient: descClient,
+		Services:         services,
 	}
 	if err := m.registry.Register(name, info); err != nil {
 		proc.Kill()
@@ -403,6 +422,29 @@ func (m *Manager) ListPlugins() []dotfilesdv1.ExtensionDescriptor {
 		}
 	}
 	return result
+}
+
+// ListPluginInfos returns full plugin info entries including URLs and services.
+func (m *Manager) ListPluginInfos() []PluginInfo {
+	return m.registry.List()
+}
+
+// PluginURL returns the RPC URL for a loaded plugin.
+func (m *Manager) PluginURL(name string) (string, bool) {
+	info, ok := m.registry.Get(name)
+	if !ok {
+		return "", false
+	}
+	return info.Process.URL, true
+}
+
+// PluginServices returns the custom services exposed by a plugin.
+func (m *Manager) PluginServices(name string) ([]*dotfilesdv1.ServiceInfo, bool) {
+	info, ok := m.registry.Get(name)
+	if !ok {
+		return nil, false
+	}
+	return info.Services, true
 }
 
 // ListPluginTree returns the tree of plugin directory entries from the

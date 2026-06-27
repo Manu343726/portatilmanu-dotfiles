@@ -1,28 +1,52 @@
 // Package plugin is the public SDK for writing dotfilesd extensions (plugins).
 //
 // A plugin is a standalone Go program that uses this SDK to:
-//   - Expose tools (commands) that the daemon can discover via the Extension API
-//   - Use the Execution Context to interact with the host system (run commands,
-//     prompt the user, etc.) through the daemon's controlled interface
+//   - Expose tools (commands) that the daemon discovers via DescriptorService
+//   - Expose type-safe Connect RPC services for plugin-to-plugin calls
+//   - Use the plugin Context to interact with the host system
 //
-// Usage (in a plugin's main.go):
+// Usage (simple tool-based plugin):
 //
 //	func main() {
-//	    plugin.Serve("hello", "Hello World", "1.0.0", "A sample plugin",
-//	        plugin.NewTool("greet", "Greet someone",
-//	            &dotfilesdv1.ToolInputSchema{
-//	                Properties: map[string]*dotfilesdv1.PropertySchema{
-//	                    "name": {Type: "string", Description: "Name to greet"},
+//	    plugin.Serve(plugin.Config{
+//	        Name:        "weather",
+//	        DisplayName: "Weather Plugin",
+//	        Version:     "1.0.0",
+//	        Description: "Fetches weather data from wttr.in",
+//	        Tools: []plugin.Tool{
+//	            plugin.NewTool("forecast", "Get weather forecast",
+//	                &dotfilesdv1.ToolInputSchema{...},
+//	                nil,
+//	                func(ctx plugin.Context, args map[string]string) error {
+//	                    result, _ := ctx.Exec("curl wttr.in")
+//	                    fmt.Fprintln(ctx.Stdout(), result.Stdout)
+//	                    return nil
 //	                },
-//	                Required: []string{"name"},
-//	            },
-//	            &dotfilesdv1.CLIHints{CommandPath: "greet"},
-//	            func(ctx plugin.Context, args map[string]string) error {
-//	                fmt.Fprintf(ctx.Stdout(), "Hello, %s!", args["name"])
-//	                return nil
-//	            },
-//	        ),
-//	    )
+//	            ),
+//	        },
+//	    })
+//	}
+//
+// Usage (with custom RPC service for type-safe plugin-to-plugin calls):
+//
+//	func main() {
+//	    weatherSvc := &myWeatherService{}
+//	    path, handler := weatherconnect.NewWeatherServiceHandler(weatherSvc)
+//
+//	    plugin.Serve(plugin.Config{
+//	        Name:        "weather",
+//	        DisplayName: "Weather Plugin",
+//	        Version:     "1.0.0",
+//	        Description: "Fetches weather data from wttr.in",
+//	        Services: []plugin.ServiceRegistration{
+//	            {Path: path, Handler: handler,
+//	             Info: &dotfilesdv1.ServiceInfo{
+//	                 Name: "dotfilesd.v1.WeatherService",
+//	                 Description: "Type-safe weather API for other plugins",
+//	                 PluginAccessible: true,
+//	             }},
+//	        },
+//	    })
 //	}
 package plugin
 
@@ -42,72 +66,73 @@ import (
 	"connectrpc.com/connect"
 )
 
-// Serve starts the plugin's Connect RPC server and performs the handshake
-// with the daemon. It blocks until the process receives SIGTERM or SIGINT.
-//
-// The daemon launches the plugin binary with these environment variables:
-//   - EXECUTION_CONTEXT_URL — base URL of the daemon's Execution Context service
-//   - EXECUTION_CONTEXT_TOKEN — secret token for authenticating context requests
-//   - SESSION_ID — plugin's session ID for grouping requests
-//
-// Serve writes a JSON handshake to stdout:
-//
-//	{"protocol":"dotfilesd-extension-v1","url":"http://127.0.0.1:PORT","session_id":"..."}
-//
-// The daemon reads this line to learn the plugin's URL and then calls
-// GetDescriptor to discover the plugin's capabilities.
-//
-// Tools execute in their own goroutine when the daemon calls CallTool. Each
-// tool receives a plugin.Context that can be used to run system commands,
-// prompt the user, or stream output through the daemon.
-func Serve(name, displayName, version, description string, tools ...Tool) {
-	serve(name, displayName, version, description, tools, nil)
+// Config configures a plugin server.
+type Config struct {
+	// Basic plugin metadata.
+	Name, DisplayName, Version, Description string
+
+	// Legacy tool-based API (wrapped into ExtensionService.CallTool).
+	Tools []Tool
+
+	// Background worker (optional). Runs after the server starts.
+	Background func(ctx Context, stop <-chan struct{})
+
+	// Type-safe Connect RPC services this plugin exposes.
+	// Other plugins can call these after discovering them via the registry.
+	Services []ServiceRegistration
 }
 
-// ServeWithBackground is like Serve but also starts a background goroutine
-// with access to the execution context. This is useful for plugins that
-// need to perform continuous work (polling, monitoring, aggregation) using
-// the daemon's exec context throughout the plugin's lifetime.
+// ServiceRegistration registers a custom Connect service on the plugin.
+type ServiceRegistration struct {
+	Path    string                    // HTTP path prefix (e.g. "/dotfilesd.v1.WeatherService/")
+	Handler http.Handler
+	Info    *dotfilesdv1.ServiceInfo  // metadata for the registry
+}
+
+// ServePlugin starts the plugin server with the given config.
 //
-// The background function receives the plugin's Context and a stop channel.
-// It should return when the stop channel is closed (the daemon is shutting
-// down or the plugin was killed). The background goroutine is started after
-// the plugin server is fully initialized and the handshake has completed.
+// The server automatically exposes:
+//   - DescriptorService (daemon-known protocol for discovery)
+//   - ExtensionService (backward compat for legacy tool dispatch)
+//   - All custom services from Config.Services
 //
-// Usage:
-//
-//	func main() {
-//	    plugin.ServeWithBackground("ram", "RAM Monitor", "1.0.0",
-//	        "Live RAM monitoring",
-//	        func(ctx plugin.Context, stop <-chan struct{}) {
-//	            // background loop: collect, poll, etc.
-//	            for {
-//	                select {
-//	                case <-stop:
-//	                    return
-//	                case <-time.After(5 * time.Second):
-//	                    // use ctx.Exec(...), etc.
-//	                }
-//	            }
-//	        },
-//	        plugin.NewTool("current", "Get current RAM usage", ...),
-//	        plugin.NewTool("history", "Show RAM usage history", ...),
-//	    )
-//	}
+// It performs the handshake with the daemon and blocks until SIGTERM/SIGINT.
+// This is the new-style entry point. Use Serve() for simple tool-only plugins.
+func ServePlugin(cfg Config) {
+	serve(cfg)
+}
+
+// Serve is the traditional convenience wrapper for simple tool plugins.
+// It calls ServePlugin with a Config built from the positional arguments.
+func Serve(name, displayName, version, description string, tools ...Tool) {
+	serve(Config{
+		Name:        name,
+		DisplayName: displayName,
+		Version:     version,
+		Description: description,
+		Tools:       tools,
+	})
+}
+
+// ServeWithBackground is the traditional wrapper for plugins with a background
+// worker. It calls ServePlugin with a Config built from the positional args.
 func ServeWithBackground(
 	name, displayName, version, description string,
 	background func(ctx Context, stop <-chan struct{}),
 	tools ...Tool,
 ) {
-	serve(name, displayName, version, description, tools, background)
+	serve(Config{
+		Name:        name,
+		DisplayName: displayName,
+		Version:     version,
+		Description: description,
+		Tools:       tools,
+		Background:  background,
+	})
 }
 
-// serve is the shared implementation for Serve and ServeWithBackground.
-func serve(
-	name, displayName, version, description string,
-	tools []Tool,
-	background func(ctx Context, stop <-chan struct{}),
-) {
+// serve is the shared implementation.
+func serve(cfg Config) {
 	ctxURL := os.Getenv("EXECUTION_CONTEXT_URL")
 	ctxToken := os.Getenv("EXECUTION_CONTEXT_TOKEN")
 	sessionID := os.Getenv("SESSION_ID")
@@ -117,22 +142,37 @@ func serve(
 		os.Exit(1)
 	}
 
-	// Build the extension server with tool handlers.
-	ctxClient := newContextClient(ctxURL, ctxToken, sessionID, name)
+	ctxClient := newContextClient(ctxURL, ctxToken, sessionID, cfg.Name)
 
 	mux := http.NewServeMux()
 
-	svc := &extensionSvcServer{
-		name:        name,
-		displayName: displayName,
-		version:     version,
-		description: description,
-		tools:       tools,
-		ctxClient:   ctxClient,
+	// 1. DescriptorService — daemon-known protocol, always served.
+	descSvc := &descriptorServiceServer{
+		name:        cfg.Name,
+		displayName: cfg.DisplayName,
+		version:     cfg.Version,
+		description: cfg.Description,
+		tools:       cfg.Tools,
+		services:    cfg.Services,
+	}
+	dPath, dHandler := dotfilesdv1connect.NewDescriptorServiceHandler(descSvc)
+	mux.Handle(dPath, dHandler)
+
+	// 2. Legacy ExtensionService — backward compat tool dispatch.
+	if len(cfg.Tools) > 0 {
+		extSvc := &extensionSvcServer{
+			name:      cfg.Name,
+			tools:     cfg.Tools,
+			ctxClient: ctxClient,
+		}
+		ePath, eHandler := dotfilesdv1connect.NewExtensionServiceHandler(extSvc)
+		mux.Handle(ePath, eHandler)
 	}
 
-	path, handler := dotfilesdv1connect.NewExtensionServiceHandler(svc)
-	mux.Handle(path, handler)
+	// 3. Custom services (type-safe plugin-to-plugin RPC).
+	for _, svc := range cfg.Services {
+		mux.Handle(svc.Path, svc.Handler)
+	}
 
 	// Listen on a random available port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -142,11 +182,12 @@ func serve(
 	}
 
 	addr := listener.Addr().(*net.TCPAddr)
+	pluginURL := fmt.Sprintf("http://127.0.0.1:%d", addr.Port)
 
 	// Write handshake JSON to stdout so the daemon can discover us.
 	handshake := map[string]string{
 		"protocol":   "dotfilesd-extension-v1",
-		"url":        fmt.Sprintf("http://127.0.0.1:%d", addr.Port),
+		"url":        pluginURL,
 		"session_id": sessionID,
 	}
 	enc := json.NewEncoder(os.Stdout)
@@ -166,26 +207,26 @@ func serve(
 		}
 	}()
 
-	// Start the background worker if provided.
-	if background != nil {
+	// Start background worker if provided.
+	if cfg.Background != nil {
 		stopCh := make(chan struct{})
-		go background(ctxClient, stopCh)
+		go cfg.Background(ctxClient, stopCh)
 		<-sigCh
-		close(stopCh) // signal the background worker to stop
+		close(stopCh)
 	} else {
 		<-sigCh
 	}
 	_ = srv.Shutdown(context.Background())
 }
 
-// extensionSvcServer implements the ExtensionService Connect RPC handlers.
-type extensionSvcServer struct {
+// descriptorServiceServer implements the DescriptorService.
+type descriptorServiceServer struct {
 	name, displayName, version, description string
 	tools                                   []Tool
-	ctxClient                               *contextClient
+	services                                []ServiceRegistration
 }
 
-func (s *extensionSvcServer) GetDescriptor(
+func (s *descriptorServiceServer) GetDescriptor(
 	ctx context.Context,
 	req *connect.Request[dotfilesdv1.GetDescriptorRequest],
 ) (*connect.Response[dotfilesdv1.GetDescriptorResponse], error) {
@@ -210,6 +251,48 @@ func (s *extensionSvcServer) GetDescriptor(
 	}), nil
 }
 
+func (s *descriptorServiceServer) ListServices(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.ListServicesRequest],
+) (*connect.Response[dotfilesdv1.ListServicesResponse], error) {
+	svcInfos := make([]*dotfilesdv1.ServiceInfo, len(s.services))
+	for i, svc := range s.services {
+		svcInfos[i] = svc.Info
+	}
+	return connect.NewResponse(&dotfilesdv1.ListServicesResponse{
+		Services: svcInfos,
+	}), nil
+}
+
+// extensionSvcServer implements the legacy ExtensionService for backward compat.
+type extensionSvcServer struct {
+	name      string
+	tools     []Tool
+	ctxClient *contextClient
+}
+
+func (s *extensionSvcServer) GetDescriptor(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.GetDescriptorRequest],
+) (*connect.Response[dotfilesdv1.GetDescriptorResponse], error) {
+	toolsPB := make([]*dotfilesdv1.ToolDescriptor, len(s.tools))
+	for i, t := range s.tools {
+		toolsPB[i] = &dotfilesdv1.ToolDescriptor{
+			Name:        t.Name(),
+			Description: t.Description(),
+			Input:       t.Input(),
+			Cli:         t.CLI(),
+		}
+	}
+
+	return connect.NewResponse(&dotfilesdv1.GetDescriptorResponse{
+		Descriptor_: &dotfilesdv1.ExtensionDescriptor{
+			Name:  s.name,
+			Tools: toolsPB,
+		},
+	}), nil
+}
+
 func (s *extensionSvcServer) CallTool(
 	ctx context.Context,
 	req *connect.Request[dotfilesdv1.CallToolRequest],
@@ -217,12 +300,9 @@ func (s *extensionSvcServer) CallTool(
 ) error {
 	for _, t := range s.tools {
 		if t.Name() == req.Msg.ToolName {
-			// Create stdout/stderr writers that tunnel output via the RPC stream.
 			stdout := &streamWriter{stream: stream}
 			stderr := &streamWriter{stream: stream, isStderr: true}
 
-			// Wrap context with streaming writers so tool output is sent
-			// back to the caller in real time.
 			toolCtx := &streamingContext{
 				Context: s.ctxClient,
 				client:  s.ctxClient,
@@ -230,8 +310,6 @@ func (s *extensionSvcServer) CallTool(
 				stderr:  stderr,
 			}
 
-			// Run the tool. It writes to ctx.Stdout()/Stderr() and may
-			// return an error.
 			err := t.Run(toolCtx, req.Msg.Arguments)
 			doneMsg := &dotfilesdv1.CallToolResponse{Done: true}
 			if err != nil {
@@ -243,8 +321,7 @@ func (s *extensionSvcServer) CallTool(
 	return connect.NewError(connect.CodeNotFound, fmt.Errorf("tool %q not found", req.Msg.ToolName))
 }
 
-// streamWriter implements io.Writer by sending each Write call as a chunk
-// on the Connect server stream.
+// streamWriter implements io.Writer by sending each Write as a chunk.
 type streamWriter struct {
 	stream   *connect.ServerStream[dotfilesdv1.CallToolResponse]
 	isStderr bool
