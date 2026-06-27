@@ -2,6 +2,9 @@
 
 ## Logs
 
+The daemon uses a structured logging system with level filtering, color output,
+and rotating file sinks. See `docs/logging.md` for full documentation.
+
 ### Daemon (systemd service)
 
 ```sh
@@ -15,6 +18,7 @@ journalctl --user -u dotfilesd -n 50       # last 50 lines
 ```sh
 tail -f ~/dotfilesd/logs/dotfilesd.log
 tail -f ~/dotfilesd/logs/dotfilesctl.log
+tail -f ~/dotfilesd/logs/plugins/weather.log   # plugin-specific (if configured)
 ```
 
 ### CLI verbose mode
@@ -96,13 +100,26 @@ dotfilesctl plugin tree         # show plugin hierarchy
 
 ### Inspect plugin logs
 
-Plugin logs are interleaved with daemon logs:
+Plugin logs are interleaved with daemon logs. They appear under the `[plugin.<name>]`
+module hierarchy:
 
 ```sh
-journalctl --user -u dotfilesd -f | grep -i plugin
-# Or:
-cat ~/dotfilesd/logs/dotfilesd.log | grep -i plugin
+journalctl --user -u dotfilesd -f | grep -i '\[plugin\.'
+# Or via the log file:
+tail -f ~/dotfilesd/logs/dotfilesd.log | grep '\[plugin\.'
+
+# Filter for a specific plugin:
+journalctl --user -u dotfilesd -f | grep '\[plugin\.weather'
 ```
+
+If plugin `debug`/`trace` messages are not appearing, the daemon's log level
+may be filtering them. Change it at runtime:
+
+```sh
+dotfilesctl config reconfigure --log-level debug
+```
+
+For dedicated per-plugin log files, see `docs/logging.md#plugin-log-files`.
 
 ### Common plugin issues
 

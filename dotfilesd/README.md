@@ -100,6 +100,7 @@ For commands with `sudo=true`, the daemon supports multiple auth methods:
 | Deploy & Install | `docs/deploy.md` |
 | Debugging | `docs/debugging.md` |
 | Features | `docs/features.md` |
+| Logging System | `docs/logging.md` |
 | Plugin System | `docs/plugins.md` |
 
 ## Project layout

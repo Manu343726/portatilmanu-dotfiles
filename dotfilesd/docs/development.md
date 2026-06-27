@@ -193,10 +193,30 @@ For detailed plugin documentation, see `docs/plugins.md`.
 
 ## Logging
 
-Both the daemon and CLI use Go's `log/slog` package with structured text output to rotated log files.
-**Neither the daemon nor the CLI ever write log output to stdout or stderr** — program output
-(e.g. `dotfilesctl exec` displaying command results) goes to stdout/stderr directly via `fmt.Print`,
-but internal diagnostic logging goes exclusively to files.
+The daemon uses a structured, hierarchical logging system with level filtering,
+colored output, and rotating file sinks. See `docs/logging.md` for full documentation.
+
+### Quick reference
+
+```go
+import "dotfilesd/internal/pkg/logging"
+
+// Package-level logging
+logging.Info("server started", "port", 9105)
+
+// Named loggers (hierarchical)
+var log = logging.NewPackageLogger("daemon")
+log.Child("server").Debug("connecting", "addr", addr)
+
+// slog bridge — existing slog code routes through our system
+slog.Info("legacy message", "key", "val")
+```
+
+### Runtime level change
+
+```sh
+dotfilesctl config reconfigure --log-level debug
+```
 
 | Component | Log file | Rotation | Retention |
 |-----------|----------|----------|-----------|

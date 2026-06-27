@@ -240,6 +240,18 @@ Plugin tools interact with the host through a `plugin.Context`:
 
 ```go
 type Context interface {
+    // Stdout returns a writer that tunnels output back to the caller in real
+    // time via RPC streaming.
+    Stdout() io.Writer
+
+    // Stderr returns a writer that tunnels stderr output back to the caller.
+    Stderr() io.Writer
+
+    // Log returns a structured logger that sends log entries to the daemon's
+    // logging system. The plugin name is automatically attached so entries
+    // appear under a "plugin.<name>" hierarchy.
+    Log() logging.Logger
+
     // Run a shell command without privilege escalation.
     Exec(cmd string) (ExecResult, error)
 
@@ -262,6 +274,72 @@ type ExecResult struct {
     Stderr   string
 }
 ```
+
+### Plugin logging
+
+Plugins can log structured messages back to the daemon through `ctx.Log()`.
+See `docs/logging.md` for the full logging system documentation.
+
+```go
+func forecastFn(ctx plugin.Context, args map[string]string) error {
+    loc := args["location"]
+    ctx.Log().Info("forecasting weather", "location", loc)
+
+    result, err := ctx.Exec("curl -s wttr.in/" + loc)
+    if err != nil {
+        ctx.Log().Error("fetch failed", "error", err)
+        return err
+    }
+
+    ctx.Log().Debug("response received", "size", len(result.Stdout))
+    return nil
+}
+```
+
+#### How it works
+
+1. `ctx.Log()` returns a `logging.Logger` implementation (`pluginLogger`)
+2. Each log call sends a **Log RPC** to the daemon's `ExecutionContext` service
+3. The daemon receives the entry in `pluginBackend.Log()` and routes it through
+   its logging system under the `"plugin.<name>"` hierarchy
+4. Level filtering, formatting, and sink dispatch happen **daemon-side**
+
+Key points:
+
+- **Level filtering is daemon-side**: plugins always send all log entries;
+  the daemon decides what to keep based on its logger configuration.
+- **Structured attributes**: use key-value pairs — they appear as `key=val`
+  in the formatted output.
+- **Not for user output**: use `ctx.Stdout()` / `ctx.Stderr()` for output
+  the user should see. `ctx.Log()` is for diagnostic logging.
+
+#### Viewing plugin logs
+
+```sh
+# Follow daemon logs (includes plugin logs)
+journalctl --user -u dotfilesd -f | grep -i '\[plugin\.'
+
+# Or via the rotated log file
+tail -f ~/dotfilesd/logs/dotfilesd.log | grep '\[plugin\.'
+
+# Filter for a specific plugin
+journalctl --user -u dotfilesd -f | grep '\[plugin\.weather'
+```
+
+#### Setting plugin log levels
+
+By default, the daemon logs at `info` level. Plugin `debug` and `trace` messages
+are filtered. To see them:
+
+```sh
+# Temporarily change the daemon log level at runtime
+dotfilesctl config reconfigure --log-level debug
+
+# Or set back to info
+dotfilesctl config reconfigure --log-level info
+```
+
+For permanent configuration, see the [Logging Configuration](logging.md#configuration) docs.
 
 ## Complete examples
 

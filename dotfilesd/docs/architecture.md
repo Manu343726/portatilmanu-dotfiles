@@ -154,6 +154,15 @@ Shared/internal packages containing all business logic.
 - **`internal/pkg/shared/`** — Shared utilities:
   - `buildhash.go` — CheckBuildHash (binary version vs source staleness).
 
+- **`internal/pkg/logging/`** — Structured logging system:
+  - `manager.go` — Manager, logger resolution, slog bridge.
+  - `logger.go` — `Logger` interface, `namedLogger`, `nopLogger`.
+  - `config.go` — YAML configuration, defaults, parsing.
+  - `formatter.go` — Colored log line formatter.
+  - `sink.go` — Output sinks (stdout, stderr, rotating file).
+  - `level.go` — Level constants (trace–fatal), parsing, ANSI colors.
+  - `colors.go` — ANSI color escape constants.
+
 ### Proto (`proto/dotfilesd/v1/dotfilesdv1/`)
 
 - **`*.proto`** — Protobuf service definitions.
@@ -221,6 +230,7 @@ service ExecutionContext {
   rpc RequestInput(InputRequest) returns (InputResponse);
   rpc RequestConfirm(ConfirmRequest) returns (ConfirmResponse);
   rpc RequestChoose(ChooseRequest) returns (ChooseResponse);
+  rpc Log(LogRequest) returns (LogResponse);  // plugin → daemon log routing
 }
 ```
 
