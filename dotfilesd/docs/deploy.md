@@ -11,41 +11,32 @@ This builds binaries, installs them to `~/.local/bin/`, registers the systemd us
 
 ## Manual steps
 
-### 1. Build
+### 1. Build (includes proto generation)
 
 ```sh
 cd ~/dotfilesd
 make build
 ```
 
-### 2. Install binaries
+### 2. Install binaries and restart daemon
 
 ```sh
 make install
 ```
 
-Binaries are installed to `~/.local/bin/dotfilesd` and `~/.local/bin/dotfilesctl`.
+This builds (if needed), replaces the running daemon binary, and restarts the service.
 
-### 3. Install systemd service
+### 3. Start/stop the service
 
 ```sh
-make service-install
+make service-start    # enable and start
+make service-stop     # stop and disable
 ```
 
-This generates `~/.config/systemd/user/dotfilesd.service` from the template and runs `systemctl --user daemon-reload`.
-
-### 4. Start the service
+### 4. Verify
 
 ```sh
-make service-start
-```
-
-Enables and starts `dotfilesd.service` via `systemctl --user`.
-
-### 5. Verify
-
-```sh
-dotfilesctl ping
+dotfilesctl system ping
 # → dotfilesd v0.1.0 (pid 12345, up 5s)
 ```
 
@@ -54,40 +45,25 @@ dotfilesctl ping
 ```sh
 cd ~/dotfilesd
 git pull
-make build
-make service-stop
-make service-start
+make install    # auto-rebuilds if hash changed, restarts daemon
 ```
 
 Or in one step:
-
 ```sh
-cd ~/dotfilesd && git pull && make build && systemctl --user restart dotfilesd
+cd ~/dotfilesd && git pull && make install
 ```
 
 ## Service management
 
 ```sh
-make service-stop    # stop and disable the service
-make service-start   # enable and start
-make service-logs    # follow journald logs (journalctl --user -u dotfilesd)
-```
-
-Manual:
-
-```sh
 systemctl --user status dotfilesd
 systemctl --user restart dotfilesd
-systemctl --user stop dotfilesd
 journalctl --user -u dotfilesd -f
 ```
 
 ## Configuration
 
-The daemon reads configuration from `~/.config/dotfilesd/config.yaml` (YAML) and
-environment variables. Environment variables take precedence over config file values.
-
-### Config file (`~/.config/dotfilesd/config.yaml`)
+The daemon reads from `~/.config/dotfilesd/config.yaml`:
 
 ```yaml
 port: 9105
@@ -98,31 +74,21 @@ plugin_cache_dir: ~/.cache/dotfilesd/plugins
 scripts_dir: ~/.config/dotfilesd/scripts
 ```
 
-### Environment variables
+Environment variables override config values: `DOTFILESD_PORT`, `DOTFILESD_LOG_LEVEL`, `DOTFILESD_LOG_DIR`.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DOTFILESD_PORT` | `9105` | Connect RPC port |
-| `DOTFILESD_LOG_DIR` | `~/dotfilesd/logs` | Log output directory |
-| `DOTFILESD_LOG_LEVEL` | `info` | Log level (trace/debug/info/warn/error) |
-| `DOTFILESD_PLUGINS_DIR` | `~/.config/dotfilesd/plugins` | Plugin sources directory |
-| `DOTFILESD_PLUGIN_CACHE_DIR` | `~/.cache/dotfilesd/plugins` | Compiled plugin binary cache |
-| `DOTFILESD_SCRIPTS_DIR` | `~/.config/dotfilesd/scripts` | Scripts directory (.dsh files) |
+## Post-install
 
-## Running without systemd
+After the daemon is running, build the plugins:
 
 ```sh
-~/.local/bin/dotfilesd &
+make plugin-build-all
+systemctl --user restart dotfilesd
 ```
 
-Logs go to stdout. Stop with `kill %1` or `pkill dotfilesd`.
-
-## Uninstall
+Distribute the systemd service file to the target machine:
 
 ```sh
-systemctl --user stop dotfilesd
-systemctl --user disable dotfilesd
-rm ~/.config/systemd/user/dotfilesd.service
+cp ~/dotfilesd/service/dotfilesd.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-rm ~/.local/bin/dotfilesd ~/.local/bin/dotfilesctl
+systemctl --user enable --now dotfilesd
 ```
