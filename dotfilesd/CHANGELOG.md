@@ -181,7 +181,7 @@ by every build check in steps 5-7.
 
 ## [Steps 9-13] — Daemon-Side Rewrite (Manager + Registry + CLI)
 
-**Commit:** `87f40e8`
+**Commit:** `57e20ee`
 **Date:** 2026-06-28
 
 ### Changes
