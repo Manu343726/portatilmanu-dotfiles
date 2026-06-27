@@ -57,10 +57,16 @@ type Context interface {
 	// Returns the selected index and option text (index = -1 if cancelled).
 	RequestChoose(prompt string, options []string, defaultIndex int) (int, string, error)
 
-	// CallPlugin invokes a tool on another loaded plugin. Plugins can use
-	// this to delegate work to other plugins without shelling out to
-	// dotfilesctl as a subprocess.
+	// CallPlugin invokes a tool on another loaded plugin and returns the
+	// buffered result. Use CallPluginStream to pipe output in real time
+	// through this plugin's Stdout()/Stderr().
 	CallPlugin(pluginName, toolName string, args map[string]string) (ExecResult, error)
+
+	// CallPluginStream invokes a tool on another loaded plugin and pipes
+	// its stdout/stderr chunks directly to this plugin's Stdout()/Stderr()
+	// writers in real time. Returns an error if the call failed or the
+	// target tool returned a non-nil Go error.
+	CallPluginStream(pluginName, toolName string, args map[string]string) error
 
 	// RunScript runs a registered script by name (e.g. "git/commit").
 	// The script executes on the daemon host and may include feedback
@@ -278,6 +284,48 @@ func (c *contextClient) CallPlugin(pluginName, toolName string, args map[string]
 	}, nil
 }
 
+func (c *contextClient) CallPluginStream(pluginName, toolName string, args map[string]string) error {
+	return callPluginStreamWithWriters(c, c.Stdout(), c.Stderr(), pluginName, toolName, args)
+}
+
+// callPluginStreamWithWriters is the shared implementation for
+// CallPluginStream. It opens a CallPluginTool stream and pipes chunks
+// to the given stdout/stderr writers.
+func callPluginStreamWithWriters(c *contextClient, stdout, stderr io.Writer, pluginName, toolName string, args map[string]string) error {
+	req := connect.NewRequest(&dotfilesdv1.CallPluginToolRequest{
+		Session:    c.buildSession(),
+		PluginName: pluginName,
+		ToolName:   toolName,
+		Arguments:  args,
+	})
+	c.setTokenHeader(req)
+
+	stream, err := c.pluginClient.CallPluginTool(context.Background(), req)
+	if err != nil {
+		return fmt.Errorf("call plugin: %w", err)
+	}
+
+	for stream.Receive() {
+		chunk := stream.Msg()
+		if len(chunk.StdoutChunk) > 0 {
+			stdout.Write(chunk.StdoutChunk)
+		}
+		if len(chunk.StderrChunk) > 0 {
+			stderr.Write(chunk.StderrChunk)
+		}
+		if chunk.Done {
+			if chunk.ErrorMessage != "" {
+				return fmt.Errorf("%s", chunk.ErrorMessage)
+			}
+			return nil
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return fmt.Errorf("call plugin stream: %w", err)
+	}
+	return nil
+}
+
 func (c *contextClient) RunScript(name string) (ScriptResult, error) {
 	req := connect.NewRequest(&dotfilesdv1.RunScriptRequest{
 		Session: c.buildSession(),
@@ -330,6 +378,7 @@ func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 // execution.
 type streamingContext struct {
 	Context
+	client *contextClient
 	stdout io.Writer
 	stderr io.Writer
 }
@@ -337,6 +386,12 @@ type streamingContext struct {
 func (c *streamingContext) Stdout() io.Writer   { return c.stdout }
 func (c *streamingContext) Stderr() io.Writer   { return c.stderr }
 func (c *streamingContext) Log() logging.Logger { return c.Context.Log() }
+
+// CallPluginStream overrides the embedded contextClient.CallPluginStream
+// to pipe chunks through the streaming writers instead of the no-op writers.
+func (c *streamingContext) CallPluginStream(pluginName, toolName string, args map[string]string) error {
+	return callPluginStreamWithWriters(c.client, c.stdout, c.stderr, pluginName, toolName, args)
+}
 
 // ---------------------------------------------------------------------------
 // pluginLogger — sends log entries to the daemon via the Log RPC

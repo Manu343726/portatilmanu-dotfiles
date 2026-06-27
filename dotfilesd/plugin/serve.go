@@ -182,7 +182,7 @@ func serve(
 type extensionSvcServer struct {
 	name, displayName, version, description string
 	tools                                   []Tool
-	ctxClient                               Context
+	ctxClient                               *contextClient
 }
 
 func (s *extensionSvcServer) GetDescriptor(
@@ -225,6 +225,7 @@ func (s *extensionSvcServer) CallTool(
 			// back to the caller in real time.
 			toolCtx := &streamingContext{
 				Context: s.ctxClient,
+				client:  s.ctxClient,
 				stdout:  stdout,
 				stderr:  stderr,
 			}
