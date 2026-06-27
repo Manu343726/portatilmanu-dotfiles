@@ -25,24 +25,21 @@ type SudoMethod int32
 
 const (
 	SudoMethod_SUDO_METHOD_UNSPECIFIED SudoMethod = 0
-	SudoMethod_SUDO_METHOD_TERMINAL    SudoMethod = 1
-	SudoMethod_SUDO_METHOD_GRAPHICAL   SudoMethod = 2
-	SudoMethod_SUDO_METHOD_NOPASS      SudoMethod = 3
+	SudoMethod_SUDO_METHOD_GRAPHICAL   SudoMethod = 1
+	SudoMethod_SUDO_METHOD_NOPASS      SudoMethod = 2
 )
 
 // Enum value maps for SudoMethod.
 var (
 	SudoMethod_name = map[int32]string{
 		0: "SUDO_METHOD_UNSPECIFIED",
-		1: "SUDO_METHOD_TERMINAL",
-		2: "SUDO_METHOD_GRAPHICAL",
-		3: "SUDO_METHOD_NOPASS",
+		1: "SUDO_METHOD_GRAPHICAL",
+		2: "SUDO_METHOD_NOPASS",
 	}
 	SudoMethod_value = map[string]int32{
 		"SUDO_METHOD_UNSPECIFIED": 0,
-		"SUDO_METHOD_TERMINAL":    1,
-		"SUDO_METHOD_GRAPHICAL":   2,
-		"SUDO_METHOD_NOPASS":      3,
+		"SUDO_METHOD_GRAPHICAL":   1,
+		"SUDO_METHOD_NOPASS":      2,
 	}
 )
 
@@ -1042,13 +1039,12 @@ const file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc = "" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\"M\n" +
 	"\tExitEvent\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage*v\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage*\\\n" +
 	"\n" +
 	"SudoMethod\x12\x1b\n" +
-	"\x17SUDO_METHOD_UNSPECIFIED\x10\x00\x12\x18\n" +
-	"\x14SUDO_METHOD_TERMINAL\x10\x01\x12\x19\n" +
-	"\x15SUDO_METHOD_GRAPHICAL\x10\x02\x12\x16\n" +
-	"\x12SUDO_METHOD_NOPASS\x10\x032\xcb\x02\n" +
+	"\x17SUDO_METHOD_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15SUDO_METHOD_GRAPHICAL\x10\x01\x12\x16\n" +
+	"\x12SUDO_METHOD_NOPASS\x10\x022\xcb\x02\n" +
 	"\vExecService\x12=\n" +
 	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse\x12Q\n" +
 	"\n" +

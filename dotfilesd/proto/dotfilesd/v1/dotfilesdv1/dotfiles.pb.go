@@ -69,8 +69,6 @@ type StatusResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GitClean      bool                   `protobuf:"varint,1,opt,name=git_clean,json=gitClean,proto3" json:"git_clean,omitempty"`
 	GitBranch     string                 `protobuf:"bytes,2,opt,name=git_branch,json=gitBranch,proto3" json:"git_branch,omitempty"`
-	GitAhead      int32                  `protobuf:"varint,3,opt,name=git_ahead,json=gitAhead,proto3" json:"git_ahead,omitempty"`
-	GitBehind     int32                  `protobuf:"varint,4,opt,name=git_behind,json=gitBehind,proto3" json:"git_behind,omitempty"`
 	LastCommit    string                 `protobuf:"bytes,5,opt,name=last_commit,json=lastCommit,proto3" json:"last_commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -120,20 +118,6 @@ func (x *StatusResponse) GetGitBranch() string {
 	return ""
 }
 
-func (x *StatusResponse) GetGitAhead() int32 {
-	if x != nil {
-		return x.GitAhead
-	}
-	return 0
-}
-
-func (x *StatusResponse) GetGitBehind() int32 {
-	if x != nil {
-		return x.GitBehind
-	}
-	return 0
-}
-
 func (x *StatusResponse) GetLastCommit() string {
 	if x != nil {
 		return x.LastCommit
@@ -147,14 +131,11 @@ const file_proto_dotfilesd_v1_dotfilesdv1_dotfiles_proto_rawDesc = "" +
 	"\n" +
 	"-proto/dotfilesd/v1/dotfilesdv1/dotfiles.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"@\n" +
 	"\rStatusRequest\x12/\n" +
-	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"\xa9\x01\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"m\n" +
 	"\x0eStatusResponse\x12\x1b\n" +
 	"\tgit_clean\x18\x01 \x01(\bR\bgitClean\x12\x1d\n" +
 	"\n" +
-	"git_branch\x18\x02 \x01(\tR\tgitBranch\x12\x1b\n" +
-	"\tgit_ahead\x18\x03 \x01(\x05R\bgitAhead\x12\x1d\n" +
-	"\n" +
-	"git_behind\x18\x04 \x01(\x05R\tgitBehind\x12\x1f\n" +
+	"git_branch\x18\x02 \x01(\tR\tgitBranch\x12\x1f\n" +
 	"\vlast_commit\x18\x05 \x01(\tR\n" +
 	"lastCommit2V\n" +
 	"\x0fDotfilesService\x12C\n" +

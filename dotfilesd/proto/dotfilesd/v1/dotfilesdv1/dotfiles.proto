@@ -19,7 +19,5 @@ message StatusRequest {
 message StatusResponse {
   bool git_clean = 1;
   string git_branch = 2;
-  int32 git_ahead = 3;
-  int32 git_behind = 4;
   string last_commit = 5;
 }
