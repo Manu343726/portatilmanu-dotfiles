@@ -5,6 +5,7 @@ package dotfilesd.v1;
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/config.proto";
 
 // LogService — plugins submit structured log entries to the daemon's logging
 // system. This is the usage-level service (both CLI tools and plugins can log
@@ -17,7 +18,7 @@ service LogService {
 
 // LogEntry represents a single log record from a plugin or tool.
 message LogEntry {
-  string level = 1;       // trace, debug, info, warn, error, fatal
+  LogLevel level = 1;
   string message = 2;
   map<string, string> attributes = 3;
 }

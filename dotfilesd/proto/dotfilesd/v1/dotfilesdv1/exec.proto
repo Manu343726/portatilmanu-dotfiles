@@ -85,7 +85,7 @@ message SudoExecResponse {
 }
 
 message AuthChallenge {
-  repeated string methods = 1;
+  repeated SudoMethod methods = 1;
   string prompt = 2;
 }
 

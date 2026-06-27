@@ -42,37 +42,21 @@ func (s *logServer) Log(
 		}
 
 		switch entry.Level {
-		case "trace":
+		case dotfilesdv1.LogLevel_LOG_LEVEL_TRACE:
 			log.Trace(entry.Message, kv...)
-		case "debug":
+		case dotfilesdv1.LogLevel_LOG_LEVEL_DEBUG:
 			log.Debug(entry.Message, kv...)
-		case "info":
+		case dotfilesdv1.LogLevel_LOG_LEVEL_INFO:
 			log.Info(entry.Message, kv...)
-		case "warn":
+		case dotfilesdv1.LogLevel_LOG_LEVEL_WARN:
 			log.Warn(entry.Message, kv...)
-		case "error":
+		case dotfilesdv1.LogLevel_LOG_LEVEL_ERROR:
 			log.Error(entry.Message, kv...)
-		case "fatal":
-			log.Fatal(entry.Message, kv...)
 		default:
 			log.Info(entry.Message, kv...)
 		}
 	} else {
-		// Fallback to slog.
-		slogLevel := slog.LevelInfo
-		switch entry.Level {
-		case "trace":
-			slogLevel = levelTrace
-		case "debug":
-			slogLevel = slog.LevelDebug
-		case "info":
-			slogLevel = slog.LevelInfo
-		case "warn":
-			slogLevel = slog.LevelWarn
-		case "error":
-			slogLevel = slog.LevelError
-		}
-		slog.Log(ctx, slogLevel, entry.Message, "source", req.Msg.Source, "attrs", entry.Attributes)
+		slog.Log(ctx, logLevelToSlog(entry.Level), entry.Message, "source", req.Msg.Source, "attrs", entry.Attributes)
 	}
 
 	return connect.NewResponse(&dotfilesdv1.LogResponse{}), nil

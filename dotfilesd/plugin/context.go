@@ -473,7 +473,7 @@ type pluginLogger struct {
 	fixedAttrs []any
 }
 
-func (l *pluginLogger) log(level, msg string, attrs ...any) {
+func (l *pluginLogger) log(level dotfilesdv1.LogLevel, msg string, attrs ...any) {
 	// Merge fixed attrs with call attrs (call attrs take precedence).
 	merged := make(map[string]string)
 	for i := 0; i < len(l.fixedAttrs)-1; i += 2 {
@@ -501,13 +501,23 @@ func (l *pluginLogger) log(level, msg string, attrs ...any) {
 	_, _ = l.client.logClient.Log(context.Background(), req)
 }
 
-func (l *pluginLogger) Trace(msg string, attrs ...any) { l.log("trace", msg, attrs...) }
-func (l *pluginLogger) Debug(msg string, attrs ...any) { l.log("debug", msg, attrs...) }
-func (l *pluginLogger) Info(msg string, attrs ...any)  { l.log("info", msg, attrs...) }
-func (l *pluginLogger) Warn(msg string, attrs ...any)  { l.log("warn", msg, attrs...) }
-func (l *pluginLogger) Error(msg string, attrs ...any) { l.log("error", msg, attrs...) }
+func (l *pluginLogger) Trace(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_TRACE, msg, attrs...)
+}
+func (l *pluginLogger) Debug(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_DEBUG, msg, attrs...)
+}
+func (l *pluginLogger) Info(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_INFO, msg, attrs...)
+}
+func (l *pluginLogger) Warn(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_WARN, msg, attrs...)
+}
+func (l *pluginLogger) Error(msg string, attrs ...any) {
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...)
+}
 func (l *pluginLogger) Fatal(msg string, attrs ...any) {
-	l.log("fatal", msg, attrs...)
+	l.log(dotfilesdv1.LogLevel_LOG_LEVEL_ERROR, msg, attrs...)
 	os.Exit(1)
 }
 

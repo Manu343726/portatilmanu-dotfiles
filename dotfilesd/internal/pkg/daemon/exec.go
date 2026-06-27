@@ -413,12 +413,16 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		return resp, nil
 	}
 
-	var methods []string
+	var methods []dotfilesdv1.SudoMethod
 	if hasSudo() {
-		methods = append(methods, "terminal")
+		methods = append(methods, dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL)
 	}
 	if hasPkexec() {
-		methods = append(methods, "graphical")
+		methods = append(methods, dotfilesdv1.SudoMethod_SUDO_METHOD_GRAPHICAL)
+	}
+	// Deduplicate.
+	if len(methods) > 1 && methods[0] == methods[1] {
+		methods = methods[:1]
 	}
 	user := os.Getenv("USER")
 	if user == "" {

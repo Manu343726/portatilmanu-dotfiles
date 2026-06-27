@@ -2,3 +2,5 @@
 /dotfilesctl
 /logs/
 __debug_bin*
+proto/**/*.pb.go
+proto/**/*.connect.go

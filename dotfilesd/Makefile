@@ -47,7 +47,7 @@ setup: install service-install service-start
 
 # -- Build -------------------------------------------------------------------
 
-build:
+build: proto
 	@mkdir -p $(BINARY_DIR)
 	$(GO) build $(GOFLAGS) -o $(DAEMON_BIN) $(CMD_DIR)/dotfilesd
 	$(GO) build $(GOFLAGS) -o $(CLI_BIN) $(CMD_DIR)/dotfilesctl
