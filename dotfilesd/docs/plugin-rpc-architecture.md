@@ -1526,3 +1526,106 @@ The daemon's `LoadPlugins()` function resolves this automatically from `go.mod`.
 | weather | `weather.WeatherService` | Forecast | — |
 | resources | `resources.ResourcesService` | Current, Top, PS, History | — |
 | tmuxbar | `tmuxbar.TmuxBarService` | RAMWidget, CPUWidget, CPUTempWidget, BatteryWidget, StatusBar | resources |
+
+---
+
+## 18. Development Workflow
+
+> **Rules for the AI agent implementing this document.** These rules prevent
+> irrecoverable mistakes and keep every change reviewable and revertible.
+
+### 18.1 One Commit Per Implementation Step
+
+Implementation step = one section of §16 (Implementation Order). For example:
+
+| Step | Commit |
+|------|--------|
+| Step 0: Scaffold plugin dirs | `feat: scaffold weather/resources/tmuxbar plugin directories` |
+| Step 1: Delete old plugin code | `feat: remove old Tool-based plugin system` |
+| Step 2: Create documentation.proto | `feat: add DocumentationService proto` |
+| ... | ... |
+
+**Rules:**
+- Each step is exactly **one commit**. No combining steps, no splitting a step
+  into multiple commits.
+- After each commit, update the changelog (see §18.2).
+- After each commit, **push** so every step is on the remote.
+- If a step fails (build breaks, tests fail), **fix it before moving to the
+  next step.** Do not leave the tree broken.
+- Always check the current state before starting a step — read files, check
+  for errors, verify the build.
+
+### 18.2 Changelog
+
+A file `CHANGELOG.md` lives in the repository root (`~/dotfilesd/CHANGELOG.md`).
+It tracks detailed progress per step.
+
+**Format:**
+```markdown
+# Changelog — Plugin RPC Architecture Rewrite
+
+## [Step N] — Short Name
+
+**Commit:** `<hash>`
+**Date:** YYYY-MM-DD
+
+### Changes
+- List each file modified, created, or deleted
+- One bullet per file with what was done
+
+### State
+- [x] Build passes
+- [ ] Tests pass (N/A)
+- [ ] Daemon starts
+- [ ] Plugins load
+
+### Notes
+Any decisions made, deviations from the document, or things to revisit.
+```
+
+**Rules:**
+- The changelog is updated **immediately after each commit**, before starting
+  the next step.
+- Every file touched in a step is listed. If a step deletes files, list them.
+- The "State" checkboxes reflect what was verified for that step. If something
+  wasn't tested, leave it unchecked.
+- The changelog is committed as part of the step's commit (alongside the code
+  changes).
+
+### 18.3 When in Doubt, Stop and Ask
+
+The AI agent **must not** make assumptions or decisions that deviate from this
+document. Specifically:
+
+- If a section of this document is ambiguous or incomplete, **stop and ask.**
+  Do not fill in the blanks yourself.
+- If a command fails with an unexpected error, **stop and ask.** Do not attempt
+  creative workarounds.
+- If two possible approaches exist and the document doesn't specify which,
+  **stop and ask.**
+- If a file referenced in this document doesn't exist at the expected path,
+  **stop and ask.**
+
+The agent should phrase questions as yes/no or multiple-choice so the user can
+answer quickly. Example: "The file `proto/dotfilesd/v1/dotfilesdv1/extension.proto`
+does not exist. Should I create it from the spec in §13, or skip this step?"
+
+### 18.4 Safe Rollback
+
+Because every step is a single commit, rolling back is always `git revert <hash>`.
+The changelog makes it easy to find which commit to revert.
+
+- To roll back one step: `git revert HEAD`
+- To roll back N steps: `git revert HEAD~N..HEAD`
+- After reverting, update the changelog to mark the step as reverted.
+
+### 18.5 Pre-Flight Checklist
+
+Before running any command that modifies files (including edit tools):
+
+- [ ] I have read the relevant section of this document in full.
+- [ ] I understand what the step produces (files created, files deleted,
+      files modified).
+- [ ] I have checked the current state of every file I will touch.
+- [ ] I know what to do if the build breaks (fix before next step).
+- [ ] If I am unsure about any detail, I will ask instead of deciding.
