@@ -56,7 +56,58 @@ import (
 //
 // The daemon reads this line to learn the plugin's URL and then calls
 // GetDescriptor to discover the plugin's capabilities.
+//
+// Tools execute in their own goroutine when the daemon calls CallTool. Each
+// tool receives a plugin.Context that can be used to run system commands,
+// prompt the user, or stream output through the daemon.
 func Serve(name, displayName, version, description string, tools ...Tool) {
+	serve(name, displayName, version, description, tools, nil)
+}
+
+// ServeWithBackground is like Serve but also starts a background goroutine
+// with access to the execution context. This is useful for plugins that
+// need to perform continuous work (polling, monitoring, aggregation) using
+// the daemon's exec context throughout the plugin's lifetime.
+//
+// The background function receives the plugin's Context and a stop channel.
+// It should return when the stop channel is closed (the daemon is shutting
+// down or the plugin was killed). The background goroutine is started after
+// the plugin server is fully initialized and the handshake has completed.
+//
+// Usage:
+//
+//	func main() {
+//	    plugin.ServeWithBackground("ram", "RAM Monitor", "1.0.0",
+//	        "Live RAM monitoring",
+//	        func(ctx plugin.Context, stop <-chan struct{}) {
+//	            // background loop: collect, poll, etc.
+//	            for {
+//	                select {
+//	                case <-stop:
+//	                    return
+//	                case <-time.After(5 * time.Second):
+//	                    // use ctx.Exec(...), etc.
+//	                }
+//	            }
+//	        },
+//	        plugin.NewTool("current", "Get current RAM usage", ...),
+//	        plugin.NewTool("history", "Show RAM usage history", ...),
+//	    )
+//	}
+func ServeWithBackground(
+	name, displayName, version, description string,
+	background func(ctx Context, stop <-chan struct{}),
+	tools ...Tool,
+) {
+	serve(name, displayName, version, description, tools, background)
+}
+
+// serve is the shared implementation for Serve and ServeWithBackground.
+func serve(
+	name, displayName, version, description string,
+	tools []Tool,
+	background func(ctx Context, stop <-chan struct{}),
+) {
 	ctxURL := os.Getenv("EXECUTION_CONTEXT_URL")
 	ctxToken := os.Getenv("EXECUTION_CONTEXT_TOKEN")
 	sessionID := os.Getenv("SESSION_ID")
@@ -67,6 +118,8 @@ func Serve(name, displayName, version, description string, tools ...Tool) {
 	}
 
 	// Build the extension server with tool handlers.
+	ctxClient := newContextClient(ctxURL, ctxToken, sessionID)
+
 	mux := http.NewServeMux()
 
 	svc := &extensionSvcServer{
@@ -75,7 +128,7 @@ func Serve(name, displayName, version, description string, tools ...Tool) {
 		version:     version,
 		description: description,
 		tools:       tools,
-		ctxClient:   newContextClient(ctxURL, ctxToken, sessionID),
+		ctxClient:   ctxClient,
 	}
 
 	path, handler := dotfilesdv1connect.NewExtensionServiceHandler(svc)
@@ -102,7 +155,7 @@ func Serve(name, displayName, version, description string, tools ...Tool) {
 		os.Exit(1)
 	}
 
-	// Wait for shutdown signal.
+	// Signal handler for graceful shutdown.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
@@ -113,7 +166,15 @@ func Serve(name, displayName, version, description string, tools ...Tool) {
 		}
 	}()
 
-	<-sigCh
+	// Start the background worker if provided.
+	if background != nil {
+		stopCh := make(chan struct{})
+		go background(ctxClient, stopCh)
+		<-sigCh
+		close(stopCh) // signal the background worker to stop
+	} else {
+		<-sigCh
+	}
 	_ = srv.Shutdown(context.Background())
 }
 

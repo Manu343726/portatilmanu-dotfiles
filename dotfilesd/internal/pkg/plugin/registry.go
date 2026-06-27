@@ -11,10 +11,10 @@ import (
 // PluginInfo holds the metadata and client for a loaded plugin.
 type PluginInfo struct {
 	Descriptor *dotfilesdv1.ExtensionDescriptor // plugin capabilities
-	Client     *Client                         // RPC client for calling the plugin
-	Process    *Process                        // running plugin subprocess
-	SourceDir  string                          // source directory for rebuild on restart
-	CacheDir   string                          // cache directory for build artifacts
+	Client     *Client                          // RPC client for calling the plugin
+	Process    *Process                         // running plugin subprocess
+	SourceDir  string                           // source directory for rebuild on restart
+	CacheDir   string                           // cache directory for build artifacts
 }
 
 // Registry maintains a thread-safe map of loaded plugins.

@@ -69,12 +69,12 @@ type Manager struct {
 	CtxURL     string // Execution Context URL the daemon exposes
 	CtxToken   string // shared secret for Execution Context auth
 
-	registry        *Registry
-	builder         *Builder
-	mu              sync.Mutex
-	loaded          bool
-	tree            []PluginTreeEntry // cached tree from last LoadPlugins
-	supervisorCtx   context.Context
+	registry         *Registry
+	builder          *Builder
+	mu               sync.Mutex
+	loaded           bool
+	tree             []PluginTreeEntry // cached tree from last LoadPlugins
+	supervisorCtx    context.Context
 	supervisorCancel context.CancelFunc
 	// wg tracks all supervisor goroutines; Wait() blocks until they finish.
 	supervisorWg sync.WaitGroup

@@ -56,5 +56,3 @@ func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]
 	slog.Debug("client CallTool stream opened", "tool", toolName)
 	return stream, nil
 }
-
-
