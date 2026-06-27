@@ -56,6 +56,16 @@ type Context interface {
 	// RequestChoose prompts the user to pick from a list of options.
 	// Returns the selected index and option text (index = -1 if cancelled).
 	RequestChoose(prompt string, options []string, defaultIndex int) (int, string, error)
+
+	// CallPlugin invokes a tool on another loaded plugin. Plugins can use
+	// this to delegate work to other plugins without shelling out to
+	// dotfilesctl as a subprocess.
+	CallPlugin(pluginName, toolName string, args map[string]string) (ExecResult, error)
+
+	// RunScript runs a registered script by name (e.g. "git/commit").
+	// The script executes on the daemon host and may include feedback
+	// steps (confirm, input, choose).
+	RunScript(name string) (ScriptResult, error)
 }
 
 // ExecResult contains the result of a shell command execution.
@@ -63,6 +73,24 @@ type ExecResult struct {
 	ExitCode int
 	Stdout   string
 	Stderr   string
+}
+
+// ScriptResult contains the result of a script execution.
+type ScriptResult struct {
+	AllSucceeded bool
+	Steps        []ScriptStepResult
+	Error        string
+}
+
+// ScriptStepResult contains the result of a single script step.
+type ScriptStepResult struct {
+	StepNumber   int
+	SourceLine   string
+	StepKind     string // "exec", "confirm", "input", "choose"
+	ExitCode     int
+	Stdout       string
+	Stderr       string
+	FeedbackValue string
 }
 
 // contextClient implements the Context interface by calling the daemon's
@@ -187,6 +215,61 @@ func (c *contextClient) RequestChoose(prompt string, options []string, defaultIn
 	}
 
 	return int(resp.Msg.SelectedIndex), resp.Msg.SelectedOption, nil
+}
+
+func (c *contextClient) CallPlugin(pluginName, toolName string, args map[string]string) (ExecResult, error) {
+	req := connect.NewRequest(&dotfilesdv1.CallPluginRequest{
+		Session:    c.buildSession(),
+		PluginName: pluginName,
+		ToolName:   toolName,
+		Arguments:  args,
+	})
+	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+
+	resp, err := c.client.CallPlugin(context.Background(), req)
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("context call plugin: %w", err)
+	}
+
+	return ExecResult{
+		ExitCode: int(resp.Msg.ExitCode),
+		Stdout:   resp.Msg.Stdout,
+		Stderr:   resp.Msg.Stderr,
+	}, nil
+}
+
+func (c *contextClient) RunScript(name string) (ScriptResult, error) {
+	req := connect.NewRequest(&dotfilesdv1.RunScriptViaContextRequest{
+		Session: c.buildSession(),
+		Source: &dotfilesdv1.RunScriptViaContextRequest_RegisteredScript{
+			RegisteredScript: name,
+		},
+	})
+	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+
+	resp, err := c.client.RunScript(context.Background(), req)
+	if err != nil {
+		return ScriptResult{}, fmt.Errorf("context run script: %w", err)
+	}
+
+	steps := make([]ScriptStepResult, len(resp.Msg.Steps))
+	for i, s := range resp.Msg.Steps {
+		steps[i] = ScriptStepResult{
+			StepNumber:    int(s.StepNumber),
+			SourceLine:    s.SourceLine,
+			StepKind:      s.StepKind,
+			ExitCode:      int(s.ExitCode),
+			Stdout:        s.Stdout,
+			Stderr:        s.Stderr,
+			FeedbackValue: s.FeedbackValue,
+		}
+	}
+
+	return ScriptResult{
+		AllSucceeded: resp.Msg.AllSucceeded,
+		Steps:        steps,
+		Error:        resp.Msg.Error,
+	}, nil
 }
 
 // Stdout returns a no-op writer (no streaming outside a tool call context).

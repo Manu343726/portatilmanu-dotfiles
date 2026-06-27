@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"dotfilesd/internal/pkg/plugin"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 // pluginBackend implements plugin.ContextBackend by routing to the daemon's
@@ -116,6 +120,70 @@ func (b *pluginBackend) Log(ctx context.Context, pluginName, level, msg string, 
 		slog.Log(ctx, slogLevel, msg, "plugin", pluginName, "attrs", attrs)
 	}
 	return nil
+}
+
+func (b *pluginBackend) CallPlugin(ctx context.Context, pluginName, toolName string, args map[string]string) (int32, string, string, string, error) {
+	// Route through the plugin manager's CallTool which opens a streaming
+	// connection to the target plugin. We buffer the entire response.
+	if b.daemon.pluginMgr == nil {
+		return 0, "", "", "", fmt.Errorf("plugin system not initialized")
+	}
+
+	stream, err := b.daemon.pluginMgr.CallTool(ctx, pluginName, toolName, args)
+	if err != nil {
+		return 0, "", "", "", fmt.Errorf("call plugin %q tool %q: %w", pluginName, toolName, err)
+	}
+
+	var stdoutBuf, stderrBuf strings.Builder
+	var errMsg string
+	for stream.Receive() {
+		chunk := stream.Msg()
+		if len(chunk.StdoutChunk) > 0 {
+			stdoutBuf.Write(chunk.StdoutChunk)
+		}
+		if len(chunk.StderrChunk) > 0 {
+			stderrBuf.Write(chunk.StderrChunk)
+		}
+		if chunk.Done {
+			errMsg = chunk.ErrorMessage
+			break
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return 0, stdoutBuf.String(), stderrBuf.String(), "", fmt.Errorf("plugin tool stream: %w", err)
+	}
+
+	exitCode := int32(0)
+	if errMsg != "" {
+		exitCode = 1
+	}
+
+	return exitCode, stdoutBuf.String(), stderrBuf.String(), errMsg, nil
+}
+
+func (b *pluginBackend) RunScript(ctx context.Context, sessionID string, req *dotfilesdv1.RunScriptViaContextRequest) (bool, []*dotfilesdv1.StepResult, string, error) {
+	// Convert the context-style request to the internal ScriptRunner request.
+	runReq := connect.NewRequest(&dotfilesdv1.RunScriptRequest{
+		Session: &dotfilesdv1.Session{Id: sessionID},
+	})
+	switch src := req.Source.(type) {
+	case *dotfilesdv1.RunScriptViaContextRequest_Script:
+		runReq.Msg.Source = &dotfilesdv1.RunScriptRequest_Script{Script: src.Script}
+	case *dotfilesdv1.RunScriptViaContextRequest_ScriptPath:
+		runReq.Msg.Source = &dotfilesdv1.RunScriptRequest_ScriptPath{ScriptPath: src.ScriptPath}
+	case *dotfilesdv1.RunScriptViaContextRequest_RegisteredScript:
+		runReq.Msg.Source = &dotfilesdv1.RunScriptRequest_RegisteredScript{RegisteredScript: src.RegisteredScript}
+	default:
+		return false, nil, "no script source provided", nil
+	}
+
+	runner := NewScriptRunner(b.daemon.sessions, b.daemon.scripts)
+	resp, err := runner.RunScript(ctx, runReq)
+	if err != nil {
+		return false, nil, "", fmt.Errorf("run script: %w", err)
+	}
+
+	return resp.Msg.AllSucceeded, resp.Msg.Steps, resp.Msg.Error, nil
 }
 
 // ------------------------------------------------

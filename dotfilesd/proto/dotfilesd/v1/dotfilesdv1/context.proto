@@ -7,6 +7,7 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 import "proto/dotfilesd/v1/dotfilesdv1/exec.proto";
 import "proto/dotfilesd/v1/dotfilesdv1/feedback.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/script.proto";
 
 // ExecutionContext — plugin-to-daemon API. Plugins call back into the daemon
 // through this service to execute shell commands, request user input, etc.
@@ -43,6 +44,15 @@ service ExecutionContext {
   // Log submits a log entry from a plugin. The daemon routes it through
   // its logging system with the plugin name as the logger module.
   rpc Log(LogRequest) returns (LogResponse);
+
+  // CallPlugin invokes a tool on another loaded plugin. Plugins can use
+  // this to delegate work to other plugins instead of shelling out.
+  rpc CallPlugin(CallPluginRequest) returns (CallPluginResponse);
+
+  // RunScript runs a registered script or inline script content. Plugins
+  // can use this to invoke scripted workflows (which may include feedback
+  // steps like confirm/input/choose) without shelling out to dotfilesctl.
+  rpc RunScript(RunScriptViaContextRequest) returns (RunScriptViaContextResponse);
 }
 
 // ContextSudoExecRequest — simplified sudo exec for plugins. The daemon
@@ -75,3 +85,36 @@ message LogRequest {
 
 // LogResponse acknowledges receipt of a log entry.
 message LogResponse {}
+
+// CallPluginRequest asks the daemon to invoke a tool on another plugin.
+message CallPluginRequest {
+  Session session = 100;
+  string plugin_name = 1;
+  string tool_name = 2;
+  map<string, string> arguments = 3;
+}
+
+// CallPluginResponse returns the result of a plugin tool invocation.
+message CallPluginResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  string error_message = 4;  // non-empty if the tool returned a Go error
+}
+
+// RunScriptViaContextRequest asks the daemon to run a script.
+message RunScriptViaContextRequest {
+  Session session = 100;
+  oneof source {
+    string script = 1;               // inline script content
+    string script_path = 2;          // path on the daemon host
+    string registered_script = 3;    // registered script name (e.g. "git/commit")
+  }
+}
+
+// RunScriptViaContextResponse returns the result of a script execution.
+message RunScriptViaContextResponse {
+  bool all_succeeded = 1;
+  repeated StepResult steps = 2;
+  string error = 3;  // overall error if script couldn't run
+}

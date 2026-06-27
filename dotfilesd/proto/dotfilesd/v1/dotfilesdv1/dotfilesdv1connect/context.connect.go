@@ -49,6 +49,12 @@ const (
 	ExecutionContextRequestChooseProcedure = "/dotfilesd.v1.ExecutionContext/RequestChoose"
 	// ExecutionContextLogProcedure is the fully-qualified name of the ExecutionContext's Log RPC.
 	ExecutionContextLogProcedure = "/dotfilesd.v1.ExecutionContext/Log"
+	// ExecutionContextCallPluginProcedure is the fully-qualified name of the ExecutionContext's
+	// CallPlugin RPC.
+	ExecutionContextCallPluginProcedure = "/dotfilesd.v1.ExecutionContext/CallPlugin"
+	// ExecutionContextRunScriptProcedure is the fully-qualified name of the ExecutionContext's
+	// RunScript RPC.
+	ExecutionContextRunScriptProcedure = "/dotfilesd.v1.ExecutionContext/RunScript"
 )
 
 // ExecutionContextClient is a client for the dotfilesd.v1.ExecutionContext service.
@@ -67,6 +73,13 @@ type ExecutionContextClient interface {
 	// Log submits a log entry from a plugin. The daemon routes it through
 	// its logging system with the plugin name as the logger module.
 	Log(context.Context, *connect.Request[dotfilesdv1.LogRequest]) (*connect.Response[dotfilesdv1.LogResponse], error)
+	// CallPlugin invokes a tool on another loaded plugin. Plugins can use
+	// this to delegate work to other plugins instead of shelling out.
+	CallPlugin(context.Context, *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error)
+	// RunScript runs a registered script or inline script content. Plugins
+	// can use this to invoke scripted workflows (which may include feedback
+	// steps like confirm/input/choose) without shelling out to dotfilesctl.
+	RunScript(context.Context, *connect.Request[dotfilesdv1.RunScriptViaContextRequest]) (*connect.Response[dotfilesdv1.RunScriptViaContextResponse], error)
 }
 
 // NewExecutionContextClient constructs a client for the dotfilesd.v1.ExecutionContext service. By
@@ -116,6 +129,18 @@ func NewExecutionContextClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(executionContextMethods.ByName("Log")),
 			connect.WithClientOptions(opts...),
 		),
+		callPlugin: connect.NewClient[dotfilesdv1.CallPluginRequest, dotfilesdv1.CallPluginResponse](
+			httpClient,
+			baseURL+ExecutionContextCallPluginProcedure,
+			connect.WithSchema(executionContextMethods.ByName("CallPlugin")),
+			connect.WithClientOptions(opts...),
+		),
+		runScript: connect.NewClient[dotfilesdv1.RunScriptViaContextRequest, dotfilesdv1.RunScriptViaContextResponse](
+			httpClient,
+			baseURL+ExecutionContextRunScriptProcedure,
+			connect.WithSchema(executionContextMethods.ByName("RunScript")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -127,6 +152,8 @@ type executionContextClient struct {
 	requestConfirm *connect.Client[dotfilesdv1.ConfirmRequest, dotfilesdv1.ConfirmResponse]
 	requestChoose  *connect.Client[dotfilesdv1.ChooseRequest, dotfilesdv1.ChooseResponse]
 	log            *connect.Client[dotfilesdv1.LogRequest, dotfilesdv1.LogResponse]
+	callPlugin     *connect.Client[dotfilesdv1.CallPluginRequest, dotfilesdv1.CallPluginResponse]
+	runScript      *connect.Client[dotfilesdv1.RunScriptViaContextRequest, dotfilesdv1.RunScriptViaContextResponse]
 }
 
 // Exec calls dotfilesd.v1.ExecutionContext.Exec.
@@ -159,6 +186,16 @@ func (c *executionContextClient) Log(ctx context.Context, req *connect.Request[d
 	return c.log.CallUnary(ctx, req)
 }
 
+// CallPlugin calls dotfilesd.v1.ExecutionContext.CallPlugin.
+func (c *executionContextClient) CallPlugin(ctx context.Context, req *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error) {
+	return c.callPlugin.CallUnary(ctx, req)
+}
+
+// RunScript calls dotfilesd.v1.ExecutionContext.RunScript.
+func (c *executionContextClient) RunScript(ctx context.Context, req *connect.Request[dotfilesdv1.RunScriptViaContextRequest]) (*connect.Response[dotfilesdv1.RunScriptViaContextResponse], error) {
+	return c.runScript.CallUnary(ctx, req)
+}
+
 // ExecutionContextHandler is an implementation of the dotfilesd.v1.ExecutionContext service.
 type ExecutionContextHandler interface {
 	// Exec runs a shell command without privilege escalation.
@@ -175,6 +212,13 @@ type ExecutionContextHandler interface {
 	// Log submits a log entry from a plugin. The daemon routes it through
 	// its logging system with the plugin name as the logger module.
 	Log(context.Context, *connect.Request[dotfilesdv1.LogRequest]) (*connect.Response[dotfilesdv1.LogResponse], error)
+	// CallPlugin invokes a tool on another loaded plugin. Plugins can use
+	// this to delegate work to other plugins instead of shelling out.
+	CallPlugin(context.Context, *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error)
+	// RunScript runs a registered script or inline script content. Plugins
+	// can use this to invoke scripted workflows (which may include feedback
+	// steps like confirm/input/choose) without shelling out to dotfilesctl.
+	RunScript(context.Context, *connect.Request[dotfilesdv1.RunScriptViaContextRequest]) (*connect.Response[dotfilesdv1.RunScriptViaContextResponse], error)
 }
 
 // NewExecutionContextHandler builds an HTTP handler from the service implementation. It returns the
@@ -220,6 +264,18 @@ func NewExecutionContextHandler(svc ExecutionContextHandler, opts ...connect.Han
 		connect.WithSchema(executionContextMethods.ByName("Log")),
 		connect.WithHandlerOptions(opts...),
 	)
+	executionContextCallPluginHandler := connect.NewUnaryHandler(
+		ExecutionContextCallPluginProcedure,
+		svc.CallPlugin,
+		connect.WithSchema(executionContextMethods.ByName("CallPlugin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	executionContextRunScriptHandler := connect.NewUnaryHandler(
+		ExecutionContextRunScriptProcedure,
+		svc.RunScript,
+		connect.WithSchema(executionContextMethods.ByName("RunScript")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dotfilesd.v1.ExecutionContext/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExecutionContextExecProcedure:
@@ -234,6 +290,10 @@ func NewExecutionContextHandler(svc ExecutionContextHandler, opts ...connect.Han
 			executionContextRequestChooseHandler.ServeHTTP(w, r)
 		case ExecutionContextLogProcedure:
 			executionContextLogHandler.ServeHTTP(w, r)
+		case ExecutionContextCallPluginProcedure:
+			executionContextCallPluginHandler.ServeHTTP(w, r)
+		case ExecutionContextRunScriptProcedure:
+			executionContextRunScriptHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -265,4 +325,12 @@ func (UnimplementedExecutionContextHandler) RequestChoose(context.Context, *conn
 
 func (UnimplementedExecutionContextHandler) Log(context.Context, *connect.Request[dotfilesdv1.LogRequest]) (*connect.Response[dotfilesdv1.LogResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecutionContext.Log is not implemented"))
+}
+
+func (UnimplementedExecutionContextHandler) CallPlugin(context.Context, *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecutionContext.CallPlugin is not implemented"))
+}
+
+func (UnimplementedExecutionContextHandler) RunScript(context.Context, *connect.Request[dotfilesdv1.RunScriptViaContextRequest]) (*connect.Response[dotfilesdv1.RunScriptViaContextResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecutionContext.RunScript is not implemented"))
 }

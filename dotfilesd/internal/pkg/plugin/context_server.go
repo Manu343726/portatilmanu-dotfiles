@@ -35,6 +35,14 @@ type ContextBackend interface {
 	// Log submits a log entry from a plugin. The daemon routes it through
 	// its logging system with the plugin name as the logger module.
 	Log(ctx context.Context, pluginName, level, msg string, attrs map[string]string) error
+
+	// CallPlugin invokes a tool on another loaded plugin. Returns the
+	// combined output (stdout+stderr) and any tool error.
+	CallPlugin(ctx context.Context, pluginName, toolName string, args map[string]string) (exitCode int32, stdout, stderr, errMsg string, err error)
+
+	// RunScript runs a script (inline, file path, or registered script)
+	// and returns the combined step results.
+	RunScript(ctx context.Context, sessionID string, source *dotfilesdv1.RunScriptViaContextRequest) (allSucceeded bool, steps []*dotfilesdv1.StepResult, errorMsg string, err error)
 }
 
 // ContextServerOptions configures the Execution Context server.
@@ -257,4 +265,65 @@ func (s *contextServer) Log(
 	}
 
 	return connect.NewResponse(&dotfilesdv1.LogResponse{}), nil
+}
+
+// ---- CallPlugin ----
+
+func (s *contextServer) CallPlugin(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.CallPluginRequest],
+) (*connect.Response[dotfilesdv1.CallPluginResponse], error) {
+	if err := s.authenticate(req); err != nil {
+		return nil, err
+	}
+
+	sessionID := ""
+	if req.Msg.Session != nil {
+		sessionID = req.Msg.Session.Id
+	}
+
+	slog.Debug("context server CallPlugin", "session", sessionID, "plugin", req.Msg.PluginName, "tool", req.Msg.ToolName)
+	exitCode, stdout, stderr, errMsg, err := s.opts.Backend.CallPlugin(ctx, req.Msg.PluginName, req.Msg.ToolName, req.Msg.Arguments)
+	if err != nil {
+		slog.Debug("context server CallPlugin failed", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("call plugin: %w", err))
+	}
+
+	slog.Debug("context server CallPlugin completed", "plugin", req.Msg.PluginName, "tool", req.Msg.ToolName, "exit_code", exitCode)
+	return connect.NewResponse(&dotfilesdv1.CallPluginResponse{
+		ExitCode:     exitCode,
+		Stdout:       stdout,
+		Stderr:       stderr,
+		ErrorMessage: errMsg,
+	}), nil
+}
+
+// ---- RunScript ----
+
+func (s *contextServer) RunScript(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.RunScriptViaContextRequest],
+) (*connect.Response[dotfilesdv1.RunScriptViaContextResponse], error) {
+	if err := s.authenticate(req); err != nil {
+		return nil, err
+	}
+
+	sessionID := ""
+	if req.Msg.Session != nil {
+		sessionID = req.Msg.Session.Id
+	}
+
+	slog.Debug("context server RunScript", "session", sessionID, "source", req.Msg.Source)
+	allSucceeded, steps, errorMsg, err := s.opts.Backend.RunScript(ctx, sessionID, req.Msg)
+	if err != nil {
+		slog.Debug("context server RunScript failed", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run script: %w", err))
+	}
+
+	slog.Debug("context server RunScript completed", "all_succeeded", allSucceeded, "steps", len(steps))
+	return connect.NewResponse(&dotfilesdv1.RunScriptViaContextResponse{
+		AllSucceeded: allSucceeded,
+		Steps:        steps,
+		Error:        errorMsg,
+	}), nil
 }
