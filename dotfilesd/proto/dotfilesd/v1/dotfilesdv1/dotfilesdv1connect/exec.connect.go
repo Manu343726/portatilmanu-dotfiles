@@ -39,6 +39,9 @@ const (
 	ExecServiceExecStreamProcedure = "/dotfilesd.v1.ExecService/ExecStream"
 	// ExecServiceSudoExecProcedure is the fully-qualified name of the ExecService's SudoExec RPC.
 	ExecServiceSudoExecProcedure = "/dotfilesd.v1.ExecService/SudoExec"
+	// ExecServiceBackgroundExecProcedure is the fully-qualified name of the ExecService's
+	// BackgroundExec RPC.
+	ExecServiceBackgroundExecProcedure = "/dotfilesd.v1.ExecService/BackgroundExec"
 )
 
 // ExecServiceClient is a client for the dotfilesd.v1.ExecService service.
@@ -54,6 +57,11 @@ type ExecServiceClient interface {
 	// The first call omits password; if the daemon needs auth it returns
 	// AuthChallenge. The client retries with the password.
 	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
+	// BackgroundExec starts a command and keeps it running in the background.
+	// The bidirectional stream carries stdin from client→server, stdout/stderr
+	// from server→client, and a cancel signal. The command runs until it exits
+	// or the client cancels. Only one BackgroundExec per stream.
+	BackgroundExec(context.Context) *connect.BidiStreamForClient[dotfilesdv1.BackgroundExecRequest, dotfilesdv1.BackgroundExecResponse]
 }
 
 // NewExecServiceClient constructs a client for the dotfilesd.v1.ExecService service. By default, it
@@ -85,14 +93,21 @@ func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(execServiceMethods.ByName("SudoExec")),
 			connect.WithClientOptions(opts...),
 		),
+		backgroundExec: connect.NewClient[dotfilesdv1.BackgroundExecRequest, dotfilesdv1.BackgroundExecResponse](
+			httpClient,
+			baseURL+ExecServiceBackgroundExecProcedure,
+			connect.WithSchema(execServiceMethods.ByName("BackgroundExec")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // execServiceClient implements ExecServiceClient.
 type execServiceClient struct {
-	exec       *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
-	execStream *connect.Client[dotfilesdv1.ExecStreamRequest, dotfilesdv1.ExecStreamResponse]
-	sudoExec   *connect.Client[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse]
+	exec           *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
+	execStream     *connect.Client[dotfilesdv1.ExecStreamRequest, dotfilesdv1.ExecStreamResponse]
+	sudoExec       *connect.Client[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse]
+	backgroundExec *connect.Client[dotfilesdv1.BackgroundExecRequest, dotfilesdv1.BackgroundExecResponse]
 }
 
 // Exec calls dotfilesd.v1.ExecService.Exec.
@@ -110,6 +125,11 @@ func (c *execServiceClient) SudoExec(ctx context.Context, req *connect.Request[d
 	return c.sudoExec.CallUnary(ctx, req)
 }
 
+// BackgroundExec calls dotfilesd.v1.ExecService.BackgroundExec.
+func (c *execServiceClient) BackgroundExec(ctx context.Context) *connect.BidiStreamForClient[dotfilesdv1.BackgroundExecRequest, dotfilesdv1.BackgroundExecResponse] {
+	return c.backgroundExec.CallBidiStream(ctx)
+}
+
 // ExecServiceHandler is an implementation of the dotfilesd.v1.ExecService service.
 type ExecServiceHandler interface {
 	// Exec runs a command and returns the complete output.
@@ -123,6 +143,11 @@ type ExecServiceHandler interface {
 	// The first call omits password; if the daemon needs auth it returns
 	// AuthChallenge. The client retries with the password.
 	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
+	// BackgroundExec starts a command and keeps it running in the background.
+	// The bidirectional stream carries stdin from client→server, stdout/stderr
+	// from server→client, and a cancel signal. The command runs until it exits
+	// or the client cancels. Only one BackgroundExec per stream.
+	BackgroundExec(context.Context, *connect.BidiStream[dotfilesdv1.BackgroundExecRequest, dotfilesdv1.BackgroundExecResponse]) error
 }
 
 // NewExecServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -150,6 +175,12 @@ func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(execServiceMethods.ByName("SudoExec")),
 		connect.WithHandlerOptions(opts...),
 	)
+	execServiceBackgroundExecHandler := connect.NewBidiStreamHandler(
+		ExecServiceBackgroundExecProcedure,
+		svc.BackgroundExec,
+		connect.WithSchema(execServiceMethods.ByName("BackgroundExec")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/dotfilesd.v1.ExecService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExecServiceExecProcedure:
@@ -158,6 +189,8 @@ func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption
 			execServiceExecStreamHandler.ServeHTTP(w, r)
 		case ExecServiceSudoExecProcedure:
 			execServiceSudoExecHandler.ServeHTTP(w, r)
+		case ExecServiceBackgroundExecProcedure:
+			execServiceBackgroundExecHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -177,4 +210,8 @@ func (UnimplementedExecServiceHandler) ExecStream(context.Context, *connect.Requ
 
 func (UnimplementedExecServiceHandler) SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.SudoExec is not implemented"))
+}
+
+func (UnimplementedExecServiceHandler) BackgroundExec(context.Context, *connect.BidiStream[dotfilesdv1.BackgroundExecRequest, dotfilesdv1.BackgroundExecResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.BackgroundExec is not implemented"))
 }

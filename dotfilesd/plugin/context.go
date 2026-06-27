@@ -53,6 +53,14 @@ type Context interface {
 	// want to see output as it's produced. Returns the exit code.
 	ExecStream(cmd string, sudo bool) (int, error)
 
+	// BackgroundExec starts a command in the background on the daemon and
+	// returns a BackgroundTask for controlling it. The task provides
+	// io.Reader/io.WriteCloser access to the command's stdout and stdin,
+	// plus Cancel() and Wait(). Use this for interactive commands or
+	// long-running daemon-like processes that the plugin needs to control
+	// asynchronously.
+	BackgroundExec(cmd string, sudo bool) (BackgroundTask, error)
+
 	// RequestInput prompts the user for arbitrary text input.
 	RequestInput(prompt, defaultVal string, sensitive bool) (string, error)
 

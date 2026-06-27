@@ -7,7 +7,6 @@ import (
 	"io"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
@@ -143,12 +142,4 @@ func zeroBytes(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}
-}
-
-// discardStream is a helper that drains a reader into a stream until EOF
-// or context cancellation. Used for merging stderr into the stream after
-// stdout is done.
-func discardStream(reader io.Reader, wg *sync.WaitGroup) {
-	defer wg.Done()
-	_, _ = io.Copy(io.Discard, reader)
 }

@@ -18,6 +18,7 @@ import (
 
 type execServer struct {
 	sessions *SessionStore
+	bgTasks  *backgroundTaskManager
 }
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
@@ -432,4 +433,69 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_AuthChallenge{
 		AuthChallenge: &dotfilesdv1.AuthChallenge{Methods: methods, Prompt: prompt},
 	}}), nil
+}
+
+// BackgroundExec handles the bidirectional background execution stream.
+// The first client message must contain a start action; after that the
+// client may send stdin chunks or cancel. The server streams stdout/stderr
+// chunks and a final exit event.
+func (s *execServer) BackgroundExec(
+	ctx context.Context,
+	stream *connect.BidiStream[dotfilesdv1.BackgroundExecRequest, dotfilesdv1.BackgroundExecResponse],
+) error {
+	// Read the start message.
+	msg, err := stream.Receive()
+	if err != nil {
+		return err
+	}
+
+	start := msg.GetStart()
+	if start == nil {
+		return connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("first BackgroundExec message must be a start action"))
+	}
+
+	session := s.sessions.ResolveSession(msg.GetSession())
+	command := start.Command
+	sudo := start.Sudo
+
+	slog.Log(ctx, levelTrace, "BackgroundExec", "command", command, "sudo", sudo)
+
+	var cmd *exec.Cmd
+
+	if sudo {
+		vars := session.Variables()
+
+		if vars["_cap_graphical"] == "true" && hasPkexec() {
+			cmd = exec.Command("pkexec", "sh", "-c", command)
+		} else if vars["_cap_elicitation"] == "true" || vars["_cap_terminal"] == "true" {
+			if !session.HasCallbackURL() {
+				return connect.NewError(connect.CodeFailedPrecondition,
+					fmt.Errorf("sudo requires callback URL for password prompt"))
+			}
+			user := os.Getenv("USER")
+			if user == "" {
+				user = "unknown"
+			}
+			prompt := fmt.Sprintf("[sudo] password for %s: ", user)
+			password, err := session.RequestInput(ctx, prompt, "", true)
+			if err != nil {
+				return connect.NewError(connect.CodeInternal,
+					fmt.Errorf("password prompt: %w", err))
+			}
+			pwd := []byte(password + "\n")
+			defer zeroBytes(pwd)
+			cmd = exec.Command("sudo", "-S", "sh", "-c", command)
+			cmd.Stdin = strings.NewReader(string(pwd))
+		} else {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("no sudo method available"))
+		}
+	} else {
+		cmd = exec.Command("sh", "-c", command)
+	}
+
+	// Hand off to the task manager — it owns the stream from here.
+	s.bgTasks.start(ctx, stream, cmd)
+	return nil
 }

@@ -604,6 +604,383 @@ func (x *SudoResult) GetAuthCancelled() bool {
 	return false
 }
 
+// BackgroundExecRequest is a client→server message on a background exec
+// stream. The first message MUST be a start action; subsequent messages
+// carry stdin data or a cancel signal.
+type BackgroundExecRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
+	// Types that are valid to be assigned to Action:
+	//
+	//	*BackgroundExecRequest_Start
+	//	*BackgroundExecRequest_StdinChunk
+	//	*BackgroundExecRequest_Cancel
+	Action        isBackgroundExecRequest_Action `protobuf_oneof:"action"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackgroundExecRequest) Reset() {
+	*x = BackgroundExecRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackgroundExecRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackgroundExecRequest) ProtoMessage() {}
+
+func (x *BackgroundExecRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackgroundExecRequest.ProtoReflect.Descriptor instead.
+func (*BackgroundExecRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *BackgroundExecRequest) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *BackgroundExecRequest) GetAction() isBackgroundExecRequest_Action {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *BackgroundExecRequest) GetStart() *StartCommand {
+	if x != nil {
+		if x, ok := x.Action.(*BackgroundExecRequest_Start); ok {
+			return x.Start
+		}
+	}
+	return nil
+}
+
+func (x *BackgroundExecRequest) GetStdinChunk() []byte {
+	if x != nil {
+		if x, ok := x.Action.(*BackgroundExecRequest_StdinChunk); ok {
+			return x.StdinChunk
+		}
+	}
+	return nil
+}
+
+func (x *BackgroundExecRequest) GetCancel() bool {
+	if x != nil {
+		if x, ok := x.Action.(*BackgroundExecRequest_Cancel); ok {
+			return x.Cancel
+		}
+	}
+	return false
+}
+
+type isBackgroundExecRequest_Action interface {
+	isBackgroundExecRequest_Action()
+}
+
+type BackgroundExecRequest_Start struct {
+	Start *StartCommand `protobuf:"bytes,1,opt,name=start,proto3,oneof"`
+}
+
+type BackgroundExecRequest_StdinChunk struct {
+	StdinChunk []byte `protobuf:"bytes,2,opt,name=stdin_chunk,json=stdinChunk,proto3,oneof"`
+}
+
+type BackgroundExecRequest_Cancel struct {
+	Cancel bool `protobuf:"varint,3,opt,name=cancel,proto3,oneof"`
+}
+
+func (*BackgroundExecRequest_Start) isBackgroundExecRequest_Action() {}
+
+func (*BackgroundExecRequest_StdinChunk) isBackgroundExecRequest_Action() {}
+
+func (*BackgroundExecRequest_Cancel) isBackgroundExecRequest_Action() {}
+
+// StartCommand configures the background process.
+type StartCommand struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Command       string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	Sudo          bool                   `protobuf:"varint,2,opt,name=sudo,proto3" json:"sudo,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartCommand) Reset() {
+	*x = StartCommand{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartCommand) ProtoMessage() {}
+
+func (x *StartCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartCommand.ProtoReflect.Descriptor instead.
+func (*StartCommand) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *StartCommand) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *StartCommand) GetSudo() bool {
+	if x != nil {
+		return x.Sudo
+	}
+	return false
+}
+
+// BackgroundExecResponse is a server→client message on a background exec
+// stream. The first response is always a started event; subsequent responses
+// carry output chunks or a final exit event.
+type BackgroundExecResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*BackgroundExecResponse_StdoutChunk
+	//	*BackgroundExecResponse_StderrChunk
+	//	*BackgroundExecResponse_Exit
+	//	*BackgroundExecResponse_Started
+	Event         isBackgroundExecResponse_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackgroundExecResponse) Reset() {
+	*x = BackgroundExecResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackgroundExecResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackgroundExecResponse) ProtoMessage() {}
+
+func (x *BackgroundExecResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackgroundExecResponse.ProtoReflect.Descriptor instead.
+func (*BackgroundExecResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *BackgroundExecResponse) GetEvent() isBackgroundExecResponse_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *BackgroundExecResponse) GetStdoutChunk() []byte {
+	if x != nil {
+		if x, ok := x.Event.(*BackgroundExecResponse_StdoutChunk); ok {
+			return x.StdoutChunk
+		}
+	}
+	return nil
+}
+
+func (x *BackgroundExecResponse) GetStderrChunk() []byte {
+	if x != nil {
+		if x, ok := x.Event.(*BackgroundExecResponse_StderrChunk); ok {
+			return x.StderrChunk
+		}
+	}
+	return nil
+}
+
+func (x *BackgroundExecResponse) GetExit() *ExitEvent {
+	if x != nil {
+		if x, ok := x.Event.(*BackgroundExecResponse_Exit); ok {
+			return x.Exit
+		}
+	}
+	return nil
+}
+
+func (x *BackgroundExecResponse) GetStarted() *StartedEvent {
+	if x != nil {
+		if x, ok := x.Event.(*BackgroundExecResponse_Started); ok {
+			return x.Started
+		}
+	}
+	return nil
+}
+
+type isBackgroundExecResponse_Event interface {
+	isBackgroundExecResponse_Event()
+}
+
+type BackgroundExecResponse_StdoutChunk struct {
+	StdoutChunk []byte `protobuf:"bytes,1,opt,name=stdout_chunk,json=stdoutChunk,proto3,oneof"`
+}
+
+type BackgroundExecResponse_StderrChunk struct {
+	StderrChunk []byte `protobuf:"bytes,2,opt,name=stderr_chunk,json=stderrChunk,proto3,oneof"`
+}
+
+type BackgroundExecResponse_Exit struct {
+	Exit *ExitEvent `protobuf:"bytes,3,opt,name=exit,proto3,oneof"`
+}
+
+type BackgroundExecResponse_Started struct {
+	Started *StartedEvent `protobuf:"bytes,4,opt,name=started,proto3,oneof"`
+}
+
+func (*BackgroundExecResponse_StdoutChunk) isBackgroundExecResponse_Event() {}
+
+func (*BackgroundExecResponse_StderrChunk) isBackgroundExecResponse_Event() {}
+
+func (*BackgroundExecResponse_Exit) isBackgroundExecResponse_Event() {}
+
+func (*BackgroundExecResponse_Started) isBackgroundExecResponse_Event() {}
+
+type StartedEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Opaque task ID for logging/diagnostics.
+	TaskId        string `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartedEvent) Reset() {
+	*x = StartedEvent{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartedEvent) ProtoMessage() {}
+
+func (x *StartedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartedEvent.ProtoReflect.Descriptor instead.
+func (*StartedEvent) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *StartedEvent) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+type ExitEvent struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	// Non-empty if the command could not be started (Go error).
+	ErrorMessage  string `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExitEvent) Reset() {
+	*x = ExitEvent{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExitEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExitEvent) ProtoMessage() {}
+
+func (x *ExitEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExitEvent.ProtoReflect.Descriptor instead.
+func (*ExitEvent) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ExitEvent) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *ExitEvent) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_proto_dotfilesd_v1_dotfilesdv1_exec_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc = "" +
@@ -644,18 +1021,40 @@ const file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc = "" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12%\n" +
-	"\x0eauth_cancelled\x18\x04 \x01(\bR\rauthCancelled*v\n" +
+	"\x0eauth_cancelled\x18\x04 \x01(\bR\rauthCancelled\"\xc3\x01\n" +
+	"\x15BackgroundExecRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x122\n" +
+	"\x05start\x18\x01 \x01(\v2\x1a.dotfilesd.v1.StartCommandH\x00R\x05start\x12!\n" +
+	"\vstdin_chunk\x18\x02 \x01(\fH\x00R\n" +
+	"stdinChunk\x12\x18\n" +
+	"\x06cancel\x18\x03 \x01(\bH\x00R\x06cancelB\b\n" +
+	"\x06action\"<\n" +
+	"\fStartCommand\x12\x18\n" +
+	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
+	"\x04sudo\x18\x02 \x01(\bR\x04sudo\"\xd2\x01\n" +
+	"\x16BackgroundExecResponse\x12#\n" +
+	"\fstdout_chunk\x18\x01 \x01(\fH\x00R\vstdoutChunk\x12#\n" +
+	"\fstderr_chunk\x18\x02 \x01(\fH\x00R\vstderrChunk\x12-\n" +
+	"\x04exit\x18\x03 \x01(\v2\x17.dotfilesd.v1.ExitEventH\x00R\x04exit\x126\n" +
+	"\astarted\x18\x04 \x01(\v2\x1a.dotfilesd.v1.StartedEventH\x00R\astartedB\a\n" +
+	"\x05event\"'\n" +
+	"\fStartedEvent\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\"M\n" +
+	"\tExitEvent\x12\x1b\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage*v\n" +
 	"\n" +
 	"SudoMethod\x12\x1b\n" +
 	"\x17SUDO_METHOD_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SUDO_METHOD_TERMINAL\x10\x01\x12\x19\n" +
 	"\x15SUDO_METHOD_GRAPHICAL\x10\x02\x12\x16\n" +
-	"\x12SUDO_METHOD_NOPASS\x10\x032\xea\x01\n" +
+	"\x12SUDO_METHOD_NOPASS\x10\x032\xcb\x02\n" +
 	"\vExecService\x12=\n" +
 	"\x04Exec\x12\x19.dotfilesd.v1.ExecRequest\x1a\x1a.dotfilesd.v1.ExecResponse\x12Q\n" +
 	"\n" +
 	"ExecStream\x12\x1f.dotfilesd.v1.ExecStreamRequest\x1a .dotfilesd.v1.ExecStreamResponse0\x01\x12I\n" +
-	"\bSudoExec\x12\x1d.dotfilesd.v1.SudoExecRequest\x1a\x1e.dotfilesd.v1.SudoExecResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\bSudoExec\x12\x1d.dotfilesd.v1.SudoExecRequest\x1a\x1e.dotfilesd.v1.SudoExecResponse\x12_\n" +
+	"\x0eBackgroundExec\x12#.dotfilesd.v1.BackgroundExecRequest\x1a$.dotfilesd.v1.BackgroundExecResponse(\x010\x01B*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescOnce sync.Once
@@ -670,37 +1069,48 @@ func file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_goTypes = []any{
-	(SudoMethod)(0),            // 0: dotfilesd.v1.SudoMethod
-	(*ExecRequest)(nil),        // 1: dotfilesd.v1.ExecRequest
-	(*ExecResponse)(nil),       // 2: dotfilesd.v1.ExecResponse
-	(*ExecStreamRequest)(nil),  // 3: dotfilesd.v1.ExecStreamRequest
-	(*ExecStreamResponse)(nil), // 4: dotfilesd.v1.ExecStreamResponse
-	(*SudoExecRequest)(nil),    // 5: dotfilesd.v1.SudoExecRequest
-	(*SudoExecResponse)(nil),   // 6: dotfilesd.v1.SudoExecResponse
-	(*AuthChallenge)(nil),      // 7: dotfilesd.v1.AuthChallenge
-	(*SudoResult)(nil),         // 8: dotfilesd.v1.SudoResult
-	(*Session)(nil),            // 9: dotfilesd.v1.Session
+	(SudoMethod)(0),                // 0: dotfilesd.v1.SudoMethod
+	(*ExecRequest)(nil),            // 1: dotfilesd.v1.ExecRequest
+	(*ExecResponse)(nil),           // 2: dotfilesd.v1.ExecResponse
+	(*ExecStreamRequest)(nil),      // 3: dotfilesd.v1.ExecStreamRequest
+	(*ExecStreamResponse)(nil),     // 4: dotfilesd.v1.ExecStreamResponse
+	(*SudoExecRequest)(nil),        // 5: dotfilesd.v1.SudoExecRequest
+	(*SudoExecResponse)(nil),       // 6: dotfilesd.v1.SudoExecResponse
+	(*AuthChallenge)(nil),          // 7: dotfilesd.v1.AuthChallenge
+	(*SudoResult)(nil),             // 8: dotfilesd.v1.SudoResult
+	(*BackgroundExecRequest)(nil),  // 9: dotfilesd.v1.BackgroundExecRequest
+	(*StartCommand)(nil),           // 10: dotfilesd.v1.StartCommand
+	(*BackgroundExecResponse)(nil), // 11: dotfilesd.v1.BackgroundExecResponse
+	(*StartedEvent)(nil),           // 12: dotfilesd.v1.StartedEvent
+	(*ExitEvent)(nil),              // 13: dotfilesd.v1.ExitEvent
+	(*Session)(nil),                // 14: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_depIdxs = []int32{
-	9, // 0: dotfilesd.v1.ExecRequest.session:type_name -> dotfilesd.v1.Session
-	9, // 1: dotfilesd.v1.ExecStreamRequest.session:type_name -> dotfilesd.v1.Session
-	9, // 2: dotfilesd.v1.SudoExecRequest.session:type_name -> dotfilesd.v1.Session
-	0, // 3: dotfilesd.v1.SudoExecRequest.preferred_method:type_name -> dotfilesd.v1.SudoMethod
-	8, // 4: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
-	7, // 5: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
-	1, // 6: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
-	3, // 7: dotfilesd.v1.ExecService.ExecStream:input_type -> dotfilesd.v1.ExecStreamRequest
-	5, // 8: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
-	2, // 9: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
-	4, // 10: dotfilesd.v1.ExecService.ExecStream:output_type -> dotfilesd.v1.ExecStreamResponse
-	6, // 11: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	14, // 0: dotfilesd.v1.ExecRequest.session:type_name -> dotfilesd.v1.Session
+	14, // 1: dotfilesd.v1.ExecStreamRequest.session:type_name -> dotfilesd.v1.Session
+	14, // 2: dotfilesd.v1.SudoExecRequest.session:type_name -> dotfilesd.v1.Session
+	0,  // 3: dotfilesd.v1.SudoExecRequest.preferred_method:type_name -> dotfilesd.v1.SudoMethod
+	8,  // 4: dotfilesd.v1.SudoExecResponse.result:type_name -> dotfilesd.v1.SudoResult
+	7,  // 5: dotfilesd.v1.SudoExecResponse.auth_challenge:type_name -> dotfilesd.v1.AuthChallenge
+	14, // 6: dotfilesd.v1.BackgroundExecRequest.session:type_name -> dotfilesd.v1.Session
+	10, // 7: dotfilesd.v1.BackgroundExecRequest.start:type_name -> dotfilesd.v1.StartCommand
+	13, // 8: dotfilesd.v1.BackgroundExecResponse.exit:type_name -> dotfilesd.v1.ExitEvent
+	12, // 9: dotfilesd.v1.BackgroundExecResponse.started:type_name -> dotfilesd.v1.StartedEvent
+	1,  // 10: dotfilesd.v1.ExecService.Exec:input_type -> dotfilesd.v1.ExecRequest
+	3,  // 11: dotfilesd.v1.ExecService.ExecStream:input_type -> dotfilesd.v1.ExecStreamRequest
+	5,  // 12: dotfilesd.v1.ExecService.SudoExec:input_type -> dotfilesd.v1.SudoExecRequest
+	9,  // 13: dotfilesd.v1.ExecService.BackgroundExec:input_type -> dotfilesd.v1.BackgroundExecRequest
+	2,  // 14: dotfilesd.v1.ExecService.Exec:output_type -> dotfilesd.v1.ExecResponse
+	4,  // 15: dotfilesd.v1.ExecService.ExecStream:output_type -> dotfilesd.v1.ExecStreamResponse
+	6,  // 16: dotfilesd.v1.ExecService.SudoExec:output_type -> dotfilesd.v1.SudoExecResponse
+	11, // 17: dotfilesd.v1.ExecService.BackgroundExec:output_type -> dotfilesd.v1.BackgroundExecResponse
+	14, // [14:18] is the sub-list for method output_type
+	10, // [10:14] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_init() }
@@ -713,13 +1123,24 @@ func file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_init() {
 		(*SudoExecResponse_Result)(nil),
 		(*SudoExecResponse_AuthChallenge)(nil),
 	}
+	file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[8].OneofWrappers = []any{
+		(*BackgroundExecRequest_Start)(nil),
+		(*BackgroundExecRequest_StdinChunk)(nil),
+		(*BackgroundExecRequest_Cancel)(nil),
+	}
+	file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_msgTypes[10].OneofWrappers = []any{
+		(*BackgroundExecResponse_StdoutChunk)(nil),
+		(*BackgroundExecResponse_StderrChunk)(nil),
+		(*BackgroundExecResponse_Exit)(nil),
+		(*BackgroundExecResponse_Started)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_exec_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   8,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

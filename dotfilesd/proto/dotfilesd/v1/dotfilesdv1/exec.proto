@@ -21,6 +21,12 @@ service ExecService {
   // The first call omits password; if the daemon needs auth it returns
   // AuthChallenge. The client retries with the password.
   rpc SudoExec(SudoExecRequest) returns (SudoExecResponse);
+
+  // BackgroundExec starts a command and keeps it running in the background.
+  // The bidirectional stream carries stdin from client→server, stdout/stderr
+  // from server→client, and a cancel signal. The command runs until it exits
+  // or the client cancels. Only one BackgroundExec per stream.
+  rpc BackgroundExec(stream BackgroundExecRequest) returns (stream BackgroundExecResponse);
 }
 
 enum SudoMethod {
@@ -89,4 +95,47 @@ message SudoResult {
   string stdout = 2;
   string stderr = 3;
   bool auth_cancelled = 4;
+}
+
+// --- BackgroundExec protocol (bidi stream) ---------------------------------
+
+// BackgroundExecRequest is a client→server message on a background exec
+// stream. The first message MUST be a start action; subsequent messages
+// carry stdin data or a cancel signal.
+message BackgroundExecRequest {
+  Session session = 100;
+  oneof action {
+    StartCommand start = 1;
+    bytes stdin_chunk = 2;
+    bool cancel = 3;
+  }
+}
+
+// StartCommand configures the background process.
+message StartCommand {
+  string command = 1;
+  bool sudo = 2;
+}
+
+// BackgroundExecResponse is a server→client message on a background exec
+// stream. The first response is always a started event; subsequent responses
+// carry output chunks or a final exit event.
+message BackgroundExecResponse {
+  oneof event {
+    bytes stdout_chunk = 1;
+    bytes stderr_chunk = 2;
+    ExitEvent exit = 3;
+    StartedEvent started = 4;
+  }
+}
+
+message StartedEvent {
+  // Opaque task ID for logging/diagnostics.
+  string task_id = 1;
+}
+
+message ExitEvent {
+  int32 exit_code = 1;
+  // Non-empty if the command could not be started (Go error).
+  string error_message = 2;
 }

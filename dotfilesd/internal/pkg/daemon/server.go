@@ -39,6 +39,9 @@ type Daemon struct {
 	// Plugin system.
 	pluginMgr   *plugin.Manager
 	pluginToken string
+
+	// Background tasks.
+	bgTasks *backgroundTaskManager
 }
 
 func New(cfg Config) *Daemon {
@@ -70,7 +73,7 @@ func (d *Daemon) Start() error {
 
 	sysSvc := &systemServer{startedAt: time.Now(), sessions: d.sessions, daemon: d}
 	dotSvc := &dotfilesServer{sessions: d.sessions}
-	execSvc := &execServer{sessions: d.sessions}
+	execSvc := &execServer{sessions: d.sessions, bgTasks: newBackgroundTaskManager()}
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)

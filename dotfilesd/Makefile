@@ -161,7 +161,7 @@ plugin-build:
 		exit 1; \
 	fi
 	@mkdir -p $(PLUGIN_CACHE_DIR)/$(PLUGIN)
-	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/plugin .
+	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
 	@echo "plugin '$(PLUGIN)' built."
 
 # Build all plugins found in the plugins directory
@@ -170,7 +170,7 @@ plugin-build-all:
 		name=$$(basename $$dir); \
 		echo "building plugin: $$name..."; \
 		mkdir -p $(PLUGIN_CACHE_DIR)/$$name; \
-		cd $$dir && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/plugin .; \
+		cd $$dir && $(GO) build -o $(PLUGIN_CACHE_DIR)/$$name/$$name .; \
 	done
 	@echo "all plugins built."
 
