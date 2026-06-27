@@ -49,7 +49,7 @@ is entirely new. Empty proto dirs use `.gitkeep` so git tracks the structure.
 
 ## [Step 1] — Delete ALL Old Plugin Code
 
-**Commit:** `pending`
+**Commit:** `0c0b30c`
 **Date:** 2026-06-27
 
 ### Changes
