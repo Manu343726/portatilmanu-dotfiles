@@ -424,7 +424,11 @@ const file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18d \x01(\tR\tsessionId\x12%\n" +
 	"\x0eselected_index\x18\x01 \x01(\x05R\rselectedIndex\x12'\n" +
-	"\x0fselected_option\x18\x02 \x01(\tR\x0eselectedOption2W\n" +
+	"\x0fselected_option\x18\x02 \x01(\tR\x0eselectedOption2\xf5\x01\n" +
+	"\x0fFeedbackService\x12G\n" +
+	"\fRequestInput\x12\x1a.dotfilesd.v1.InputRequest\x1a\x1b.dotfilesd.v1.InputResponse\x12M\n" +
+	"\x0eRequestConfirm\x12\x1c.dotfilesd.v1.ConfirmRequest\x1a\x1d.dotfilesd.v1.ConfirmResponse\x12J\n" +
+	"\rRequestChoose\x12\x1b.dotfilesd.v1.ChooseRequest\x1a\x1c.dotfilesd.v1.ChooseResponse2W\n" +
 	"\fInputService\x12G\n" +
 	"\fRequestInput\x12\x1a.dotfilesd.v1.InputRequest\x1a\x1b.dotfilesd.v1.InputResponse2_\n" +
 	"\x0eConfirmService\x12M\n" +
@@ -458,14 +462,20 @@ var file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_depIdxs = []int32{
 	6, // 0: dotfilesd.v1.InputRequest.session:type_name -> dotfilesd.v1.Session
 	6, // 1: dotfilesd.v1.ConfirmRequest.session:type_name -> dotfilesd.v1.Session
 	6, // 2: dotfilesd.v1.ChooseRequest.session:type_name -> dotfilesd.v1.Session
-	0, // 3: dotfilesd.v1.InputService.RequestInput:input_type -> dotfilesd.v1.InputRequest
-	2, // 4: dotfilesd.v1.ConfirmService.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
-	4, // 5: dotfilesd.v1.ChooseService.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
-	1, // 6: dotfilesd.v1.InputService.RequestInput:output_type -> dotfilesd.v1.InputResponse
-	3, // 7: dotfilesd.v1.ConfirmService.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
-	5, // 8: dotfilesd.v1.ChooseService.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
+	0, // 3: dotfilesd.v1.FeedbackService.RequestInput:input_type -> dotfilesd.v1.InputRequest
+	2, // 4: dotfilesd.v1.FeedbackService.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
+	4, // 5: dotfilesd.v1.FeedbackService.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
+	0, // 6: dotfilesd.v1.InputService.RequestInput:input_type -> dotfilesd.v1.InputRequest
+	2, // 7: dotfilesd.v1.ConfirmService.RequestConfirm:input_type -> dotfilesd.v1.ConfirmRequest
+	4, // 8: dotfilesd.v1.ChooseService.RequestChoose:input_type -> dotfilesd.v1.ChooseRequest
+	1, // 9: dotfilesd.v1.FeedbackService.RequestInput:output_type -> dotfilesd.v1.InputResponse
+	3, // 10: dotfilesd.v1.FeedbackService.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
+	5, // 11: dotfilesd.v1.FeedbackService.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
+	1, // 12: dotfilesd.v1.InputService.RequestInput:output_type -> dotfilesd.v1.InputResponse
+	3, // 13: dotfilesd.v1.ConfirmService.RequestConfirm:output_type -> dotfilesd.v1.ConfirmResponse
+	5, // 14: dotfilesd.v1.ChooseService.RequestChoose:output_type -> dotfilesd.v1.ChooseResponse
+	9, // [9:15] is the sub-list for method output_type
+	3, // [3:9] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
 	3, // [3:3] is the sub-list for extension extendee
 	0, // [0:3] is the sub-list for field type_name
@@ -485,7 +495,7 @@ func file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_init() {
 			NumEnums:      0,
 			NumMessages:   6,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   4,
 		},
 		GoTypes:           file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_goTypes,
 		DependencyIndexes: file_proto_dotfilesd_v1_dotfilesdv1_feedback_proto_depIdxs,

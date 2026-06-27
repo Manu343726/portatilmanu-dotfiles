@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
+// LogService — plugins submit structured log entries to the daemon's logging
+// system. This is the usage-level service (both CLI tools and plugins can log
+// through their daemon connection).
+service LogService {
+  // Log submits a log entry. The daemon routes it through its logging system
+  // with the caller's identity as the logger module.
+  rpc Log(LogRequest) returns (LogResponse);
+}
+
+// LogEntry represents a single log record from a plugin or tool.
+message LogEntry {
+  string level = 1;       // trace, debug, info, warn, error, fatal
+  string message = 2;
+  map<string, string> attributes = 3;
+}
+
+// LogRequest submits a log entry to the daemon.
+message LogRequest {
+  Session session = 100;
+  // Source identifier (e.g. plugin name, tool name).
+  string source = 1;
+  // The structured log entry.
+  LogEntry entry = 2;
+}
+
+// LogResponse acknowledges receipt of a log entry.
+message LogResponse {}

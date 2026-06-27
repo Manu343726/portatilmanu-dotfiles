@@ -37,10 +37,8 @@ type Daemon struct {
 	logger *logging.Manager
 
 	// Plugin system.
-	pluginMgr        *plugin.Manager
-	pluginToken      string
-	pluginCtxPath    string
-	pluginCtxHandler http.Handler
+	pluginMgr   *plugin.Manager
+	pluginToken string
 }
 
 func New(cfg Config) *Daemon {
@@ -78,7 +76,7 @@ func (d *Daemon) Start() error {
 	scriptSvc := newScriptServer(d.sessions, d.scripts)
 
 	// Initialize plugin system.
-	if err := d.InitPlugins(execSvc); err != nil {
+	if err := d.InitPlugins(); err != nil {
 		slog.Warn("plugin init (continuing)", "error", err)
 	}
 
@@ -107,9 +105,17 @@ func (d *Daemon) Start() error {
 		p, h := dotfilesdv1connect.NewScriptServiceHandler(scriptSvc)
 		mux.Handle(p, h)
 	}
-	// Mount the plugin execution context server.
-	if d.pluginCtxPath != "" && d.pluginCtxHandler != nil {
-		mux.Handle(d.pluginCtxPath, d.pluginCtxHandler)
+	{
+		p, h := dotfilesdv1connect.NewFeedbackServiceHandler(newFeedbackServer(d.sessions))
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewLogServiceHandler(newLogServer(d))
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewPluginServiceHandler(newPluginServiceServer(d.sessions, d))
+		mux.Handle(p, h)
 	}
 
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)

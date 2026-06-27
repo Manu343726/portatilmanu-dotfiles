@@ -37,7 +37,7 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 	slog.Debug("connected to daemon for dynamic command registration")
 
 	// Fetch plugin tree (directory hierarchy with loaded plugin descriptors).
-	pluginResp, err := dynClients.Sys.ListPluginTree(context.Background(), connect.NewRequest(&dotfilesdv1.ListPluginTreeRequest{}))
+	pluginResp, err := dynClients.Plugin.ListPluginTree(context.Background(), connect.NewRequest(&dotfilesdv1.ListPluginTreeRequest{}))
 	if err == nil {
 		for _, entry := range pluginResp.Msg.Entries {
 			registerPluginTreeEntry(root, dynClients, entry, true)

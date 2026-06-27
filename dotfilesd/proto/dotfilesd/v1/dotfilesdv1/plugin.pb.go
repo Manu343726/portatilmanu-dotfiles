@@ -220,11 +220,375 @@ func (x *ListPluginTreeResponse) GetEntries() []*PluginTreeEntry {
 	return nil
 }
 
+type ListPluginsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPluginsRequest) Reset() {
+	*x = ListPluginsRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPluginsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPluginsRequest) ProtoMessage() {}
+
+func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
+func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListPluginsRequest) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+type ListPluginsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Plugins       []*ExtensionDescriptor `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPluginsResponse) Reset() {
+	*x = ListPluginsResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPluginsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPluginsResponse) ProtoMessage() {}
+
+func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPluginsResponse.ProtoReflect.Descriptor instead.
+func (*ListPluginsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListPluginsResponse) GetPlugins() []*ExtensionDescriptor {
+	if x != nil {
+		return x.Plugins
+	}
+	return nil
+}
+
+type CallPluginToolRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
+	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	ToolName      string                 `protobuf:"bytes,2,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	Arguments     map[string]string      `protobuf:"bytes,3,rep,name=arguments,proto3" json:"arguments,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallPluginToolRequest) Reset() {
+	*x = CallPluginToolRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallPluginToolRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallPluginToolRequest) ProtoMessage() {}
+
+func (x *CallPluginToolRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallPluginToolRequest.ProtoReflect.Descriptor instead.
+func (*CallPluginToolRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CallPluginToolRequest) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *CallPluginToolRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *CallPluginToolRequest) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
+func (x *CallPluginToolRequest) GetArguments() map[string]string {
+	if x != nil {
+		return x.Arguments
+	}
+	return nil
+}
+
+type CallPluginToolResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A chunk of stdout output from the tool.
+	StdoutChunk []byte `protobuf:"bytes,1,opt,name=stdout_chunk,json=stdoutChunk,proto3" json:"stdout_chunk,omitempty"`
+	// A chunk of stderr output from the tool.
+	StderrChunk []byte `protobuf:"bytes,2,opt,name=stderr_chunk,json=stderrChunk,proto3" json:"stderr_chunk,omitempty"`
+	// If true, this is the final message — the tool has finished.
+	Done bool `protobuf:"varint,3,opt,name=done,proto3" json:"done,omitempty"`
+	// If done is true, the tool's error message (empty means success).
+	ErrorMessage  string `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallPluginToolResponse) Reset() {
+	*x = CallPluginToolResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallPluginToolResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallPluginToolResponse) ProtoMessage() {}
+
+func (x *CallPluginToolResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallPluginToolResponse.ProtoReflect.Descriptor instead.
+func (*CallPluginToolResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CallPluginToolResponse) GetStdoutChunk() []byte {
+	if x != nil {
+		return x.StdoutChunk
+	}
+	return nil
+}
+
+func (x *CallPluginToolResponse) GetStderrChunk() []byte {
+	if x != nil {
+		return x.StderrChunk
+	}
+	return nil
+}
+
+func (x *CallPluginToolResponse) GetDone() bool {
+	if x != nil {
+		return x.Done
+	}
+	return false
+}
+
+func (x *CallPluginToolResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type CallPluginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,100,opt,name=session,proto3" json:"session,omitempty"`
+	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	ToolName      string                 `protobuf:"bytes,2,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	Arguments     map[string]string      `protobuf:"bytes,3,rep,name=arguments,proto3" json:"arguments,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallPluginRequest) Reset() {
+	*x = CallPluginRequest{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallPluginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallPluginRequest) ProtoMessage() {}
+
+func (x *CallPluginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallPluginRequest.ProtoReflect.Descriptor instead.
+func (*CallPluginRequest) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CallPluginRequest) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
+func (x *CallPluginRequest) GetPluginName() string {
+	if x != nil {
+		return x.PluginName
+	}
+	return ""
+}
+
+func (x *CallPluginRequest) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
+func (x *CallPluginRequest) GetArguments() map[string]string {
+	if x != nil {
+		return x.Arguments
+	}
+	return nil
+}
+
+type CallPluginResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode      int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Stdout        string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr        string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // non-empty if the tool returned a Go error
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallPluginResponse) Reset() {
+	*x = CallPluginResponse{}
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallPluginResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallPluginResponse) ProtoMessage() {}
+
+func (x *CallPluginResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallPluginResponse.ProtoReflect.Descriptor instead.
+func (*CallPluginResponse) Descriptor() ([]byte, []int) {
+	return file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *CallPluginResponse) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *CallPluginResponse) GetStdout() string {
+	if x != nil {
+		return x.Stdout
+	}
+	return ""
+}
+
+func (x *CallPluginResponse) GetStderr() string {
+	if x != nil {
+		return x.Stderr
+	}
+	return ""
+}
+
+func (x *CallPluginResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_proto_dotfilesd_v1_dotfilesdv1_plugin_proto protoreflect.FileDescriptor
 
 const file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"+proto/dotfilesd/v1/dotfilesdv1/plugin.proto\x12\fdotfilesd.v1\x1a.proto/dotfilesd/v1/dotfilesdv1/extension.proto\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\"\xa2\x02\n" +
+	"+proto/dotfilesd/v1/dotfilesdv1/plugin.proto\x12\fdotfilesd.v1\x1a,proto/dotfilesd/v1/dotfilesdv1/session.proto\x1a.proto/dotfilesd/v1/dotfilesdv1/extension.proto\"\xa2\x02\n" +
 	"\x0fPluginTreeEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
@@ -237,7 +601,45 @@ const file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDesc = "" +
 	"\x15ListPluginTreeRequest\x12/\n" +
 	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"Q\n" +
 	"\x16ListPluginTreeResponse\x127\n" +
-	"\aentries\x18\x01 \x03(\v2\x1d.dotfilesd.v1.PluginTreeEntryR\aentriesB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
+	"\aentries\x18\x01 \x03(\v2\x1d.dotfilesd.v1.PluginTreeEntryR\aentries\"E\n" +
+	"\x12ListPluginsRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\"R\n" +
+	"\x13ListPluginsResponse\x12;\n" +
+	"\aplugins\x18\x01 \x03(\v2!.dotfilesd.v1.ExtensionDescriptorR\aplugins\"\x96\x02\n" +
+	"\x15CallPluginToolRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x1f\n" +
+	"\vplugin_name\x18\x01 \x01(\tR\n" +
+	"pluginName\x12\x1b\n" +
+	"\ttool_name\x18\x02 \x01(\tR\btoolName\x12P\n" +
+	"\targuments\x18\x03 \x03(\v22.dotfilesd.v1.CallPluginToolRequest.ArgumentsEntryR\targuments\x1a<\n" +
+	"\x0eArgumentsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x01\n" +
+	"\x16CallPluginToolResponse\x12!\n" +
+	"\fstdout_chunk\x18\x01 \x01(\fR\vstdoutChunk\x12!\n" +
+	"\fstderr_chunk\x18\x02 \x01(\fR\vstderrChunk\x12\x12\n" +
+	"\x04done\x18\x03 \x01(\bR\x04done\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\x8e\x02\n" +
+	"\x11CallPluginRequest\x12/\n" +
+	"\asession\x18d \x01(\v2\x15.dotfilesd.v1.SessionR\asession\x12\x1f\n" +
+	"\vplugin_name\x18\x01 \x01(\tR\n" +
+	"pluginName\x12\x1b\n" +
+	"\ttool_name\x18\x02 \x01(\tR\btoolName\x12L\n" +
+	"\targuments\x18\x03 \x03(\v2..dotfilesd.v1.CallPluginRequest.ArgumentsEntryR\targuments\x1a<\n" +
+	"\x0eArgumentsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x86\x01\n" +
+	"\x12CallPluginResponse\x12\x1b\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
+	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage2\xf0\x02\n" +
+	"\rPluginService\x12R\n" +
+	"\vListPlugins\x12 .dotfilesd.v1.ListPluginsRequest\x1a!.dotfilesd.v1.ListPluginsResponse\x12[\n" +
+	"\x0eListPluginTree\x12#.dotfilesd.v1.ListPluginTreeRequest\x1a$.dotfilesd.v1.ListPluginTreeResponse\x12]\n" +
+	"\x0eCallPluginTool\x12#.dotfilesd.v1.CallPluginToolRequest\x1a$.dotfilesd.v1.CallPluginToolResponse0\x01\x12O\n" +
+	"\n" +
+	"CallPlugin\x12\x1f.dotfilesd.v1.CallPluginRequest\x1a .dotfilesd.v1.CallPluginResponseB*Z(dotfilesd/proto/dotfilesd/v1/dotfilesdv1b\x06proto3"
 
 var (
 	file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescOnce sync.Once
@@ -251,24 +653,46 @@ func file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescGZIP() []byte {
 	return file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDescData
 }
 
-var file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_goTypes = []any{
 	(*PluginTreeEntry)(nil),        // 0: dotfilesd.v1.PluginTreeEntry
 	(*ListPluginTreeRequest)(nil),  // 1: dotfilesd.v1.ListPluginTreeRequest
 	(*ListPluginTreeResponse)(nil), // 2: dotfilesd.v1.ListPluginTreeResponse
-	(*ExtensionDescriptor)(nil),    // 3: dotfilesd.v1.ExtensionDescriptor
-	(*Session)(nil),                // 4: dotfilesd.v1.Session
+	(*ListPluginsRequest)(nil),     // 3: dotfilesd.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),    // 4: dotfilesd.v1.ListPluginsResponse
+	(*CallPluginToolRequest)(nil),  // 5: dotfilesd.v1.CallPluginToolRequest
+	(*CallPluginToolResponse)(nil), // 6: dotfilesd.v1.CallPluginToolResponse
+	(*CallPluginRequest)(nil),      // 7: dotfilesd.v1.CallPluginRequest
+	(*CallPluginResponse)(nil),     // 8: dotfilesd.v1.CallPluginResponse
+	nil,                            // 9: dotfilesd.v1.CallPluginToolRequest.ArgumentsEntry
+	nil,                            // 10: dotfilesd.v1.CallPluginRequest.ArgumentsEntry
+	(*ExtensionDescriptor)(nil),    // 11: dotfilesd.v1.ExtensionDescriptor
+	(*Session)(nil),                // 12: dotfilesd.v1.Session
 }
 var file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_depIdxs = []int32{
-	0, // 0: dotfilesd.v1.PluginTreeEntry.children:type_name -> dotfilesd.v1.PluginTreeEntry
-	3, // 1: dotfilesd.v1.PluginTreeEntry.plugin:type_name -> dotfilesd.v1.ExtensionDescriptor
-	4, // 2: dotfilesd.v1.ListPluginTreeRequest.session:type_name -> dotfilesd.v1.Session
-	0, // 3: dotfilesd.v1.ListPluginTreeResponse.entries:type_name -> dotfilesd.v1.PluginTreeEntry
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0,  // 0: dotfilesd.v1.PluginTreeEntry.children:type_name -> dotfilesd.v1.PluginTreeEntry
+	11, // 1: dotfilesd.v1.PluginTreeEntry.plugin:type_name -> dotfilesd.v1.ExtensionDescriptor
+	12, // 2: dotfilesd.v1.ListPluginTreeRequest.session:type_name -> dotfilesd.v1.Session
+	0,  // 3: dotfilesd.v1.ListPluginTreeResponse.entries:type_name -> dotfilesd.v1.PluginTreeEntry
+	12, // 4: dotfilesd.v1.ListPluginsRequest.session:type_name -> dotfilesd.v1.Session
+	11, // 5: dotfilesd.v1.ListPluginsResponse.plugins:type_name -> dotfilesd.v1.ExtensionDescriptor
+	12, // 6: dotfilesd.v1.CallPluginToolRequest.session:type_name -> dotfilesd.v1.Session
+	9,  // 7: dotfilesd.v1.CallPluginToolRequest.arguments:type_name -> dotfilesd.v1.CallPluginToolRequest.ArgumentsEntry
+	12, // 8: dotfilesd.v1.CallPluginRequest.session:type_name -> dotfilesd.v1.Session
+	10, // 9: dotfilesd.v1.CallPluginRequest.arguments:type_name -> dotfilesd.v1.CallPluginRequest.ArgumentsEntry
+	3,  // 10: dotfilesd.v1.PluginService.ListPlugins:input_type -> dotfilesd.v1.ListPluginsRequest
+	1,  // 11: dotfilesd.v1.PluginService.ListPluginTree:input_type -> dotfilesd.v1.ListPluginTreeRequest
+	5,  // 12: dotfilesd.v1.PluginService.CallPluginTool:input_type -> dotfilesd.v1.CallPluginToolRequest
+	7,  // 13: dotfilesd.v1.PluginService.CallPlugin:input_type -> dotfilesd.v1.CallPluginRequest
+	4,  // 14: dotfilesd.v1.PluginService.ListPlugins:output_type -> dotfilesd.v1.ListPluginsResponse
+	2,  // 15: dotfilesd.v1.PluginService.ListPluginTree:output_type -> dotfilesd.v1.ListPluginTreeResponse
+	6,  // 16: dotfilesd.v1.PluginService.CallPluginTool:output_type -> dotfilesd.v1.CallPluginToolResponse
+	8,  // 17: dotfilesd.v1.PluginService.CallPlugin:output_type -> dotfilesd.v1.CallPluginResponse
+	14, // [14:18] is the sub-list for method output_type
+	10, // [10:14] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_init() }
@@ -276,17 +700,17 @@ func file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_init() {
 	if File_proto_dotfilesd_v1_dotfilesdv1_plugin_proto != nil {
 		return
 	}
-	file_proto_dotfilesd_v1_dotfilesdv1_extension_proto_init()
 	file_proto_dotfilesd_v1_dotfilesdv1_session_proto_init()
+	file_proto_dotfilesd_v1_dotfilesdv1_extension_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDesc), len(file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   11,
 			NumExtensions: 0,
-			NumServices:   0,
+			NumServices:   1,
 		},
 		GoTypes:           file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_goTypes,
 		DependencyIndexes: file_proto_dotfilesd_v1_dotfilesdv1_plugin_proto_depIdxs,

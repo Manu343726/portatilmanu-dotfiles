@@ -21,6 +21,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
+	// FeedbackServiceName is the fully-qualified name of the FeedbackService service.
+	FeedbackServiceName = "dotfilesd.v1.FeedbackService"
 	// InputServiceName is the fully-qualified name of the InputService service.
 	InputServiceName = "dotfilesd.v1.InputService"
 	// ConfirmServiceName is the fully-qualified name of the ConfirmService service.
@@ -37,6 +39,15 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// FeedbackServiceRequestInputProcedure is the fully-qualified name of the FeedbackService's
+	// RequestInput RPC.
+	FeedbackServiceRequestInputProcedure = "/dotfilesd.v1.FeedbackService/RequestInput"
+	// FeedbackServiceRequestConfirmProcedure is the fully-qualified name of the FeedbackService's
+	// RequestConfirm RPC.
+	FeedbackServiceRequestConfirmProcedure = "/dotfilesd.v1.FeedbackService/RequestConfirm"
+	// FeedbackServiceRequestChooseProcedure is the fully-qualified name of the FeedbackService's
+	// RequestChoose RPC.
+	FeedbackServiceRequestChooseProcedure = "/dotfilesd.v1.FeedbackService/RequestChoose"
 	// InputServiceRequestInputProcedure is the fully-qualified name of the InputService's RequestInput
 	// RPC.
 	InputServiceRequestInputProcedure = "/dotfilesd.v1.InputService/RequestInput"
@@ -47,6 +58,134 @@ const (
 	// RequestChoose RPC.
 	ChooseServiceRequestChooseProcedure = "/dotfilesd.v1.ChooseService/RequestChoose"
 )
+
+// FeedbackServiceClient is a client for the dotfilesd.v1.FeedbackService service.
+type FeedbackServiceClient interface {
+	// RequestInput prompts the user for text input.
+	RequestInput(context.Context, *connect.Request[dotfilesdv1.InputRequest]) (*connect.Response[dotfilesdv1.InputResponse], error)
+	// RequestConfirm prompts the user for a yes/no confirmation.
+	RequestConfirm(context.Context, *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error)
+	// RequestChoose prompts the user to pick from a list of options.
+	RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error)
+}
+
+// NewFeedbackServiceClient constructs a client for the dotfilesd.v1.FeedbackService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewFeedbackServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) FeedbackServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	feedbackServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto.Services().ByName("FeedbackService").Methods()
+	return &feedbackServiceClient{
+		requestInput: connect.NewClient[dotfilesdv1.InputRequest, dotfilesdv1.InputResponse](
+			httpClient,
+			baseURL+FeedbackServiceRequestInputProcedure,
+			connect.WithSchema(feedbackServiceMethods.ByName("RequestInput")),
+			connect.WithClientOptions(opts...),
+		),
+		requestConfirm: connect.NewClient[dotfilesdv1.ConfirmRequest, dotfilesdv1.ConfirmResponse](
+			httpClient,
+			baseURL+FeedbackServiceRequestConfirmProcedure,
+			connect.WithSchema(feedbackServiceMethods.ByName("RequestConfirm")),
+			connect.WithClientOptions(opts...),
+		),
+		requestChoose: connect.NewClient[dotfilesdv1.ChooseRequest, dotfilesdv1.ChooseResponse](
+			httpClient,
+			baseURL+FeedbackServiceRequestChooseProcedure,
+			connect.WithSchema(feedbackServiceMethods.ByName("RequestChoose")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// feedbackServiceClient implements FeedbackServiceClient.
+type feedbackServiceClient struct {
+	requestInput   *connect.Client[dotfilesdv1.InputRequest, dotfilesdv1.InputResponse]
+	requestConfirm *connect.Client[dotfilesdv1.ConfirmRequest, dotfilesdv1.ConfirmResponse]
+	requestChoose  *connect.Client[dotfilesdv1.ChooseRequest, dotfilesdv1.ChooseResponse]
+}
+
+// RequestInput calls dotfilesd.v1.FeedbackService.RequestInput.
+func (c *feedbackServiceClient) RequestInput(ctx context.Context, req *connect.Request[dotfilesdv1.InputRequest]) (*connect.Response[dotfilesdv1.InputResponse], error) {
+	return c.requestInput.CallUnary(ctx, req)
+}
+
+// RequestConfirm calls dotfilesd.v1.FeedbackService.RequestConfirm.
+func (c *feedbackServiceClient) RequestConfirm(ctx context.Context, req *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error) {
+	return c.requestConfirm.CallUnary(ctx, req)
+}
+
+// RequestChoose calls dotfilesd.v1.FeedbackService.RequestChoose.
+func (c *feedbackServiceClient) RequestChoose(ctx context.Context, req *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error) {
+	return c.requestChoose.CallUnary(ctx, req)
+}
+
+// FeedbackServiceHandler is an implementation of the dotfilesd.v1.FeedbackService service.
+type FeedbackServiceHandler interface {
+	// RequestInput prompts the user for text input.
+	RequestInput(context.Context, *connect.Request[dotfilesdv1.InputRequest]) (*connect.Response[dotfilesdv1.InputResponse], error)
+	// RequestConfirm prompts the user for a yes/no confirmation.
+	RequestConfirm(context.Context, *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error)
+	// RequestChoose prompts the user to pick from a list of options.
+	RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error)
+}
+
+// NewFeedbackServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewFeedbackServiceHandler(svc FeedbackServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	feedbackServiceMethods := dotfilesdv1.File_proto_dotfilesd_v1_dotfilesdv1_feedback_proto.Services().ByName("FeedbackService").Methods()
+	feedbackServiceRequestInputHandler := connect.NewUnaryHandler(
+		FeedbackServiceRequestInputProcedure,
+		svc.RequestInput,
+		connect.WithSchema(feedbackServiceMethods.ByName("RequestInput")),
+		connect.WithHandlerOptions(opts...),
+	)
+	feedbackServiceRequestConfirmHandler := connect.NewUnaryHandler(
+		FeedbackServiceRequestConfirmProcedure,
+		svc.RequestConfirm,
+		connect.WithSchema(feedbackServiceMethods.ByName("RequestConfirm")),
+		connect.WithHandlerOptions(opts...),
+	)
+	feedbackServiceRequestChooseHandler := connect.NewUnaryHandler(
+		FeedbackServiceRequestChooseProcedure,
+		svc.RequestChoose,
+		connect.WithSchema(feedbackServiceMethods.ByName("RequestChoose")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/dotfilesd.v1.FeedbackService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case FeedbackServiceRequestInputProcedure:
+			feedbackServiceRequestInputHandler.ServeHTTP(w, r)
+		case FeedbackServiceRequestConfirmProcedure:
+			feedbackServiceRequestConfirmHandler.ServeHTTP(w, r)
+		case FeedbackServiceRequestChooseProcedure:
+			feedbackServiceRequestChooseHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedFeedbackServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedFeedbackServiceHandler struct{}
+
+func (UnimplementedFeedbackServiceHandler) RequestInput(context.Context, *connect.Request[dotfilesdv1.InputRequest]) (*connect.Response[dotfilesdv1.InputResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.FeedbackService.RequestInput is not implemented"))
+}
+
+func (UnimplementedFeedbackServiceHandler) RequestConfirm(context.Context, *connect.Request[dotfilesdv1.ConfirmRequest]) (*connect.Response[dotfilesdv1.ConfirmResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.FeedbackService.RequestConfirm is not implemented"))
+}
+
+func (UnimplementedFeedbackServiceHandler) RequestChoose(context.Context, *connect.Request[dotfilesdv1.ChooseRequest]) (*connect.Response[dotfilesdv1.ChooseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.FeedbackService.RequestChoose is not implemented"))
+}
 
 // InputServiceClient is a client for the dotfilesd.v1.InputService service.
 type InputServiceClient interface {

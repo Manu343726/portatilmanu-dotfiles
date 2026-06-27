@@ -16,7 +16,7 @@ import (
 func RunListPlugins(clients *Clients, sessionID string, verbose bool) error {
 	slog.Debug("list plugins requested", "session_id", sessionID)
 	req := connect.NewRequest(&dotfilesdv1.ListPluginsRequest{Session: sessionProto(sessionID)})
-	resp, err := clients.Sys.ListPlugins(context.Background(), req)
+	resp, err := clients.Plugin.ListPlugins(context.Background(), req)
 	if err != nil {
 		slog.Error("list plugins failed", "error", err)
 		return fmt.Errorf("list plugins failed: %w", err)
@@ -76,7 +76,7 @@ func RunCallPluginTool(clients *Clients, sessionID, pluginName, toolName string,
 		ToolName:   toolName,
 		Arguments:  args,
 	})
-	stream, err := clients.Sys.CallPluginTool(context.Background(), req)
+	stream, err := clients.Plugin.CallPluginTool(context.Background(), req)
 	if err != nil {
 		slog.Error("call plugin tool failed", "error", err)
 		fmt.Fprintf(os.Stderr, "error: call plugin tool: %v\n", err)
@@ -108,7 +108,7 @@ func RunCallPluginTool(clients *Clients, sessionID, pluginName, toolName string,
 // dynamic MCP tool registration.
 func ListPluginTools(clients *Clients, sessionID string) ([]toolDef, error) {
 	req := connect.NewRequest(&dotfilesdv1.ListPluginsRequest{Session: sessionProto(sessionID)})
-	resp, err := clients.Sys.ListPlugins(context.Background(), req)
+	resp, err := clients.Plugin.ListPlugins(context.Background(), req)
 	if err != nil {
 		return nil, fmt.Errorf("list plugin tools: %w", err)
 	}
@@ -171,7 +171,7 @@ func CallPluginToolViaMCP(clients *Clients, sessionID, qualifiedName string, arg
 		ToolName:   toolName,
 		Arguments:  args,
 	})
-	stream, err := clients.Sys.CallPluginTool(context.Background(), req)
+	stream, err := clients.Plugin.CallPluginTool(context.Background(), req)
 	if err != nil {
 		return "", err
 	}
@@ -215,7 +215,7 @@ func splitQualifiedName(name string) []string {
 func RunListPluginTools(clients *Clients, sessionID, pluginName string) error {
 	slog.Debug("list plugin tools requested", "plugin", pluginName, "session_id", sessionID)
 	req := connect.NewRequest(&dotfilesdv1.ListPluginsRequest{Session: sessionProto(sessionID)})
-	resp, err := clients.Sys.ListPlugins(context.Background(), req)
+	resp, err := clients.Plugin.ListPlugins(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("list plugins failed: %w", err)
 	}

@@ -4,8 +4,29 @@ package dotfilesd.v1;
 
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
-import "proto/dotfilesd/v1/dotfilesdv1/extension.proto";
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/extension.proto";
+
+// PluginService — plugin discovery and invocation (usage-level).
+// Both CLI tools and plugins use this service to list available plugins,
+// browse the plugin tree, and invoke plugin tools. Plugin-to-plugin calls
+// use the unary CallPlugin RPC; CLI/streaming calls use CallPluginTool.
+service PluginService {
+  // ListPlugins returns descriptors for all loaded plugins (flat list).
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
+  // ListPluginTree returns the plugin directory hierarchy with loaded
+  // plugin descriptors at leaf nodes.
+  rpc ListPluginTree(ListPluginTreeRequest) returns (ListPluginTreeResponse);
+  // CallPluginTool invokes a tool on a loaded plugin.
+  // Returns a stream of output chunks (stdout/stderr) followed by a
+  // final done message indicating completion or error.
+  // Used by CLI for real-time streaming output.
+  rpc CallPluginTool(CallPluginToolRequest) returns (stream CallPluginToolResponse);
+  // CallPlugin invokes a tool on another loaded plugin and returns the
+  // complete result at once (buffered). Used by plugins for plugin-to-plugin
+  // calls where streaming is not needed.
+  rpc CallPlugin(CallPluginRequest) returns (CallPluginResponse);
+}
 
 // PluginTreeEntry represents a node in the plugin directory hierarchy.
 // Directories are category groups; leaf entries are loaded Go plugins
@@ -35,4 +56,50 @@ message ListPluginTreeRequest {
 
 message ListPluginTreeResponse {
   repeated PluginTreeEntry entries = 1;
+}
+
+// ---- Plugin listing ----
+
+message ListPluginsRequest {
+  Session session = 100;
+}
+
+message ListPluginsResponse {
+  repeated ExtensionDescriptor plugins = 1;
+}
+
+// ---- Plugin tool invocation (streaming, for CLI) ----
+
+message CallPluginToolRequest {
+  Session session = 100;
+  string plugin_name = 1;
+  string tool_name = 2;
+  map<string, string> arguments = 3;
+}
+
+message CallPluginToolResponse {
+  // A chunk of stdout output from the tool.
+  bytes stdout_chunk = 1;
+  // A chunk of stderr output from the tool.
+  bytes stderr_chunk = 2;
+  // If true, this is the final message — the tool has finished.
+  bool done = 3;
+  // If done is true, the tool's error message (empty means success).
+  string error_message = 4;
+}
+
+// ---- Plugin-to-plugin invocation (unary, buffered) ----
+
+message CallPluginRequest {
+  Session session = 100;
+  string plugin_name = 1;
+  string tool_name = 2;
+  map<string, string> arguments = 3;
+}
+
+message CallPluginResponse {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  string error_message = 4;  // non-empty if the tool returned a Go error
 }

@@ -6,6 +6,21 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 
+// FeedbackService — user interaction prompts (input, confirm, choose).
+// This is the usage-level service: both CLI tools and plugins use it to
+// request user feedback. The daemon routes the prompt through whatever
+// channel is available (MCP elicitation, terminal, graphical dialog).
+service FeedbackService {
+  // RequestInput prompts the user for text input.
+  rpc RequestInput(InputRequest) returns (InputResponse);
+
+  // RequestConfirm prompts the user for a yes/no confirmation.
+  rpc RequestConfirm(ConfirmRequest) returns (ConfirmResponse);
+
+  // RequestChoose prompts the user to pick from a list of options.
+  rpc RequestChoose(ChooseRequest) returns (ChooseResponse);
+}
+
 // InputService is called by the daemon when it needs arbitrary text input
 // from the user (e.g. a value for a shell variable, git identity config).
 service InputService {

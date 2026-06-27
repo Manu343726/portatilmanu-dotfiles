@@ -84,19 +84,27 @@ type ScriptResult struct {
 
 // ScriptStepResult contains the result of a single script step.
 type ScriptStepResult struct {
-	StepNumber   int
-	SourceLine   string
-	StepKind     string // "exec", "confirm", "input", "choose"
-	ExitCode     int
-	Stdout       string
-	Stderr       string
+	StepNumber    int
+	SourceLine    string
+	StepKind      string // "exec", "confirm", "input", "choose"
+	ExitCode      int
+	Stdout        string
+	Stderr        string
 	FeedbackValue string
 }
 
 // contextClient implements the Context interface by calling the daemon's
-// ExecutionContext service over Connect RPC.
+// usage-level services over Connect RPC. Each domain has its own service
+// client (ExecService, FeedbackService, LogService, PluginService,
+// ScriptService). All requests carry the X-Dotfiles-Context-Token header
+// for authentication.
 type contextClient struct {
-	client     dotfilesdv1connect.ExecutionContextClient
+	execClient     dotfilesdv1connect.ExecServiceClient
+	feedbackClient dotfilesdv1connect.FeedbackServiceClient
+	logClient      dotfilesdv1connect.LogServiceClient
+	pluginClient   dotfilesdv1connect.PluginServiceClient
+	scriptClient   dotfilesdv1connect.ScriptServiceClient
+
 	token      string
 	sessionID  string
 	pluginName string
@@ -104,13 +112,18 @@ type contextClient struct {
 }
 
 // newContextClient creates a new Context client connected to the daemon's
-// Execution Context service.
+// usage-level services.
 func newContextClient(url, token, sessionID, pluginName string) *contextClient {
+	httpClient := &http.Client{}
 	c := &contextClient{
-		client:     dotfilesdv1connect.NewExecutionContextClient(&http.Client{}, url),
-		token:      token,
-		sessionID:  sessionID,
-		pluginName: pluginName,
+		execClient:     dotfilesdv1connect.NewExecServiceClient(httpClient, url),
+		feedbackClient: dotfilesdv1connect.NewFeedbackServiceClient(httpClient, url),
+		logClient:      dotfilesdv1connect.NewLogServiceClient(httpClient, url),
+		pluginClient:   dotfilesdv1connect.NewPluginServiceClient(httpClient, url),
+		scriptClient:   dotfilesdv1connect.NewScriptServiceClient(httpClient, url),
+		token:          token,
+		sessionID:      sessionID,
+		pluginName:     pluginName,
 	}
 	c.log = &pluginLogger{client: c, pluginName: pluginName}
 	return c
@@ -124,9 +137,11 @@ func (c *contextClient) buildSession() *dotfilesdv1.Session {
 	return &dotfilesdv1.Session{Id: c.sessionID}
 }
 
-// authHeader returns the auth header value for context requests.
-func (c *contextClient) authHeader() string {
-	return c.token
+// setTokenHeader sets the X-Dotfiles-Context-Token header on a request.
+func (c *contextClient) setTokenHeader(req connect.AnyRequest) {
+	if c.token != "" {
+		req.Header().Set("X-Dotfiles-Context-Token", c.token)
+	}
 }
 
 func (c *contextClient) Exec(cmd string) (ExecResult, error) {
@@ -134,11 +149,11 @@ func (c *contextClient) Exec(cmd string) (ExecResult, error) {
 		Session: c.buildSession(),
 		Command: cmd,
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+	c.setTokenHeader(req)
 
-	resp, err := c.client.Exec(context.Background(), req)
+	resp, err := c.execClient.Exec(context.Background(), req)
 	if err != nil {
-		return ExecResult{}, fmt.Errorf("context exec: %w", err)
+		return ExecResult{}, fmt.Errorf("exec: %w", err)
 	}
 
 	return ExecResult{
@@ -149,15 +164,16 @@ func (c *contextClient) Exec(cmd string) (ExecResult, error) {
 }
 
 func (c *contextClient) SudoExec(cmd string) (ExecResult, error) {
-	req := connect.NewRequest(&dotfilesdv1.ContextSudoExecRequest{
+	req := connect.NewRequest(&dotfilesdv1.ExecRequest{
 		Session: c.buildSession(),
 		Command: cmd,
+		Sudo:    true,
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+	c.setTokenHeader(req)
 
-	resp, err := c.client.SudoExec(context.Background(), req)
+	resp, err := c.execClient.Exec(context.Background(), req)
 	if err != nil {
-		return ExecResult{}, fmt.Errorf("context sudo exec: %w", err)
+		return ExecResult{}, fmt.Errorf("sudo exec: %w", err)
 	}
 
 	return ExecResult{
@@ -174,11 +190,11 @@ func (c *contextClient) RequestInput(prompt, defaultVal string, sensitive bool) 
 		Default:   defaultVal,
 		Sensitive: sensitive,
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+	c.setTokenHeader(req)
 
-	resp, err := c.client.RequestInput(context.Background(), req)
+	resp, err := c.feedbackClient.RequestInput(context.Background(), req)
 	if err != nil {
-		return "", fmt.Errorf("context request input: %w", err)
+		return "", fmt.Errorf("request input: %w", err)
 	}
 
 	return resp.Msg.Value, nil
@@ -190,11 +206,11 @@ func (c *contextClient) RequestConfirm(msg string, defaultConfirm bool) (bool, e
 		Message:        msg,
 		DefaultConfirm: defaultConfirm,
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+	c.setTokenHeader(req)
 
-	resp, err := c.client.RequestConfirm(context.Background(), req)
+	resp, err := c.feedbackClient.RequestConfirm(context.Background(), req)
 	if err != nil {
-		return false, fmt.Errorf("context request confirm: %w", err)
+		return false, fmt.Errorf("request confirm: %w", err)
 	}
 
 	return resp.Msg.Confirmed, nil
@@ -207,11 +223,11 @@ func (c *contextClient) RequestChoose(prompt string, options []string, defaultIn
 		Options:      options,
 		DefaultIndex: int32(defaultIndex),
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+	c.setTokenHeader(req)
 
-	resp, err := c.client.RequestChoose(context.Background(), req)
+	resp, err := c.feedbackClient.RequestChoose(context.Background(), req)
 	if err != nil {
-		return 0, "", fmt.Errorf("context request choose: %w", err)
+		return 0, "", fmt.Errorf("request choose: %w", err)
 	}
 
 	return int(resp.Msg.SelectedIndex), resp.Msg.SelectedOption, nil
@@ -224,32 +240,38 @@ func (c *contextClient) CallPlugin(pluginName, toolName string, args map[string]
 		ToolName:   toolName,
 		Arguments:  args,
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+	c.setTokenHeader(req)
 
-	resp, err := c.client.CallPlugin(context.Background(), req)
+	resp, err := c.pluginClient.CallPlugin(context.Background(), req)
 	if err != nil {
-		return ExecResult{}, fmt.Errorf("context call plugin: %w", err)
+		return ExecResult{}, fmt.Errorf("call plugin: %w", err)
+	}
+
+	errMsg := resp.Msg.ErrorMessage
+	exitCode := int(resp.Msg.ExitCode)
+	if errMsg != "" && exitCode == 0 {
+		exitCode = 1
 	}
 
 	return ExecResult{
-		ExitCode: int(resp.Msg.ExitCode),
+		ExitCode: exitCode,
 		Stdout:   resp.Msg.Stdout,
 		Stderr:   resp.Msg.Stderr,
 	}, nil
 }
 
 func (c *contextClient) RunScript(name string) (ScriptResult, error) {
-	req := connect.NewRequest(&dotfilesdv1.RunScriptViaContextRequest{
+	req := connect.NewRequest(&dotfilesdv1.RunScriptRequest{
 		Session: c.buildSession(),
-		Source: &dotfilesdv1.RunScriptViaContextRequest_RegisteredScript{
+		Source: &dotfilesdv1.RunScriptRequest_RegisteredScript{
 			RegisteredScript: name,
 		},
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", c.authHeader())
+	c.setTokenHeader(req)
 
-	resp, err := c.client.RunScript(context.Background(), req)
+	resp, err := c.scriptClient.RunScript(context.Background(), req)
 	if err != nil {
-		return ScriptResult{}, fmt.Errorf("context run script: %w", err)
+		return ScriptResult{}, fmt.Errorf("run script: %w", err)
 	}
 
 	steps := make([]ScriptStepResult, len(resp.Msg.Steps))
@@ -326,17 +348,17 @@ func (l *pluginLogger) log(level, msg string, attrs ...any) {
 	}
 
 	req := connect.NewRequest(&dotfilesdv1.LogRequest{
-		Session:    l.client.buildSession(),
-		PluginName: l.pluginName,
+		Session: l.client.buildSession(),
+		Source:  "plugin." + l.pluginName,
 		Entry: &dotfilesdv1.LogEntry{
 			Level:      level,
 			Message:    msg,
 			Attributes: merged,
 		},
 	})
-	req.Header().Set("X-Dotfiles-Context-Token", l.client.authHeader())
+	l.client.setTokenHeader(req)
 
-	_, _ = l.client.client.Log(context.Background(), req)
+	_, _ = l.client.logClient.Log(context.Background(), req)
 }
 
 func (l *pluginLogger) Trace(msg string, attrs ...any) { l.log("trace", msg, attrs...) }
@@ -349,24 +371,27 @@ func (l *pluginLogger) Fatal(msg string, attrs ...any) {
 	os.Exit(1)
 }
 
-// Child returns self — plugins don't need hierarchical sub-loggers.
-// All child log entries still route through the daemon under the same
-// plugin name.
-func (l *pluginLogger) Child(name string) logging.Logger { return l }
-
-// WithAttrs returns a new pluginLogger with the given attributes attached
-// to every log entry.
-func (l *pluginLogger) WithAttrs(attrs ...any) logging.Logger {
-	newFixed := make([]any, 0, len(l.fixedAttrs)+len(attrs))
-	newFixed = append(newFixed, l.fixedAttrs...)
-	newFixed = append(newFixed, attrs...)
+func (l *pluginLogger) Child(name string) logging.Logger {
 	return &pluginLogger{
 		client:     l.client,
-		pluginName: l.pluginName,
-		fixedAttrs: newFixed,
+		pluginName: l.pluginName + "." + name,
+		fixedAttrs: l.fixedAttrs,
 	}
 }
 
-// Enabled always returns true. Level filtering is handled by the daemon
-// side so the plugin doesn't need to know the daemon's log level.
-func (l *pluginLogger) Enabled(level logging.Level) bool { return true }
+func (l *pluginLogger) WithAttrs(attrs ...any) logging.Logger {
+	newAttrs := make([]any, len(l.fixedAttrs)+len(attrs))
+	copy(newAttrs, l.fixedAttrs)
+	copy(newAttrs[len(l.fixedAttrs):], attrs)
+	return &pluginLogger{
+		client:     l.client,
+		pluginName: l.pluginName,
+		fixedAttrs: newAttrs,
+	}
+}
+
+func (l *pluginLogger) Enabled(level logging.Level) bool {
+	// Plugin logger always reports as enabled at every level. The daemon
+	// decides whether to actually record the entry based on its own config.
+	return true
+}
