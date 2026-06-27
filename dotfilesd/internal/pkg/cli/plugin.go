@@ -41,7 +41,7 @@ func RunListPlugins(clients *Clients, sessionID string, verbose bool) error {
 				fmt.Printf("  Tool: %s - %s\n", t.Name, t.Description)
 				if t.Input != nil {
 					for name, prop := range t.Input.Properties {
-						req := prop.Type
+						req := propertyTypeToString(prop.Type)
 						if containsString(t.Input.Required, name) {
 							req += " (required)"
 						}
@@ -121,12 +121,10 @@ func ListPluginTools(clients *Clients, sessionID string) ([]toolDef, error) {
 				Properties: make(map[string]propSchema),
 			}
 			if t.Input != nil {
-				if t.Input.Type != "" {
-					schema.Type = t.Input.Type
-				}
+				schema.Type = schemaTypeToString(t.Input.Type)
 				for k, v := range t.Input.Properties {
 					schema.Properties[k] = propSchema{
-						Type:        v.Type,
+						Type:        propertyTypeToString(v.Type),
 						Description: v.Description,
 						Enum:        v.Enum,
 					}
@@ -242,7 +240,7 @@ func RunListPluginTools(clients *Clients, sessionID, pluginName string) error {
 			fmt.Println()
 			if t.Input != nil && len(t.Input.Properties) > 0 {
 				for name, prop := range t.Input.Properties {
-					reqTag := prop.Type
+					reqTag := propertyTypeToString(prop.Type)
 					if containsString(t.Input.Required, name) {
 						reqTag += " (required)"
 					}
@@ -268,4 +266,30 @@ func containsString(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// propertyTypeToString converts a PropertyType enum to its JSON string name.
+func propertyTypeToString(t dotfilesdv1.PropertyType) string {
+	switch t {
+	case dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING:
+		return "string"
+	case dotfilesdv1.PropertyType_PROPERTY_TYPE_INTEGER:
+		return "integer"
+	case dotfilesdv1.PropertyType_PROPERTY_TYPE_BOOLEAN:
+		return "boolean"
+	case dotfilesdv1.PropertyType_PROPERTY_TYPE_NUMBER:
+		return "number"
+	default:
+		return "string"
+	}
+}
+
+// schemaTypeToString converts a SchemaType enum to its JSON string name.
+func schemaTypeToString(t dotfilesdv1.SchemaType) string {
+	switch t {
+	case dotfilesdv1.SchemaType_SCHEMA_TYPE_OBJECT:
+		return "object"
+	default:
+		return "object"
+	}
 }

@@ -25,11 +25,11 @@ func main() {
 			&dotfilesdv1.ToolInputSchema{
 				Properties: map[string]*dotfilesdv1.PropertySchema{
 					"location": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Location to get weather for (city name, ZIP code, IP address, etc.)",
 					},
 					"format": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Output format (brief, full, json)",
 						Default:     "brief",
 					},

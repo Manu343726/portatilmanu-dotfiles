@@ -62,8 +62,7 @@ message ToolDescriptor {
 
 // ToolInputSchema describes the expected input for a tool.
 message ToolInputSchema {
-  // Always "object" for now.
-  string type = 1;
+  SchemaType type = 1;
 
   // Map of parameter name to its schema.
   map<string, PropertySchema> properties = 2;
@@ -72,10 +71,14 @@ message ToolInputSchema {
   repeated string required = 3;
 }
 
+// SchemaType enumerates the JSON Schema type of a ToolInputSchema.
+enum SchemaType {
+  SCHEMA_TYPE_OBJECT = 0; // always "object" from a plugin
+}
+
 // PropertySchema describes a single parameter.
 message PropertySchema {
-  // Type: "string", "integer", "boolean", "number", "enum".
-  string type = 1;
+  PropertyType type = 1;
 
   // Human-readable description of the parameter.
   string description = 2;
@@ -88,6 +91,15 @@ message PropertySchema {
 
   // Whether the default value is set.
   bool has_default = 5;
+}
+
+// PropertyType enumerates the JSON Schema type of a property.
+enum PropertyType {
+  PROPERTY_TYPE_UNSPECIFIED = 0;
+  PROPERTY_TYPE_STRING = 1;
+  PROPERTY_TYPE_INTEGER = 2;
+  PROPERTY_TYPE_BOOLEAN = 3;
+  PROPERTY_TYPE_NUMBER = 4;
 }
 
 // CLIHints provides the daemon with information to generate the CLI command

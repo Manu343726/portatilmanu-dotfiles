@@ -1010,12 +1010,12 @@ func main() {
 			&dotfilesdv1.ToolInputSchema{
 				Properties: map[string]*dotfilesdv1.PropertySchema{
 					"count": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Number of processes to show (default: 10)",
 						Default:     "10",
 					},
 					"sort": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Sort by 'cpu' or 'mem' (default: cpu)",
 						Default:     "cpu",
 					},
@@ -1031,16 +1031,16 @@ func main() {
 			&dotfilesdv1.ToolInputSchema{
 				Properties: map[string]*dotfilesdv1.PropertySchema{
 					"pid": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Show details for a specific PID (optional)",
 					},
 					"count": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Number of processes to show (default: 20)",
 						Default:     "20",
 					},
 					"sort": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Sort by 'cpu' or 'mem' (default: cpu)",
 						Default:     "cpu",
 					},
@@ -1056,12 +1056,12 @@ func main() {
 			&dotfilesdv1.ToolInputSchema{
 				Properties: map[string]*dotfilesdv1.PropertySchema{
 					"resource": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Resource to graph: ram, cpu, or disk (default: ram)",
 						Default:     "ram",
 					},
 					"count": {
-						Type:        "string",
+						Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
 						Description: "Number of data points to show (default: 20)",
 						Default:     "20",
 					},
