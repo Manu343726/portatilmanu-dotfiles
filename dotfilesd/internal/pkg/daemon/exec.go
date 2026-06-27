@@ -1,9 +1,11 @@
 package daemon
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -78,6 +80,141 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 
 	slog.Log(ctx, levelTrace, "Exec done", "command", req.Msg.Command, "exit_code", exitCode)
 	return resp, nil
+}
+
+// ExecStream runs a command and streams stdout/stderr chunks in real time.
+func (s *execServer) ExecStream(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.ExecStreamRequest],
+	stream *connect.ServerStream[dotfilesdv1.ExecStreamResponse],
+) error {
+	slog.Log(ctx, levelTrace, "ExecStream", "command", req.Msg.Command, "sudo", req.Msg.Sudo)
+
+	session := s.sessions.ResolveSession(req.Msg.GetSession())
+
+	if req.Msg.Sudo {
+		// For streaming sudo, we use pkexec (graphical auth) or prompt
+		// for password via the session, then run with the password.
+		vars := session.Variables()
+
+		if vars["_cap_graphical"] == "true" && hasPkexec() {
+			return runCmdStreamWithSudo(ctx, stream, req.Msg.Command)
+		}
+
+		if (vars["_cap_elicitation"] == "true" || vars["_cap_terminal"] == "true") && session.HasCallbackURL() {
+			return s.execStreamSudoWithPassword(ctx, req.Msg.Command, session, stream)
+		}
+
+		return stream.Send(&dotfilesdv1.ExecStreamResponse{
+			Done:         true,
+			ExitCode:     -1,
+			ErrorMessage: "sudo requires authentication but no interactive method is available",
+		})
+	}
+
+	// Non-sudo streaming: use raw exec or session shell.
+	if session.id == "" {
+		return runCmdStream(ctx, stream, req.Msg.Command)
+	}
+
+	shell, err := session.ensureShell()
+	if err != nil {
+		return stream.Send(&dotfilesdv1.ExecStreamResponse{
+			Done:         true,
+			ExitCode:     -1,
+			ErrorMessage: fmt.Sprintf("session shell error: %v", err),
+		})
+	}
+
+	// Session shell: run via shell and stream line-by-line.
+	return shell.ExecStream(ctx, stream, req.Msg.Command, session.Variables())
+}
+
+// execStreamSudoWithPassword prompts for the sudo password, then runs the
+// command with sudo -S and streams output.
+func (s *execServer) execStreamSudoWithPassword(
+	ctx context.Context,
+	command string,
+	session *Session,
+	stream *connect.ServerStream[dotfilesdv1.ExecStreamResponse],
+) error {
+	user := os.Getenv("USER")
+	if user == "" {
+		user = "unknown"
+	}
+	prompt := fmt.Sprintf("[sudo] password for %s: ", user)
+
+	password, err := session.RequestInput(ctx, prompt, "", true)
+	if err != nil {
+		return stream.Send(&dotfilesdv1.ExecStreamResponse{
+			Done:         true,
+			ExitCode:     -1,
+			ErrorMessage: fmt.Sprintf("password prompt failed: %v", err),
+		})
+	}
+
+	pwd := []byte(password + "\n")
+	defer zeroBytes(pwd)
+
+	cmd := exec.Command("sudo", "-S", "sh", "-c", command)
+	cmd.Stdin = bytes.NewReader(pwd)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+	cmd.Stderr = cmd.Stdout
+
+	if err := cmd.Start(); err != nil {
+		return stream.Send(&dotfilesdv1.ExecStreamResponse{
+			Done:         true,
+			ExitCode:     -1,
+			ErrorMessage: fmt.Sprintf("start sudo command: %v", err),
+		})
+	}
+
+	reader := bufio.NewReader(stdout)
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := reader.Read(buf)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			if err := stream.Send(&dotfilesdv1.ExecStreamResponse{
+				StdoutChunk: chunk,
+			}); err != nil {
+				_ = cmd.Process.Kill()
+				return err
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			_ = stream.Send(&dotfilesdv1.ExecStreamResponse{
+				Done:         true,
+				ExitCode:     -1,
+				ErrorMessage: readErr.Error(),
+			})
+			_ = cmd.Process.Kill()
+			return nil
+		}
+	}
+
+	err = cmd.Wait()
+	exitCode := int32(0)
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = int32(exitErr.ExitCode())
+		} else {
+			exitCode = -1
+		}
+	}
+
+	return stream.Send(&dotfilesdv1.ExecStreamResponse{
+		Done:     true,
+		ExitCode: exitCode,
+	})
 }
 
 func (s *execServer) execSudoWithPassword(ctx context.Context, command string, session *Session) (*connect.Response[dotfilesdv1.ExecResponse], error) {

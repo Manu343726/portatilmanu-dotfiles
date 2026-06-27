@@ -1,9 +1,17 @@
 package daemon
 
 import (
+	"bufio"
+	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+	"sync"
+
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/connect"
 )
 
 // execCommand is used instead of exec.Command directly so tests can replace it.
@@ -48,6 +56,84 @@ func runCmdFull(name string, args ...string) (string, string, int) {
 	return stdout.String(), stderr.String(), exitCode
 }
 
+// runCmdStream runs a command and streams stdout/stderr chunks to a
+// Connect server stream. Each chunk is sent as an ExecStreamResponse.
+// Stderr is merged with stdout (both go to stdout_chunk) since there's
+// no clean cross-platform way to interleave two pipes without deadlocks.
+func runCmdStream(
+	ctx context.Context,
+	stream *connect.ServerStream[dotfilesdv1.ExecStreamResponse],
+	command string,
+) error {
+	cmd := execCommand("sh", "-c", command)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+	cmd.Stderr = cmd.Stdout // stderr merged into stdout
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start command: %w", err)
+	}
+
+	// Read chunks in a goroutine, send them on the stream.
+	reader := bufio.NewReader(stdout)
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := reader.Read(buf)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			if err := stream.Send(&dotfilesdv1.ExecStreamResponse{
+				StdoutChunk: chunk,
+			}); err != nil {
+				// Client disconnected; kill the command.
+				_ = cmd.Process.Kill()
+				return err
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			// Pipe error — send as stderr, treat as done.
+			_ = stream.Send(&dotfilesdv1.ExecStreamResponse{
+				Done:         true,
+				ExitCode:     -1,
+				ErrorMessage: readErr.Error(),
+			})
+			_ = cmd.Process.Kill()
+			return nil
+		}
+	}
+
+	err = cmd.Wait()
+	exitCode := int32(0)
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = int32(exitErr.ExitCode())
+		} else {
+			exitCode = -1
+		}
+	}
+
+	return stream.Send(&dotfilesdv1.ExecStreamResponse{
+		Done:     true,
+		ExitCode: exitCode,
+	})
+}
+
+// runCmdStreamWithSudo runs a command with pkexec, streaming output.
+func runCmdStreamWithSudo(
+	ctx context.Context,
+	stream *connect.ServerStream[dotfilesdv1.ExecStreamResponse],
+	command string,
+) error {
+	escaped := strings.ReplaceAll(command, "'", "'\\''")
+	return runCmdStream(ctx, stream, fmt.Sprintf("pkexec sh -c '%s'", escaped))
+}
+
 func fmtSscanf(str string, v any) (int, error) {
 	return fmt.Sscanf(str, "%d", v)
 }
@@ -57,4 +143,12 @@ func zeroBytes(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}
+}
+
+// discardStream is a helper that drains a reader into a stream until EOF
+// or context cancellation. Used for merging stderr into the stream after
+// stdout is done.
+func discardStream(reader io.Reader, wg *sync.WaitGroup) {
+	defer wg.Done()
+	_, _ = io.Copy(io.Discard, reader)
 }

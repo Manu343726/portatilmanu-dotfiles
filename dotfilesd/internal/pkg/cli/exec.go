@@ -13,26 +13,35 @@ import (
 
 func execCommand(clients *Clients, sessionID, command string, sudo bool) error {
 	slog.Info("exec", "command", command, "sudo", sudo, "session_id", sessionID)
-	req := connect.NewRequest(&dotfilesdv1.ExecRequest{
+	req := connect.NewRequest(&dotfilesdv1.ExecStreamRequest{
 		Command: command,
 		Sudo:    sudo,
 		Session: sessionProto(sessionID),
 	})
-	resp, err := clients.Exec.Exec(context.Background(), req)
+	stream, err := clients.Exec.ExecStream(context.Background(), req)
 	if err != nil {
-		slog.Error("exec failed", "command", command, "error", err)
+		slog.Error("exec stream failed to start", "command", command, "error", err)
 		return fmt.Errorf("exec failed: %w", err)
 	}
-	slog.Debug("exec result", "command", command, "exit_code", resp.Msg.ExitCode,
-		"stdout_len", len(resp.Msg.Stdout), "stderr_len", len(resp.Msg.Stderr))
-	if resp.Msg.Stdout != "" {
-		fmt.Print(resp.Msg.Stdout)
+
+	for stream.Receive() {
+		chunk := stream.Msg()
+		if len(chunk.StdoutChunk) > 0 {
+			fmt.Print(string(chunk.StdoutChunk))
+		}
+		if chunk.Done {
+			if chunk.ErrorMessage != "" {
+				fmt.Fprintln(os.Stderr, chunk.ErrorMessage)
+				os.Exit(1)
+			}
+			if chunk.ExitCode != 0 {
+				os.Exit(int(chunk.ExitCode))
+			}
+			return nil
+		}
 	}
-	if resp.Msg.Stderr != "" {
-		fmt.Fprint(os.Stderr, resp.Msg.Stderr)
-	}
-	if resp.Msg.ExitCode != 0 {
-		os.Exit(int(resp.Msg.ExitCode))
+	if err := stream.Err(); err != nil {
+		return fmt.Errorf("exec stream: %w", err)
 	}
 	return nil
 }

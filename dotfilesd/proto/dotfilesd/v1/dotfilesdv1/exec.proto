@@ -8,10 +8,18 @@ import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 
 // ExecService - command execution.
 service ExecService {
-  // Simple unary exec (no sudo).
+  // Exec runs a command and returns the complete output.
   rpc Exec(ExecRequest) returns (ExecResponse);
-  // Challenge-response sudo. The first call omits password; if the daemon
-  // needs auth it returns AuthChallenge. The client retries with the password.
+
+  // ExecStream runs a command and streams stdout/stderr chunks in real
+  // time. The final message has done=true with the exit code. Use this
+  // for long-running commands (e.g. package updates, builds) where the
+  // caller wants to see output as it's produced.
+  rpc ExecStream(ExecStreamRequest) returns (stream ExecStreamResponse);
+
+  // SudoExec is a challenge-response protocol for sudo elevation.
+  // The first call omits password; if the daemon needs auth it returns
+  // AuthChallenge. The client retries with the password.
   rpc SudoExec(SudoExecRequest) returns (SudoExecResponse);
 }
 
@@ -32,6 +40,27 @@ message ExecResponse {
   int32 exit_code = 1;
   string stdout = 2;
   string stderr = 3;
+}
+
+// ExecStream — same inputs as Exec but output is streamed chunk by chunk.
+
+message ExecStreamRequest {
+  Session session = 100;
+  string command = 1;
+  bool sudo = 2;
+}
+
+message ExecStreamResponse {
+  // A chunk of stdout output from the command.
+  bytes stdout_chunk = 1;
+  // A chunk of stderr output from the command.
+  bytes stderr_chunk = 2;
+  // If true, this is the final message — the command has finished.
+  bool done = 3;
+  // The command's exit code (only meaningful when done=true).
+  int32 exit_code = 4;
+  // Non-empty if the command could not be started (Go error).
+  string error_message = 5;
 }
 
 // --- SudoExec protocol (challenge-response over unary RPC) -----------------

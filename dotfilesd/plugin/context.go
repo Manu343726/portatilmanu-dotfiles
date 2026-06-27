@@ -47,6 +47,12 @@ type Context interface {
 	// elicitation internally.
 	SudoExec(cmd string) (ExecResult, error)
 
+	// ExecStream runs a command and pipes stdout/stderr chunks directly
+	// to this plugin's Stdout()/Stderr() writers in real time. Use this
+	// for long-running commands (e.g. package updates, builds) where you
+	// want to see output as it's produced. Returns the exit code.
+	ExecStream(cmd string, sudo bool) (int, error)
+
 	// RequestInput prompts the user for arbitrary text input.
 	RequestInput(prompt, defaultVal string, sensitive bool) (string, error)
 
@@ -187,6 +193,47 @@ func (c *contextClient) SudoExec(cmd string) (ExecResult, error) {
 		Stdout:   resp.Msg.Stdout,
 		Stderr:   resp.Msg.Stderr,
 	}, nil
+}
+
+func (c *contextClient) ExecStream(cmd string, sudo bool) (int, error) {
+	return execStreamWithWriters(c, c.Stdout(), c.Stderr(), cmd, sudo)
+}
+
+// execStreamWithWriters is the shared implementation for ExecStream.
+func execStreamWithWriters(c *contextClient, stdout, stderr io.Writer, cmd string, sudo bool) (int, error) {
+	req := connect.NewRequest(&dotfilesdv1.ExecStreamRequest{
+		Session: c.buildSession(),
+		Command: cmd,
+		Sudo:    sudo,
+	})
+	c.setTokenHeader(req)
+
+	stream, err := c.execClient.ExecStream(context.Background(), req)
+	if err != nil {
+		return -1, fmt.Errorf("exec stream: %w", err)
+	}
+
+	exitCode := int32(-1)
+	for stream.Receive() {
+		chunk := stream.Msg()
+		if len(chunk.StdoutChunk) > 0 {
+			stdout.Write(chunk.StdoutChunk)
+		}
+		if len(chunk.StderrChunk) > 0 {
+			stderr.Write(chunk.StderrChunk)
+		}
+		if chunk.Done {
+			exitCode = chunk.ExitCode
+			if chunk.ErrorMessage != "" {
+				return int(exitCode), fmt.Errorf("%s", chunk.ErrorMessage)
+			}
+			break
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return int(exitCode), fmt.Errorf("exec stream: %w", err)
+	}
+	return int(exitCode), nil
 }
 
 func (c *contextClient) RequestInput(prompt, defaultVal string, sensitive bool) (string, error) {
@@ -391,6 +438,12 @@ func (c *streamingContext) Log() logging.Logger { return c.Context.Log() }
 // to pipe chunks through the streaming writers instead of the no-op writers.
 func (c *streamingContext) CallPluginStream(pluginName, toolName string, args map[string]string) error {
 	return callPluginStreamWithWriters(c.client, c.stdout, c.stderr, pluginName, toolName, args)
+}
+
+// ExecStream overrides the embedded contextClient.ExecStream to pipe chunks
+// through the streaming writers instead of the no-op writers.
+func (c *streamingContext) ExecStream(cmd string, sudo bool) (int, error) {
+	return execStreamWithWriters(c.client, c.stdout, c.stderr, cmd, sudo)
 }
 
 // ---------------------------------------------------------------------------

@@ -213,6 +213,70 @@ func (sh *shellSession) Exec(command string, variables map[string]string) (strin
 	}
 }
 
+// ExecStream is like Exec but streams output line-by-line to a Connect
+// server stream. Each line is sent as a stdout_chunk (stderr is merged).
+// The final message has done=true with the exit code.
+func (sh *shellSession) ExecStream(
+	ctx context.Context,
+	stream *connect.ServerStream[dotfilesdv1.ExecStreamResponse],
+	command string,
+	variables map[string]string,
+) error {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+
+	delim := fmt.Sprintf("__GS_%x__", rand.Int63())
+
+	var prefix string
+	if sh.cwd != "" {
+		prefix += fmt.Sprintf("cd %s\n", bashQuote(sh.cwd))
+	}
+	for k, v := range variables {
+		prefix += fmt.Sprintf("export %s=%s; ", k, bashQuote(v))
+	}
+	cmdLine := fmt.Sprintf("%s%s 2>&1\necho \"%s=$?\"\n", prefix, command, delim)
+	if _, err := io.WriteString(sh.stdin, cmdLine); err != nil {
+		return stream.Send(&dotfilesdv1.ExecStreamResponse{
+			Done:         true,
+			ExitCode:     -1,
+			ErrorMessage: fmt.Sprintf("shell write: %v", err),
+		})
+	}
+
+	for {
+		line, err := sh.reader.ReadString('\n')
+		if err != nil {
+			return stream.Send(&dotfilesdv1.ExecStreamResponse{
+				Done:         true,
+				ExitCode:     -1,
+				ErrorMessage: fmt.Sprintf("shell read: %v", err),
+			})
+		}
+		line = strings.TrimSuffix(line, "\n")
+		if strings.HasPrefix(line, delim+"=") {
+			codeStr := strings.TrimPrefix(line, delim+"=")
+			code, err := strconv.Atoi(strings.TrimSpace(codeStr))
+			if err != nil {
+				return stream.Send(&dotfilesdv1.ExecStreamResponse{
+					Done:         true,
+					ExitCode:     -1,
+					ErrorMessage: fmt.Sprintf("parse exit code: %v", err),
+				})
+			}
+			return stream.Send(&dotfilesdv1.ExecStreamResponse{
+				Done:     true,
+				ExitCode: int32(code),
+			})
+		}
+		// Send each line as a chunk (add back the newline).
+		if err := stream.Send(&dotfilesdv1.ExecStreamResponse{
+			StdoutChunk: []byte(line + "\n"),
+		}); err != nil {
+			return err
+		}
+	}
+}
+
 func (sh *shellSession) Close() error {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()

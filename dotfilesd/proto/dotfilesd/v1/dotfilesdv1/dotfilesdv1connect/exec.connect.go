@@ -35,16 +35,24 @@ const (
 const (
 	// ExecServiceExecProcedure is the fully-qualified name of the ExecService's Exec RPC.
 	ExecServiceExecProcedure = "/dotfilesd.v1.ExecService/Exec"
+	// ExecServiceExecStreamProcedure is the fully-qualified name of the ExecService's ExecStream RPC.
+	ExecServiceExecStreamProcedure = "/dotfilesd.v1.ExecService/ExecStream"
 	// ExecServiceSudoExecProcedure is the fully-qualified name of the ExecService's SudoExec RPC.
 	ExecServiceSudoExecProcedure = "/dotfilesd.v1.ExecService/SudoExec"
 )
 
 // ExecServiceClient is a client for the dotfilesd.v1.ExecService service.
 type ExecServiceClient interface {
-	// Simple unary exec (no sudo).
+	// Exec runs a command and returns the complete output.
 	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
-	// Challenge-response sudo. The first call omits password; if the daemon
-	// needs auth it returns AuthChallenge. The client retries with the password.
+	// ExecStream runs a command and streams stdout/stderr chunks in real
+	// time. The final message has done=true with the exit code. Use this
+	// for long-running commands (e.g. package updates, builds) where the
+	// caller wants to see output as it's produced.
+	ExecStream(context.Context, *connect.Request[dotfilesdv1.ExecStreamRequest]) (*connect.ServerStreamForClient[dotfilesdv1.ExecStreamResponse], error)
+	// SudoExec is a challenge-response protocol for sudo elevation.
+	// The first call omits password; if the daemon needs auth it returns
+	// AuthChallenge. The client retries with the password.
 	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
 }
 
@@ -65,6 +73,12 @@ func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(execServiceMethods.ByName("Exec")),
 			connect.WithClientOptions(opts...),
 		),
+		execStream: connect.NewClient[dotfilesdv1.ExecStreamRequest, dotfilesdv1.ExecStreamResponse](
+			httpClient,
+			baseURL+ExecServiceExecStreamProcedure,
+			connect.WithSchema(execServiceMethods.ByName("ExecStream")),
+			connect.WithClientOptions(opts...),
+		),
 		sudoExec: connect.NewClient[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse](
 			httpClient,
 			baseURL+ExecServiceSudoExecProcedure,
@@ -76,13 +90,19 @@ func NewExecServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // execServiceClient implements ExecServiceClient.
 type execServiceClient struct {
-	exec     *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
-	sudoExec *connect.Client[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse]
+	exec       *connect.Client[dotfilesdv1.ExecRequest, dotfilesdv1.ExecResponse]
+	execStream *connect.Client[dotfilesdv1.ExecStreamRequest, dotfilesdv1.ExecStreamResponse]
+	sudoExec   *connect.Client[dotfilesdv1.SudoExecRequest, dotfilesdv1.SudoExecResponse]
 }
 
 // Exec calls dotfilesd.v1.ExecService.Exec.
 func (c *execServiceClient) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	return c.exec.CallUnary(ctx, req)
+}
+
+// ExecStream calls dotfilesd.v1.ExecService.ExecStream.
+func (c *execServiceClient) ExecStream(ctx context.Context, req *connect.Request[dotfilesdv1.ExecStreamRequest]) (*connect.ServerStreamForClient[dotfilesdv1.ExecStreamResponse], error) {
+	return c.execStream.CallServerStream(ctx, req)
 }
 
 // SudoExec calls dotfilesd.v1.ExecService.SudoExec.
@@ -92,10 +112,16 @@ func (c *execServiceClient) SudoExec(ctx context.Context, req *connect.Request[d
 
 // ExecServiceHandler is an implementation of the dotfilesd.v1.ExecService service.
 type ExecServiceHandler interface {
-	// Simple unary exec (no sudo).
+	// Exec runs a command and returns the complete output.
 	Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error)
-	// Challenge-response sudo. The first call omits password; if the daemon
-	// needs auth it returns AuthChallenge. The client retries with the password.
+	// ExecStream runs a command and streams stdout/stderr chunks in real
+	// time. The final message has done=true with the exit code. Use this
+	// for long-running commands (e.g. package updates, builds) where the
+	// caller wants to see output as it's produced.
+	ExecStream(context.Context, *connect.Request[dotfilesdv1.ExecStreamRequest], *connect.ServerStream[dotfilesdv1.ExecStreamResponse]) error
+	// SudoExec is a challenge-response protocol for sudo elevation.
+	// The first call omits password; if the daemon needs auth it returns
+	// AuthChallenge. The client retries with the password.
 	SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error)
 }
 
@@ -112,6 +138,12 @@ func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(execServiceMethods.ByName("Exec")),
 		connect.WithHandlerOptions(opts...),
 	)
+	execServiceExecStreamHandler := connect.NewServerStreamHandler(
+		ExecServiceExecStreamProcedure,
+		svc.ExecStream,
+		connect.WithSchema(execServiceMethods.ByName("ExecStream")),
+		connect.WithHandlerOptions(opts...),
+	)
 	execServiceSudoExecHandler := connect.NewUnaryHandler(
 		ExecServiceSudoExecProcedure,
 		svc.SudoExec,
@@ -122,6 +154,8 @@ func NewExecServiceHandler(svc ExecServiceHandler, opts ...connect.HandlerOption
 		switch r.URL.Path {
 		case ExecServiceExecProcedure:
 			execServiceExecHandler.ServeHTTP(w, r)
+		case ExecServiceExecStreamProcedure:
+			execServiceExecStreamHandler.ServeHTTP(w, r)
 		case ExecServiceSudoExecProcedure:
 			execServiceSudoExecHandler.ServeHTTP(w, r)
 		default:
@@ -135,6 +169,10 @@ type UnimplementedExecServiceHandler struct{}
 
 func (UnimplementedExecServiceHandler) Exec(context.Context, *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.Exec is not implemented"))
+}
+
+func (UnimplementedExecServiceHandler) ExecStream(context.Context, *connect.Request[dotfilesdv1.ExecStreamRequest], *connect.ServerStream[dotfilesdv1.ExecStreamResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.ExecService.ExecStream is not implemented"))
 }
 
 func (UnimplementedExecServiceHandler) SudoExec(context.Context, *connect.Request[dotfilesdv1.SudoExecRequest]) (*connect.Response[dotfilesdv1.SudoExecResponse], error) {
