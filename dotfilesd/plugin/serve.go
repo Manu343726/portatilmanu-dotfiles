@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"connectrpc.com/grpcreflect"
+	dotfilesdv1connect "dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 )
 
 // Service is a Connect RPC service a plugin exposes.
@@ -43,8 +46,10 @@ type Config struct {
 
 // Serve starts the plugin server.
 //
-// The server mounts all custom services from Config.Services and performs
-// the handshake with the daemon, blocking until SIGTERM/SIGINT.
+// The server mounts grpcreflect handlers (for daemon discovery),
+// a default DocumentationService, and all custom services from
+// Config.Services. It performs the handshake with the daemon and
+// blocks until SIGTERM/SIGINT.
 func Serve(cfg Config) {
 	ctxURL := os.Getenv("EXECUTION_CONTEXT_URL")
 	ctxToken := os.Getenv("EXECUTION_CONTEXT_TOKEN")
@@ -58,15 +63,49 @@ func Serve(cfg Config) {
 	ctxClient := newContextClient(ctxURL, ctxToken, sessionID, cfg.Name)
 
 	mux := http.NewServeMux()
-	ctxWrappedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(WithContext(r.Context(), ctxClient))
-		mux.ServeHTTP(w, r)
-	})
+
+	// Collect all service names for the grpcreflect reflector.
+	names := []string{}
+	hasDocsSvc := false
+	for _, svc := range cfg.Services {
+		names = append(names, svc.Name)
+		if svc.Name == "dotfilesd.v1.DocumentationService" {
+			hasDocsSvc = true
+		}
+	}
+	if !hasDocsSvc {
+		names = append(names, "dotfilesd.v1.DocumentationService")
+	}
+
+	// Mount grpcreflect handlers — daemon discovers ALL services via this.
+	reflector := grpcreflect.NewStaticReflector(names...)
+	mux.Handle(grpcreflect.NewHandlerV1(reflector))
+	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+
+	// Mount default DocumentationService (SKIP if plugin provides its own).
+	if !hasDocsSvc {
+		docsSvc := &documentationServiceServer{
+			name:        cfg.Name,
+			displayName: cfg.DisplayName,
+			version:     cfg.Version,
+			description: cfg.Description,
+			services:    cfg.Services,
+		}
+		docsPath, docsHandler := dotfilesdv1connect.NewDocumentationServiceHandler(docsSvc)
+		mux.Handle(docsPath, docsHandler)
+	}
 
 	// Mount custom services (type-safe plugin-to-plugin RPC).
 	for _, svc := range cfg.Services {
 		mux.Handle(svc.Path, svc.Handler)
 	}
+
+	// Context injection middleware: wraps every request so handlers can
+	// call plugin.ExtractContext(ctx) to get daemon access.
+	ctxWrappedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(WithContext(r.Context(), ctxClient))
+		mux.ServeHTTP(w, r)
+	})
 
 	// Listen on a random available port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

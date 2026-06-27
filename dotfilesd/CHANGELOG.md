@@ -125,6 +125,35 @@ architecture with `plugin.Serve()` and Connect handlers, not the old Tool API.
 Step 3 (Keep plugin_registry.proto) was already handled in Step 1 — the proto
 was updated to remove the plugin_base import, and was regenerated. The generated
 files are gitignored so only the .proto source is tracked.
+
+---
+
+## [Steps 5+7] — Rewrite serve.go + Create docs.go
+
+**Commit:** `pending`
+**Date:** 2026-06-27
+
+### Changes
+- `dotfilesd/plugin/serve.go`: Added grpcreflect handler mounting
+  (NewHandlerV1 + NewHandlerV1Alpha with static reflector listing all
+  services). Added default DocumentationService mounting (auto-skipped if
+  plugin provides its own). Added service name collection for reflector.
+  Added imports for `connectrpc.com/grpcreflect` and
+  `dotfilesdv1connect`.
+- `dotfilesd/plugin/docs.go`: Created with default
+  `documentationServiceServer` implementation. Returns markdown-formatted
+  docs from Config fields at plugin level and per-service level.
+- `dotfilesd/go.mod`: `connectrpc.com/grpcreflect` promoted from indirect
+  to direct dependency.
+- `dotfilesd/go.sum`: Updated by `go mod tidy`.
+
+### State
+- [x] Plugin SDK (`plugin/...`) builds
+
+### Notes
+Steps 5 and 7 are combined because step 5 (mount DocumentationService)
+needs the type from step 7 (docs.go). Step 6 (context.go rewrite) is
+next.
 **Date:** 2026-06-27
 
 ### Changes
