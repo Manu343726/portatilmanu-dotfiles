@@ -211,8 +211,8 @@ type streamingContext struct {
 	stderr io.Writer
 }
 
-func (c *streamingContext) Stdout() io.Writer { return c.stdout }
-func (c *streamingContext) Stderr() io.Writer { return c.stderr }
+func (c *streamingContext) Stdout() io.Writer   { return c.stdout }
+func (c *streamingContext) Stderr() io.Writer   { return c.stderr }
 func (c *streamingContext) Log() logging.Logger { return c.Context.Log() }
 
 // ---------------------------------------------------------------------------
