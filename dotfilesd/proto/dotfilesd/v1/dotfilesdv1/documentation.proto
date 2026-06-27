@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// DocumentationService provides human-readable documentation for plugin RPC
+// services. The daemon CLI and MCP tools use this to generate help text,
+// usage hints, and parameter descriptions dynamically.
+//
+// Plugins get a default implementation via the SDK that returns "not
+// implemented". They can override it to provide rich, per-service docs.
+service DocumentationService {
+  // GetDocumentation returns documentation for a specific service.
+  rpc GetDocumentation(DocumentationRequest) returns (DocumentationResponse);
+}
+
+message DocumentationRequest {
+  // Fully-qualified service name (e.g. "weather.WeatherService").
+  // If empty, returns documentation for ALL services exposed by this plugin.
+  string service_name = 1;
+}
+
+message DocumentationResponse {
+  // Documentation format. Defaults to "markdown". Other formats may be
+  // supported in the future ("html", "man").
+  string format = 1;
+  // Documentation content in the requested format.
+  string content = 2;
+}

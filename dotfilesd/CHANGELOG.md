@@ -85,6 +85,46 @@ The daemon's `internal/pkg/plugin/manager.go` and `internal/pkg/cli/` packages
 still compile against deleted types. They will be fully rewritten in steps 9-13.
 The weather plugin main.go was NOT deleted — it already uses the new RPC
 architecture with `plugin.Serve()` and Connect handlers, not the old Tool API.
+
+---
+
+## [Steps 2-4] — Documentation Proto + Regenerate
+
+**Commit:** `293a910`
+**Date:** 2026-06-27
+
+### Changes
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/documentation.proto`: Created with
+  DocumentationService, DocumentationRequest, DocumentationResponse messages.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/documentation.pb.go`: Generated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/documentation.connect.go`: Generated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/config.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/dotfiles.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/exec.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/feedback.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/log.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/plugin_registry.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/script.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/session.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect/system.connect.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/config.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/documentation.pb.go`: Generated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfiles.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/exec.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/feedback.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/log.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/plugin_registry.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/script.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/session.pb.go`: Regenerated.
+- `dotfilesd/proto/dotfilesd/v1/dotfilesdv1/system.pb.go`: Regenerated.
+
+### State
+- [x] Proto package (`proto/...`) builds
+
+### Notes
+Step 3 (Keep plugin_registry.proto) was already handled in Step 1 — the proto
+was updated to remove the plugin_base import, and was regenerated. The generated
+files are gitignored so only the .proto source is tracked.
 **Date:** 2026-06-27
 
 ### Changes
