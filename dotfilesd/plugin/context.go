@@ -234,7 +234,7 @@ func (c *contextClient) RequestChoose(prompt string, options []string, defaultIn
 }
 
 func (c *contextClient) CallPlugin(pluginName, toolName string, args map[string]string) (ExecResult, error) {
-	req := connect.NewRequest(&dotfilesdv1.CallPluginRequest{
+	req := connect.NewRequest(&dotfilesdv1.CallPluginToolRequest{
 		Session:    c.buildSession(),
 		PluginName: pluginName,
 		ToolName:   toolName,
@@ -242,21 +242,39 @@ func (c *contextClient) CallPlugin(pluginName, toolName string, args map[string]
 	})
 	c.setTokenHeader(req)
 
-	resp, err := c.pluginClient.CallPlugin(context.Background(), req)
+	stream, err := c.pluginClient.CallPluginTool(context.Background(), req)
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("call plugin: %w", err)
 	}
 
-	errMsg := resp.Msg.ErrorMessage
-	exitCode := int(resp.Msg.ExitCode)
-	if errMsg != "" && exitCode == 0 {
+	var stdoutBuf, stderrBuf string
+	var errMsg string
+	for stream.Receive() {
+		chunk := stream.Msg()
+		if len(chunk.StdoutChunk) > 0 {
+			stdoutBuf += string(chunk.StdoutChunk)
+		}
+		if len(chunk.StderrChunk) > 0 {
+			stderrBuf += string(chunk.StderrChunk)
+		}
+		if chunk.Done {
+			errMsg = chunk.ErrorMessage
+			break
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return ExecResult{}, fmt.Errorf("call plugin stream: %w", err)
+	}
+
+	exitCode := 0
+	if errMsg != "" {
 		exitCode = 1
 	}
 
 	return ExecResult{
 		ExitCode: exitCode,
-		Stdout:   resp.Msg.Stdout,
-		Stderr:   resp.Msg.Stderr,
+		Stdout:   stdoutBuf,
+		Stderr:   stderrBuf,
 	}, nil
 }
 

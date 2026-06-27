@@ -9,8 +9,9 @@ import "proto/dotfilesd/v1/dotfilesdv1/extension.proto";
 
 // PluginService — plugin discovery and invocation (usage-level).
 // Both CLI tools and plugins use this service to list available plugins,
-// browse the plugin tree, and invoke plugin tools. Plugin-to-plugin calls
-// use the unary CallPlugin RPC; CLI/streaming calls use CallPluginTool.
+// browse the plugin tree, and invoke plugin tools. All tool invocation
+// uses the streaming CallPluginTool RPC; callers that need a buffered
+// result (e.g. plugin-to-plugin calls) simply buffer the stream.
 service PluginService {
   // ListPlugins returns descriptors for all loaded plugins (flat list).
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
@@ -20,12 +21,7 @@ service PluginService {
   // CallPluginTool invokes a tool on a loaded plugin.
   // Returns a stream of output chunks (stdout/stderr) followed by a
   // final done message indicating completion or error.
-  // Used by CLI for real-time streaming output.
   rpc CallPluginTool(CallPluginToolRequest) returns (stream CallPluginToolResponse);
-  // CallPlugin invokes a tool on another loaded plugin and returns the
-  // complete result at once (buffered). Used by plugins for plugin-to-plugin
-  // calls where streaming is not needed.
-  rpc CallPlugin(CallPluginRequest) returns (CallPluginResponse);
 }
 
 // PluginTreeEntry represents a node in the plugin directory hierarchy.
@@ -86,20 +82,4 @@ message CallPluginToolResponse {
   bool done = 3;
   // If done is true, the tool's error message (empty means success).
   string error_message = 4;
-}
-
-// ---- Plugin-to-plugin invocation (unary, buffered) ----
-
-message CallPluginRequest {
-  Session session = 100;
-  string plugin_name = 1;
-  string tool_name = 2;
-  map<string, string> arguments = 3;
-}
-
-message CallPluginResponse {
-  int32 exit_code = 1;
-  string stdout = 2;
-  string stderr = 3;
-  string error_message = 4;  // non-empty if the tool returned a Go error
 }

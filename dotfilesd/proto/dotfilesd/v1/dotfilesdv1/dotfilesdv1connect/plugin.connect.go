@@ -42,9 +42,6 @@ const (
 	// PluginServiceCallPluginToolProcedure is the fully-qualified name of the PluginService's
 	// CallPluginTool RPC.
 	PluginServiceCallPluginToolProcedure = "/dotfilesd.v1.PluginService/CallPluginTool"
-	// PluginServiceCallPluginProcedure is the fully-qualified name of the PluginService's CallPlugin
-	// RPC.
-	PluginServiceCallPluginProcedure = "/dotfilesd.v1.PluginService/CallPlugin"
 )
 
 // PluginServiceClient is a client for the dotfilesd.v1.PluginService service.
@@ -57,12 +54,7 @@ type PluginServiceClient interface {
 	// CallPluginTool invokes a tool on a loaded plugin.
 	// Returns a stream of output chunks (stdout/stderr) followed by a
 	// final done message indicating completion or error.
-	// Used by CLI for real-time streaming output.
 	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest]) (*connect.ServerStreamForClient[dotfilesdv1.CallPluginToolResponse], error)
-	// CallPlugin invokes a tool on another loaded plugin and returns the
-	// complete result at once (buffered). Used by plugins for plugin-to-plugin
-	// calls where streaming is not needed.
-	CallPlugin(context.Context, *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error)
 }
 
 // NewPluginServiceClient constructs a client for the dotfilesd.v1.PluginService service. By
@@ -94,12 +86,6 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(pluginServiceMethods.ByName("CallPluginTool")),
 			connect.WithClientOptions(opts...),
 		),
-		callPlugin: connect.NewClient[dotfilesdv1.CallPluginRequest, dotfilesdv1.CallPluginResponse](
-			httpClient,
-			baseURL+PluginServiceCallPluginProcedure,
-			connect.WithSchema(pluginServiceMethods.ByName("CallPlugin")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
@@ -108,7 +94,6 @@ type pluginServiceClient struct {
 	listPlugins    *connect.Client[dotfilesdv1.ListPluginsRequest, dotfilesdv1.ListPluginsResponse]
 	listPluginTree *connect.Client[dotfilesdv1.ListPluginTreeRequest, dotfilesdv1.ListPluginTreeResponse]
 	callPluginTool *connect.Client[dotfilesdv1.CallPluginToolRequest, dotfilesdv1.CallPluginToolResponse]
-	callPlugin     *connect.Client[dotfilesdv1.CallPluginRequest, dotfilesdv1.CallPluginResponse]
 }
 
 // ListPlugins calls dotfilesd.v1.PluginService.ListPlugins.
@@ -126,11 +111,6 @@ func (c *pluginServiceClient) CallPluginTool(ctx context.Context, req *connect.R
 	return c.callPluginTool.CallServerStream(ctx, req)
 }
 
-// CallPlugin calls dotfilesd.v1.PluginService.CallPlugin.
-func (c *pluginServiceClient) CallPlugin(ctx context.Context, req *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error) {
-	return c.callPlugin.CallUnary(ctx, req)
-}
-
 // PluginServiceHandler is an implementation of the dotfilesd.v1.PluginService service.
 type PluginServiceHandler interface {
 	// ListPlugins returns descriptors for all loaded plugins (flat list).
@@ -141,12 +121,7 @@ type PluginServiceHandler interface {
 	// CallPluginTool invokes a tool on a loaded plugin.
 	// Returns a stream of output chunks (stdout/stderr) followed by a
 	// final done message indicating completion or error.
-	// Used by CLI for real-time streaming output.
 	CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest], *connect.ServerStream[dotfilesdv1.CallPluginToolResponse]) error
-	// CallPlugin invokes a tool on another loaded plugin and returns the
-	// complete result at once (buffered). Used by plugins for plugin-to-plugin
-	// calls where streaming is not needed.
-	CallPlugin(context.Context, *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error)
 }
 
 // NewPluginServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -174,12 +149,6 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(pluginServiceMethods.ByName("CallPluginTool")),
 		connect.WithHandlerOptions(opts...),
 	)
-	pluginServiceCallPluginHandler := connect.NewUnaryHandler(
-		PluginServiceCallPluginProcedure,
-		svc.CallPlugin,
-		connect.WithSchema(pluginServiceMethods.ByName("CallPlugin")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/dotfilesd.v1.PluginService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginServiceListPluginsProcedure:
@@ -188,8 +157,6 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 			pluginServiceListPluginTreeHandler.ServeHTTP(w, r)
 		case PluginServiceCallPluginToolProcedure:
 			pluginServiceCallPluginToolHandler.ServeHTTP(w, r)
-		case PluginServiceCallPluginProcedure:
-			pluginServiceCallPluginHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -209,8 +176,4 @@ func (UnimplementedPluginServiceHandler) ListPluginTree(context.Context, *connec
 
 func (UnimplementedPluginServiceHandler) CallPluginTool(context.Context, *connect.Request[dotfilesdv1.CallPluginToolRequest], *connect.ServerStream[dotfilesdv1.CallPluginToolResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.PluginService.CallPluginTool is not implemented"))
-}
-
-func (UnimplementedPluginServiceHandler) CallPlugin(context.Context, *connect.Request[dotfilesdv1.CallPluginRequest]) (*connect.Response[dotfilesdv1.CallPluginResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dotfilesd.v1.PluginService.CallPlugin is not implemented"))
 }
