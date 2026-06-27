@@ -1,0 +1,7 @@
+---
+description: Stage files for commit
+---
+
+@input "Files to add (space-separated, or '.' for all):" as PATHS
+exec git -C ~ add $PATHS
+echo "staged: $PATHS"

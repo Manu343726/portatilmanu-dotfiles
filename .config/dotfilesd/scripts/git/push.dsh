@@ -1,0 +1,6 @@
+---
+description: Push commits to remote
+---
+
+exec git -C ~ push
+echo "pushed"

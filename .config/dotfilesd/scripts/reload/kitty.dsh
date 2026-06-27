@@ -1,0 +1,6 @@
+---
+description: Reload kitty terminal configuration
+---
+
+exec kitty @ load-config
+echo "kitty config reloaded"
