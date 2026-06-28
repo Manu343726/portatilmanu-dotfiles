@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"dotfilesd/internal/pkg/cli"
 	"dotfilesd/internal/pkg/shared"
@@ -189,7 +190,8 @@ func newRootCmd() *cobra.Command {
 
 			// Capture client context for diagnostics enrichment.
 			clients.ClientType = "cli"
-			clients.CommandPath = cmd.CommandPath()
+			// Full command invocation including arguments and flags.
+			clients.CommandPath = strings.Join(os.Args, " ")
 			if pwd, err := os.Getwd(); err == nil {
 				clients.PWD = pwd
 			}
