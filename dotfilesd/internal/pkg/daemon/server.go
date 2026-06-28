@@ -127,6 +127,13 @@ func (d *Daemon) Start() error {
 		mux.Handle(p, h)
 	}
 
+	// PluginExecutorService proxies calls to plugins and streams output back.
+	// Accessible without auth so CLI/MCP can invoke plugin RPCs.
+	{
+		p, h := dotfilesdv1connect.NewPluginExecutorServiceHandler(newExecutorServer(d))
+		mux.Handle(p, h)
+	}
+
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)
 	d.server = &http.Server{
 		Addr:    rpcAddr,

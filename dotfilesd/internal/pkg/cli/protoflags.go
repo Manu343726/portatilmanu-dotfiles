@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
-	"time"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"github.com/spf13/cobra"
 )
@@ -73,7 +73,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 		}
 
 		for _, m := range svc.Methods {
-			runE := makeRunEProtoFromSchema(p.URL, svc.Name, m)
+			runE := makeRunEProtoFromSchema(p.URL, p.DaemonURL, svc.Name, m)
 			shortDesc := fmt.Sprintf("%s.%s", shortSvcName(svc.Name), m.Name)
 
 			if elideRPC {
@@ -116,6 +116,9 @@ type PluginRegistryInfo struct {
 	// pre-populated by the daemon at plugin load time. Clients use these
 	// instead of performing their own grpcreflect.
 	Schemas []*dotfilesdv1.ServiceSchema
+	// DaemonURL is the base URL of the daemon's RPC server, used to
+	// invoke PluginExecutorService for proxied plugin calls.
+	DaemonURL string
 }
 
 // buildStaticPluginCommand creates a simple info-only command (fallback).
@@ -251,8 +254,9 @@ func addRepeatedFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldS
 // ─────────────────────────────────────────────
 
 // makeRunEProtoFromSchema returns the RunE function that builds a JSON body
-// from cobra flags using registry MethodSchema and invokes the RPC.
-func makeRunEProtoFromSchema(pluginURL, svcName string, m *dotfilesdv1.MethodSchema) func(*cobra.Command, []string) error {
+// from cobra flags, invokes the plugin RPC via the daemon's PluginExecutorService,
+// and streams stdout/stderr from the plugin to the terminal.
+func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv1.MethodSchema) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		body, err := buildJSONFromSchema(cmd, m.Request, "")
 		if err != nil {
@@ -263,62 +267,80 @@ func makeRunEProtoFromSchema(pluginURL, svcName string, m *dotfilesdv1.MethodSch
 			return fmt.Errorf("marshal request: %w", err)
 		}
 
-		// Build headers: CLI defaults to RenderOutput=true (human-readable).
-		headers := map[string]string{
-			"X-Dotfiles-Render-Output": "true",
-		}
-		if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
-			headers["X-Dotfiles-Render-Output"] = "false"
-		}
-		if format, ok := body["format"]; ok {
-			if s, ok := format.(string); ok && s == "json" {
-				headers["X-Dotfiles-Render-Output"] = "false"
+		// Determine RenderOutput: default true, --json sets false.
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		renderOutput := !jsonOutput
+		if !renderOutput {
+			if format, ok := body["format"]; ok {
+				if s, ok := format.(string); ok && s == "json" {
+					renderOutput = false
+				}
 			}
 		}
 
-		// Build the RPC URL: {baseURL}/{svcName}/{methodName}
-		rpcURL := fmt.Sprintf("%s/%s/%s", pluginURL, svcName, m.Name)
+		// Open a bidi stream to the daemon's PluginExecutorService.
+		execClient := dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, daemonURL)
+		stream := execClient.CallPlugin(context.Background())
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", rpcURL, bytes.NewReader(jsonBytes))
-		if err != nil {
-			return fmt.Errorf("create request: %w", err)
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		for k, v := range headers {
-			httpReq.Header.Set(k, v)
-		}
-
-		resp, err := http.DefaultClient.Do(httpReq)
-		if err != nil {
-			return fmt.Errorf("rpc call: %w", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("read response: %w", err)
-		}
-		if resp.StatusCode >= 400 {
-			return fmt.Errorf("RPC failed (HTTP %d): %s", resp.StatusCode, string(respBody))
+		// Send the request.
+		pluginName := extractPluginName(svcName, pluginURL)
+		if err := stream.Send(&dotfilesdv1.CallPluginMessage{
+			PluginName:  pluginName,
+			Service:     svcName,
+			Method:      m.Name,
+			RequestBody: jsonBytes,
+		}); err != nil {
+			return fmt.Errorf("send request: %w", err)
 		}
 
-		// Only print response body when --json is set (RenderOutput=false).
-		// When RenderOutput=true, the plugin handler writes human-readable
-		// output to its own stdout, which is captured by the daemon's logs.
-		// The response message is structured data for programmatic use.
-		if headers["X-Dotfiles-Render-Output"] == "false" {
-			var buf bytes.Buffer
-			if err := json.Indent(&buf, respBody, "", "  "); err != nil {
-				fmt.Println(string(respBody))
-			} else {
-				fmt.Println(buf.String())
+		// Receive events from the stream.
+		var lastErr string
+		for {
+			msg, err := stream.Receive()
+			if err != nil {
+				// Stream ended normally.
+				break
 			}
+			if msg.Error != "" {
+				lastErr = msg.Error
+				break
+			}
+			// Print stdout/stderr chunks to terminal.
+			if len(msg.StdoutChunk) > 0 {
+				fmt.Print(string(msg.StdoutChunk))
+			}
+			if len(msg.StderrChunk) > 0 {
+				fmt.Fprint(os.Stderr, string(msg.StderrChunk))
+			}
+			// Print response body only when --json is set.
+			if len(msg.ResponseBody) > 0 && !renderOutput {
+				var buf bytes.Buffer
+				if err := json.Indent(&buf, msg.ResponseBody, "", "  "); err != nil {
+					fmt.Println(string(msg.ResponseBody))
+				} else {
+					fmt.Println(buf.String())
+				}
+			}
+		}
+
+		if lastErr != "" {
+			return fmt.Errorf("plugin call: %s", lastErr)
 		}
 		return nil
 	}
+}
+
+// extractPluginName extracts the plugin name from its URL or service name.
+// The service name like "resources.ResourcesService" → "resources".
+func extractPluginName(svcName, pluginURL string) string {
+	// Try from the service name first (e.g. "resources.ResourcesService").
+	parts := strings.Split(svcName, ".")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	// Fallback: last path component of URL.
+	parts = strings.Split(pluginURL, "/")
+	return parts[len(parts)-1]
 }
 
 // buildJSONFromSchema recursively builds a JSON-compatible map from cobra flags,

@@ -65,6 +65,7 @@ type Clients struct {
 	Session   dotfilesdv1connect.SessionServiceClient
 	Script    dotfilesdv1connect.ScriptServiceClient
 	Registry  dotfilesdv1connect.PluginRegistryServiceClient
+	Executor  dotfilesdv1connect.PluginExecutorServiceClient
 	Feedback  *FeedbackServer
 	SessionID string
 	mu        sync.Mutex
@@ -81,6 +82,7 @@ func NewClients(port string) *Clients {
 		Session:  dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
 		Script:   dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
 		Registry: dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, baseURL),
+		Executor: dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, baseURL),
 	}
 }
 

@@ -108,7 +108,7 @@ func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 	ctx := context.Background()
 	connectReq := connect.NewRequest(&dotfilesdv1.ConnectRequest{
 		CallbackUrl: "",
-		Session: &dotfilesdv1.Session{Id: c.sessionID},
+		Session:     &dotfilesdv1.Session{Id: c.sessionID},
 	})
 	c.setTokenHeader(connectReq)
 	connectResp, err := c.sessionClient.Connect(ctx, connectReq)

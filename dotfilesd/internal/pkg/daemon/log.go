@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
@@ -57,6 +58,17 @@ func (s *logServer) Log(
 		}
 	} else {
 		slog.Log(ctx, logLevelToSlog(entry.Level), entry.Message, "source", req.Msg.Source, "attrs", entry.Attributes)
+	}
+
+	// If this is stdout/stderr from a plugin (source like "resources/stdout"),
+	// forward to any active CallPlugin streaming session.
+	source := req.Msg.Source
+	if slash := strings.LastIndexByte(source, '/'); slash > 0 {
+		pluginName := source[:slash]
+		suffix := source[slash:]
+		if suffix == "/stdout" || suffix == "/stderr" {
+			PushPluginOutput(pluginName, source, entry.Message)
+		}
 	}
 
 	return connect.NewResponse(&dotfilesdv1.LogResponse{}), nil

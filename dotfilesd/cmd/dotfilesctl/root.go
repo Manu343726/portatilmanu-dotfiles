@@ -47,6 +47,7 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 				URL:         p.Url,
 				Services:    p.Services,
 				Schemas:     p.Schemas,
+				DaemonURL:   fmt.Sprintf("http://127.0.0.1:%s", daemonPort),
 			}
 			pluginCmd := cli.BuildPluginCommand(info)
 			pluginCmd.GroupID = "plugins"
