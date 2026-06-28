@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
+	"time"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 )
 
@@ -267,80 +268,52 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			return fmt.Errorf("marshal request: %w", err)
 		}
 
-		// Determine RenderOutput: default true, --json sets false.
 		jsonOutput, _ := cmd.Flags().GetBool("json")
-		renderOutput := !jsonOutput
-		if !renderOutput {
+		if !jsonOutput {
 			if format, ok := body["format"]; ok {
 				if s, ok := format.(string); ok && s == "json" {
-					renderOutput = false
+					jsonOutput = true
 				}
 			}
 		}
 
-		// Open a bidi stream to the daemon's PluginExecutorService.
-		execClient := dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, daemonURL)
-		stream := execClient.CallPlugin(context.Background())
+		// Invoke via daemon's PluginExecutorService.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-		// Send the request.
-		pluginName := extractPluginName(svcName, pluginURL)
-		if err := stream.Send(&dotfilesdv1.CallPluginMessage{
-			PluginName:  pluginName,
+		execClient := dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, daemonURL)
+		execReq := connect.NewRequest(&dotfilesdv1.CallPluginRequest{
+			PluginName:  stripServiceSuffix(svcName),
 			Service:     svcName,
 			Method:      m.Name,
 			RequestBody: jsonBytes,
-		}); err != nil {
-			return fmt.Errorf("send request: %w", err)
+		})
+		execResp, err := execClient.CallPlugin(ctx, execReq)
+		if err != nil {
+			return fmt.Errorf("plugin call via daemon: %w", err)
 		}
 
-		// Receive events from the stream.
-		var lastErr string
-		for {
-			msg, err := stream.Receive()
-			if err != nil {
-				// Stream ended normally.
-				break
+		// Only print JSON response body when --json is set.
+		if jsonOutput && execResp.Msg.ResponseBody != nil {
+			var buf bytes.Buffer
+			if err := json.Indent(&buf, execResp.Msg.ResponseBody, "", "  "); err != nil {
+				fmt.Println(string(execResp.Msg.ResponseBody))
+			} else {
+				fmt.Println(buf.String())
 			}
-			if msg.Error != "" {
-				lastErr = msg.Error
-				break
-			}
-			// Print stdout/stderr chunks to terminal.
-			if len(msg.StdoutChunk) > 0 {
-				fmt.Print(string(msg.StdoutChunk))
-			}
-			if len(msg.StderrChunk) > 0 {
-				fmt.Fprint(os.Stderr, string(msg.StderrChunk))
-			}
-			// Print response body only when --json is set.
-			if len(msg.ResponseBody) > 0 && !renderOutput {
-				var buf bytes.Buffer
-				if err := json.Indent(&buf, msg.ResponseBody, "", "  "); err != nil {
-					fmt.Println(string(msg.ResponseBody))
-				} else {
-					fmt.Println(buf.String())
-				}
-			}
-		}
-
-		if lastErr != "" {
-			return fmt.Errorf("plugin call: %s", lastErr)
 		}
 		return nil
 	}
 }
 
-// extractPluginName extracts the plugin name from its URL or service name.
-// The service name like "resources.ResourcesService" → "resources".
-func extractPluginName(svcName, pluginURL string) string {
-	// Try from the service name first (e.g. "resources.ResourcesService").
-	parts := strings.Split(svcName, ".")
+// stripServiceSuffix extracts the plugin name from a fully-qualified
+// service name like "resources.ResourcesService" → "resources".
+func stripServiceSuffix(fullName string) string {
+	parts := strings.Split(fullName, ".")
 	if len(parts) > 0 {
 		return parts[0]
 	}
-	// Fallback: last path component of URL.
-	parts = strings.Split(pluginURL, "/")
-	return parts[len(parts)-1]
+	return fullName
 }
 
 // buildJSONFromSchema recursively builds a JSON-compatible map from cobra flags,

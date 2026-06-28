@@ -169,15 +169,16 @@ var _ = Describe("sessionServer", func() {
 			Expect(resp.Msg.Session.Id).To(Equal(existing.id))
 		})
 
-		It("returns error when session does not exist", func() {
+		It("creates session when id does not exist", func() {
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 
 			client := dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, srv.URL)
-			_, err := client.Connect(ctx, connect.NewRequest(&dotfilesdv1.ConnectRequest{
+			resp, err := client.Connect(ctx, connect.NewRequest(&dotfilesdv1.ConnectRequest{
 				Session: &dotfilesdv1.Session{Id: "nonexistent"},
 			}))
-			Expect(err).To(HaveOccurred())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.Msg.Session.Id).To(Equal("nonexistent"))
 		})
 
 		It("sets variables from the Connect request", func() {
