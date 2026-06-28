@@ -211,6 +211,7 @@ func (s *executorServer) CallPlugin(
 
 	// Stream stdin chunks from client in background — buffer for ReadStdin RPC.
 	go func() {
+		defer CloseStdin(clientID)
 		for {
 			m, err := stream.Receive()
 			if err != nil {
@@ -220,8 +221,6 @@ func (s *executorServer) CallPlugin(
 				StoreStdin(clientID, m.StdinChunk)
 			}
 		}
-		// On stream close, mark EOF so ReadStdin returns EOF.
-		CloseStdin(clientID)
 	}()
 
 	// Launch HTTP call in background — plugin RPC may take time.

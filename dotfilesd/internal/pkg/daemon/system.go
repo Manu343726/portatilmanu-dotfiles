@@ -163,14 +163,6 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 		}
 	}
 
-	// Scripts (always shown, counted as "available").
-	scripts, err := d.scripts.ListScripts()
-	if err == nil && len(scripts) > 0 {
-		sn := &dotfilesdv1.DiagNode{Type: "scripts", Label: "Available scripts"}
-		sn.Children = buildScriptNodes(scripts)
-		root.Children = append(root.Children, sn)
-	}
-
 	// ─── Tree 2: Per-client trees ───
 	// Build a list of response trees: first is daemon, rest are clients.
 	var trees []*dotfilesdv1.DiagNode
@@ -206,19 +198,4 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 
 	slog.Log(ctx, levelTrace, "Diagnostics done", "trees", len(trees))
 	return connect.NewResponse(&dotfilesdv1.DiagnosticsResponse{Root: combined}), nil
-}
-
-func buildScriptNodes(entries []*dotfilesdv1.ScriptEntry) []*dotfilesdv1.DiagNode {
-	var nodes []*dotfilesdv1.DiagNode
-	for _, e := range entries {
-		n := &dotfilesdv1.DiagNode{Type: "script", Label: e.Name}
-		if e.Path != "" {
-			n.Attrs = map[string]string{"path": e.Path}
-		}
-		if len(e.Children) > 0 {
-			n.Children = buildScriptNodes(e.Children)
-		}
-		nodes = append(nodes, n)
-	}
-	return nodes
 }
