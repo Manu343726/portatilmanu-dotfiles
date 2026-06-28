@@ -79,6 +79,11 @@ type Clients struct {
 	PWD         string // working directory where CLI was invoked
 	AgentID     string // MCP agent identity (client name from initialize)
 
+	// ownSession tracks whether this instance created the session (as opposed to
+	// inheriting it from the DOTFILESD_SESSION environment). Only own sessions
+	// should be finalized in Close() — inherited ones belong to the parent shell.
+	ownSession bool
+
 	mu        sync.Mutex
 	connected bool
 }
@@ -289,6 +294,11 @@ func (c *Clients) Connect(ctx context.Context) error {
 		attrs["agent_id"] = clientCaps.clientName
 	}
 
+	// Remember whether we owned the session before calling Connect (empty ID means
+	// the daemon will create a fresh one we own). Used in Close() to decide whether
+	// to finalize.
+	hadSession := c.SessionID != ""
+
 	// Push client_connect diagnostic event.
 	if _, err := c.DiagPost.PostEvent(ctx, connect.NewRequest(&dotfilesdv1.DiagEvent{
 		Type:        "client_connect",
@@ -312,11 +322,12 @@ func (c *Clients) Connect(ctx context.Context) error {
 	}
 
 	c.SessionID = resp.Msg.Session.Id
+	c.ownSession = !hadSession
 	c.mu.Lock()
 	c.connected = true
 	c.mu.Unlock()
 
-	slog.Debug("client connected", "session_id", c.SessionID, "feedback_url", fb.URL())
+	slog.Debug("client connected", "session_id", c.SessionID, "own_session", c.ownSession, "feedback_url", fb.URL())
 	return nil
 }
 
@@ -332,9 +343,10 @@ func (c *Clients) Close() {
 			slog.Debug("diag post client_disconnect failed", "error", err)
 		}
 
-		// Finalize the session so it doesn't accumulate as "active" in the
-		// diagnostics tree after the CLI command completes.
-		if c.SessionID != "" {
+		// Only finalize sessions we created ourselves. Inherited sessions
+		// (from DOTFILESD_SESSION env) belong to the parent shell and must
+		// not be finalized.
+		if c.ownSession && c.SessionID != "" {
 			if _, err := c.Session.FinalizeSession(context.Background(), connect.NewRequest(&dotfilesdv1.FinalizeSessionRequest{
 				Session: &dotfilesdv1.Session{Id: c.SessionID},
 			})); err != nil {
