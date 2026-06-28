@@ -95,6 +95,9 @@ func stepProto(sourceDir, name string) error {
 	)
 	cmd.Args = append(cmd.Args, matches...)
 	cmd.Dir = sourceDir
+	// Ensure protoc can find protoc-gen-go and protoc-gen-connect-go in PATH.
+	home, _ := os.UserHomeDir()
+	cmd.Env = append(os.Environ(), "PATH="+filepath.Join(home, "go", "bin")+":"+os.Getenv("PATH"))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("proto compile: %w\n%s", err, string(out))
 	}
@@ -103,9 +106,6 @@ func stepProto(sourceDir, name string) error {
 
 // LoadPlugins discovers, builds (in dependency order), launches, and registers all plugins.
 func (m *Manager) LoadPlugins(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	pluginsDir := expandHome(m.PluginsDir)
 	cacheDir := expandHome(m.CacheDir)
 
@@ -225,17 +225,26 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 			SourceDir:   sourceDir,
 			CacheDir:    cacheDir,
 		}
+		// Register plugin BEFORE starting supervisor so that cross-plugin
+		// discovery (e.g. tmuxbar calling GetPlugin for resources) works
+		// without deadlocking. Lock is only held during map writes.
+		m.mu.Lock()
 		m.plugins[name] = info
+		m.mu.Unlock()
 
 		// Start crash supervisor with exponential backoff (adopts existing process).
 		sup := newSupervisor(name, binaryPath, sourceDir, cacheDir, m.CtxURL, m.CtxToken, sessionID)
 		if err := sup.startAdopt(ctx, info); err != nil {
 			procCmd.Process.Kill()
 			slog.Error("supervisor start failed", "name", name, "error", err)
+			m.mu.Lock()
 			delete(m.plugins, name)
+			m.mu.Unlock()
 			continue
 		}
+		m.mu.Lock()
 		m.supervisors[name] = sup
+		m.mu.Unlock()
 		slog.Info("plugin registered with supervisor", "name", name, "services", services)
 	}
 

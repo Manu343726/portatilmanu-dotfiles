@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"dotfilesd/plugin"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -26,9 +27,25 @@ type tmuxBarServer struct {
 }
 
 func (s *tmuxBarServer) RAMWidget(ctx context.Context, req *connect.Request[pb.RAMWidgetRequest]) (*connect.Response[pb.RAMWidgetResponse], error) {
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ TmuxBar.RAMWidget",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+		)
+	}
+
 	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
 	if err != nil {
+		if pc != nil {
+			pc.Log().Error("✗ TmuxBar.RAMWidget: resources.Current", "error", err)
+		}
 		return connect.NewResponse(&pb.RAMWidgetResponse{Text: "RAM N/A"}), nil
+	}
+	if pc != nil {
+		pc.Log().Info("✓ TmuxBar.RAMWidget: resources.Current done", "ram_pct", r.Msg.Ram.GetPercent())
 	}
 	ram := r.Msg.Ram
 	if ram == nil {
@@ -41,8 +58,21 @@ func (s *tmuxBarServer) RAMWidget(ctx context.Context, req *connect.Request[pb.R
 }
 
 func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.CPUWidgetRequest]) (*connect.Response[pb.CPUWidgetResponse], error) {
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ TmuxBar.CPUWidget",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+		)
+	}
+
 	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
 	if err != nil {
+		if pc != nil {
+			pc.Log().Error("✗ TmuxBar.CPUWidget: resources.Current", "error", err)
+		}
 		return connect.NewResponse(&pb.CPUWidgetResponse{Text: "CPU N/A"}), nil
 	}
 	cpu := r.Msg.Cpu
@@ -54,20 +84,47 @@ func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.C
 }
 
 func (s *tmuxBarServer) CPUTempWidget(ctx context.Context, req *connect.Request[pb.CPUTempWidgetRequest]) (*connect.Response[pb.CPUTempWidgetResponse], error) {
-	// CPU temperature requires reading from /sys/class/thermal. For now,
-	// return N/A since we don't have a dedicated data source.
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ TmuxBar.CPUTempWidget",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+		)
+	}
 	return connect.NewResponse(&pb.CPUTempWidgetResponse{Text: "🌡 N/A"}), nil
 }
 
 func (s *tmuxBarServer) BatteryWidget(ctx context.Context, req *connect.Request[pb.BatteryWidgetRequest]) (*connect.Response[pb.BatteryWidgetResponse], error) {
-	// Battery info requires reading from /sys/class/power_supply. For now,
-	// return N/A.
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ TmuxBar.BatteryWidget",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+		)
+	}
 	return connect.NewResponse(&pb.BatteryWidgetResponse{Text: "🔋 N/A"}), nil
 }
 
 func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.StatusBarRequest]) (*connect.Response[pb.StatusBarResponse], error) {
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ TmuxBar.StatusBar",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+		)
+	}
+
 	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
 	if err != nil {
+		if pc != nil {
+			pc.Log().Error("✗ TmuxBar.StatusBar: resources.Current", "error", err)
+		}
 		return connect.NewResponse(&pb.StatusBarResponse{Text: "resources unavailable"}), nil
 	}
 
@@ -86,7 +143,6 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 }
 
 func initResourcesClient() resourcesconnect.ResourcesServiceClient {
-	// Discover resources plugin via daemon's registry.
 	daemonURL := "http://127.0.0.1:9105"
 	httpClient := &http.Client{}
 	regClient := dotfilesdv1connect.NewPluginRegistryServiceClient(httpClient, daemonURL)
@@ -94,9 +150,10 @@ func initResourcesClient() resourcesconnect.ResourcesServiceClient {
 		PluginName: "resources",
 	}))
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "tmuxbar: initResourcesClient: GetPlugin failed: %v\n", err)
 		return nil
 	}
-
+	fmt.Fprintf(os.Stderr, "tmuxbar: initResourcesClient: resources at %s\n", regResp.Msg.Url)
 	return resourcesconnect.NewResourcesServiceClient(httpClient, regResp.Msg.Url)
 }
 

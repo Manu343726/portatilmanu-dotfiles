@@ -156,6 +156,16 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 	ram, cpu, disk, diskIO := s.state.get()
 
 	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ Resources.Current",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+			"ram_pct", ram.Percent,
+			"cpu_pct", cpu.TotalPercent,
+		)
+	}
 	if pc != nil && pc.RenderOutput() {
 		fmt.Fprintf(pc.Stdout(), "📊 Resources — RAM: %.0f/%.0f MB (%.0f%%) | CPU: %.0f%% (%.0f%% user, %.0f%% sys, %.0f%% iowait) | Disk: %.1f/%.1f GB (%.0f%%) on %s | Disk I/O: %.0f r/s %.0f w/s on %s\n",
 			ram.UsedMB, ram.TotalMB, ram.Percent,
@@ -197,11 +207,20 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 }
 
 func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRequest]) (*connect.Response[pb.TopResponse], error) {
-	// For now return the current snapshot as the main data.
-	// Detailed 'top' implementation would parse `ps aux` output, but
-	// the minimal version just returns what we have.
 	ram, cpu, disk, _ := s.state.get()
-	_ = disk // not needed for top
+	_ = disk
+
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ Resources.Top",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+			"count", req.Msg.Count,
+			"sort", req.Msg.Sort,
+		)
+	}
 
 	processes := []*pb.ProcessInfo{
 		{
@@ -212,7 +231,6 @@ func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRe
 		},
 	}
 
-	// If CPU data available, add a synthetic process entry.
 	if cpu.TotalPercent > 0 {
 		processes = append(processes, &pb.ProcessInfo{
 			Pid:        0,
@@ -227,9 +245,20 @@ func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRe
 }
 
 func (s *resourcesServer) PS(ctx context.Context, req *connect.Request[pb.PSRequest]) (*connect.Response[pb.PSResponse], error) {
-	// Simplified: return just the collector's aggregate data.
 	ram, cpu, _, _ := s.state.get()
 	_ = cpu
+
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ Resources.PS",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+			"pid", req.Msg.Pid,
+			"count", req.Msg.Count,
+		)
+	}
 
 	return connect.NewResponse(&pb.PSResponse{
 		Processes: []*pb.ProcessInfo{
@@ -251,6 +280,18 @@ func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.H
 	count := int(req.Msg.Count)
 	if count <= 0 {
 		count = 20
+	}
+
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ Resources.History",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+			"resource", resource,
+			"count", count,
+		)
 	}
 
 	values := s.state.getHistory(resource, count)

@@ -12,6 +12,8 @@ require (
 
 require (
 	connectrpc.com/grpcreflect v1.3.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

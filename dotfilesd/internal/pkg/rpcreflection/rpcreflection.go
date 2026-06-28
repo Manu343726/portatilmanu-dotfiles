@@ -10,16 +10,19 @@ package rpcreflection
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/grpcreflect"
+	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -48,15 +51,30 @@ type ServiceInfo struct {
 // via HTTP-based gRPC reflection.
 type Client struct {
 	baseURL    string
-	httpClient *http.Client
+	httpClient *http.Client // HTTP/1.1+ client for Connect JSON calls
+	grpcClient *http.Client // HTTP/2 (h2c) client for gRPC reflection
 }
 
 // NewClient returns a Client that talks to the Connect RPC server at the
 // given base URL (e.g. "http://127.0.0.1:9105").
+//
+// It creates two transports internally: one for standard HTTP requests
+// (Connect JSON RPC, HTTP/1.1+) and one for HTTP/2 cleartext (gRPC
+// reflection protocol which requires HTTP/2).
 func NewClient(serverURL string) *Client {
 	return &Client{
 		baseURL:    serverURL,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
+		grpcClient: &http.Client{
+			Transport: &http2.Transport{
+				AllowHTTP: true,
+				DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+					var d net.Dialer
+					return d.DialContext(ctx, network, addr)
+				},
+			},
+			Timeout: 10 * time.Second,
+		},
 	}
 }
 
@@ -65,7 +83,7 @@ func NewClient(serverURL string) *Client {
 // built-in reflection services; callers should filter with IsSystemService
 // if desired.
 func (c *Client) DiscoverServices(ctx context.Context) ([]ServiceInfo, error) {
-	refClient := grpcreflect.NewClient(c.httpClient, c.baseURL)
+	refClient := grpcreflect.NewClient(c.grpcClient, c.baseURL)
 	stream := refClient.NewStream(ctx)
 	defer stream.Close()
 

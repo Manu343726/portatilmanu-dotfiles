@@ -13,6 +13,8 @@ import (
 	dotfilesdv1connect "dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/grpcreflect"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 // Service is a Connect RPC service a plugin exposes.
@@ -144,7 +146,7 @@ func Serve(cfg Config) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 
-	srv := &http.Server{Handler: ctxWrappedMux}
+	srv := &http.Server{Handler: h2c.NewHandler(ctxWrappedMux, &http2.Server{})}
 	go func() {
 		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "plugin: serve error: %v\n", err)

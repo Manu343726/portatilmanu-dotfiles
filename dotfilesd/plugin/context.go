@@ -80,6 +80,7 @@ type contextClient struct {
 	feedbackClient dotfilesdv1connect.FeedbackServiceClient
 	logClient      dotfilesdv1connect.LogServiceClient
 	scriptClient   dotfilesdv1connect.ScriptServiceClient
+	sessionClient  dotfilesdv1connect.SessionServiceClient
 
 	token, sessionID, pluginName string
 	renderOutput                 bool
@@ -93,11 +94,26 @@ func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 		feedbackClient: dotfilesdv1connect.NewFeedbackServiceClient(httpClient, url),
 		logClient:      dotfilesdv1connect.NewLogServiceClient(httpClient, url),
 		scriptClient:   dotfilesdv1connect.NewScriptServiceClient(httpClient, url),
+		sessionClient:  dotfilesdv1connect.NewSessionServiceClient(httpClient, url),
 		token:          token,
 		sessionID:      sessionID,
 		pluginName:     pluginName,
 	}
 	c.log = &pluginLogger{client: c, pluginName: pluginName}
+
+	// Register a real daemon session so that Exec() calls from background
+	// tasks have a proper session context (avoids "session not found" warnings).
+	// The initial sessionID from SESSION_ID env is a sentinel; we replace it
+	// with a real daemon-issued session ID.
+	ctx := context.Background()
+	connectReq := connect.NewRequest(&dotfilesdv1.ConnectRequest{
+		CallbackUrl: "",
+	})
+	c.setTokenHeader(connectReq)
+	connectResp, err := c.sessionClient.Connect(ctx, connectReq)
+	if err == nil && connectResp.Msg.Session != nil && connectResp.Msg.Session.Id != "" {
+		c.sessionID = connectResp.Msg.Session.Id
+	}
 	return c
 }
 
@@ -109,6 +125,7 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 		feedbackClient: c.feedbackClient,
 		logClient:      c.logClient,
 		scriptClient:   c.scriptClient,
+		sessionClient:  c.sessionClient,
 		token:          c.token,
 		sessionID:      c.sessionID,
 		pluginName:     c.pluginName,

@@ -78,11 +78,9 @@ func (d *Daemon) Start() error {
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)
 
-	// Initialize plugin system.
-	if err := d.InitPlugins(); err != nil {
-		slog.Warn("plugin init (continuing)", "error", err)
-	}
-
+	// Build the mux with all service handlers BEFORE starting plugins.
+	// This ensures PluginRegistryService is available when plugins try
+	// to discover each other during their initialization.
 	mux := http.NewServeMux()
 
 	// —— Services accessible without auth (CLI, MCP, agent) ——
@@ -121,9 +119,12 @@ func (d *Daemon) Start() error {
 		p, h := dotfilesdv1connect.NewLogServiceHandler(newLogServer(d))
 		mux.Handle(p, auth(h))
 	}
+
+	// PluginRegistryService is accessible WITHOUT auth — both plugins and CLI/MCP
+	// use it to discover plugin metadata. It is a read-only query service.
 	{
 		p, h := dotfilesdv1connect.NewPluginRegistryServiceHandler(newRegistryServer(d.sessions, d))
-		mux.Handle(p, auth(h))
+		mux.Handle(p, h)
 	}
 
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)
@@ -132,6 +133,8 @@ func (d *Daemon) Start() error {
 		Handler: mux,
 	}
 
+	// Start the HTTP server in a goroutine BEFORE loading plugins so that
+	// PluginRegistryService is immediately available for cross-plugin discovery.
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("serving connect rpc", "addr", rpcAddr)
@@ -139,6 +142,14 @@ func (d *Daemon) Start() error {
 			errCh <- err
 		}
 	}()
+
+	// Small delay to let the server socket accept connections.
+	time.Sleep(50 * time.Millisecond)
+
+	// Initialize plugin system (discovers, builds, launches plugins).
+	if err := d.InitPlugins(); err != nil {
+		slog.Warn("plugin init (continuing)", "error", err)
+	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
