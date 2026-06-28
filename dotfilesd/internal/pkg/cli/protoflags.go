@@ -296,13 +296,15 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 		execClient := dotfilesdv1connect.NewPluginExecutorServiceClient(h2cClient, daemonURL)
 		stream := execClient.CallPlugin(ctx)
 
-		// Send request header.
+		// Send request header with render output preference.
+		renderOutput := !jsonOutput
 		if err := stream.Send(&dotfilesdv1.CallPluginMessage{
-			PluginName:  stripServiceSuffix(svcName),
-			Service:     svcName,
-			Method:      m.Name,
-			RequestBody: jsonBytes,
-			ClientId:    fmt.Sprintf("cli_%d", time.Now().UnixNano()),
+			PluginName:   stripServiceSuffix(svcName),
+			Service:      svcName,
+			Method:       m.Name,
+			RequestBody:  jsonBytes,
+			ClientId:     fmt.Sprintf("cli_%d", time.Now().UnixNano()),
+			RenderOutput: renderOutput,
 		}); err != nil {
 			return fmt.Errorf("send request: %w", err)
 		}

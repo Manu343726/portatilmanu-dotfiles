@@ -15,28 +15,27 @@ import (
 	"connectrpc.com/connect"
 )
 
-// activePluginCall tracks a bidi streaming plugin execution call.
-// The daemon matches IOService output from plugins to the correct
-// client stream using client_id.
 type activePluginCall struct {
 	clientID   string
 	pluginName string
-	stdout     func([]byte) // sends stdout chunk back to client
-	stderr     func([]byte) // sends stderr chunk back to client
+	stdoutChan chan []byte
+	stderrChan chan []byte
+	done       chan struct{}
 }
 
 var (
-	activeCallsMu sync.RWMutex
+	activeCallsMu       sync.RWMutex
 	activeCallsByClient = make(map[string]*activePluginCall)
 	activeCallsByPlugin = make(map[string]*activePluginCall)
 )
 
-func registerCall(clientID, pluginName string, stdoutFn, stderrFn func([]byte)) *activePluginCall {
+func registerCall(clientID, pluginName string) *activePluginCall {
 	call := &activePluginCall{
 		clientID:   clientID,
 		pluginName: pluginName,
-		stdout:     stdoutFn,
-		stderr:     stderrFn,
+		stdoutChan: make(chan []byte, 256),
+		stderrChan: make(chan []byte, 256),
+		done:       make(chan struct{}),
 	}
 	activeCallsMu.Lock()
 	activeCallsByClient[clientID] = call
@@ -52,13 +51,10 @@ func unregisterCall(clientID, pluginName string) {
 	activeCallsMu.Unlock()
 }
 
-// PushPluginOutput is called by IOService handler when a plugin writes
-// stdout/stderr. It forwards the output to the client's bidi stream.
 func PushPluginOutput(pluginName, source, line, clientID string) {
 	activeCallsMu.RLock()
 	defer activeCallsMu.RUnlock()
 
-	// Try matching by plugin name first, then by client ID.
 	var call *activePluginCall
 	if cid, ok := activeCallsByPlugin[pluginName]; ok {
 		call = cid
@@ -69,10 +65,33 @@ func PushPluginOutput(pluginName, source, line, clientID string) {
 		return
 	}
 
+	chunk := []byte(line + "\n")
 	if strings.HasSuffix(source, "/stdout") {
-		call.stdout([]byte(line + "\n"))
+		select {
+		case call.stdoutChan <- chunk:
+		default:
+			select {
+			case <-call.stdoutChan:
+			default:
+			}
+			select {
+			case call.stdoutChan <- chunk:
+			default:
+			}
+		}
 	} else if strings.HasSuffix(source, "/stderr") {
-		call.stderr([]byte(line + "\n"))
+		select {
+		case call.stderrChan <- chunk:
+		default:
+			select {
+			case <-call.stderrChan:
+			default:
+			}
+			select {
+			case call.stderrChan <- chunk:
+			default:
+			}
+		}
 	}
 }
 
@@ -88,7 +107,6 @@ func (s *executorServer) CallPlugin(
 	ctx context.Context,
 	stream *connect.BidiStream[dotfilesdv1.CallPluginMessage, dotfilesdv1.CallPluginMessage],
 ) error {
-	// 1. Receive the request header from the client.
 	req, err := stream.Receive()
 	if err != nil {
 		return fmt.Errorf("receive request: %w", err)
@@ -99,6 +117,7 @@ func (s *executorServer) CallPlugin(
 	methodName := req.Method
 	reqBody := req.RequestBody
 	clientID := req.ClientId
+	renderOutput := req.RenderOutput
 
 	if clientID == "" {
 		clientID = fmt.Sprintf("cli_%d", time.Now().UnixNano())
@@ -116,65 +135,84 @@ func (s *executorServer) CallPlugin(
 		})
 	}
 
-	// 2. Register this call so PushPluginOutput can route to us.
-	registerCall(clientID, pluginName,
-		func(chunk []byte) {
-			stream.Send(&dotfilesdv1.CallPluginMessage{StdoutChunk: chunk})
-		},
-		func(chunk []byte) {
-			stream.Send(&dotfilesdv1.CallPluginMessage{StderrChunk: chunk})
-		},
-	)
+	call := registerCall(clientID, pluginName)
 	defer unregisterCall(clientID, pluginName)
 
-	// 3. Forward stdin chunks from client to plugin (in background).
-	//    The plugin receives stdin through a separate mechanism, so we
-	//    just drain stdin chunks if the client sends any.
+	// Launch HTTP call in background — plugin RPC may take time.
+	type httpResult struct {
+		respBody []byte
+		err      string
+	}
+	resultCh := make(chan httpResult, 1)
+
 	go func() {
-		for {
-			msg, err := stream.Receive()
-			if err != nil {
-				return
-			}
-			_ = msg // stdin chunks could be processed here
+		rpcURL := fmt.Sprintf("%s/%s/%s", info.URL, svcName, methodName)
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", rpcURL, bytes.NewReader(reqBody))
+		if err != nil {
+			resultCh <- httpResult{err: fmt.Sprintf("create request: %v", err)}
+			return
 		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("X-Dotfiles-Context-Token", s.daemon.pluginToken)
+		httpReq.Header.Set("X-Client-ID", clientID)
+		if renderOutput {
+			httpReq.Header.Set("X-Dotfiles-Render-Output", "true")
+		}
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			resultCh <- httpResult{err: fmt.Sprintf("plugin call: %v", err)}
+			return
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			resultCh <- httpResult{err: fmt.Sprintf("read response: %v", err)}
+			return
+		}
+		if resp.StatusCode >= 400 {
+			resultCh <- httpResult{err: fmt.Sprintf("plugin returned HTTP %d: %s", resp.StatusCode, string(respBody))}
+			return
+		}
+		resultCh <- httpResult{respBody: respBody}
 	}()
 
-	// 4. Make the HTTP call to the plugin.
-	rpcURL := fmt.Sprintf("%s/%s/%s", info.URL, svcName, methodName)
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", rpcURL, bytes.NewReader(reqBody))
-	if err != nil {
-		return stream.Send(&dotfilesdv1.CallPluginMessage{
-			Error: fmt.Sprintf("create request: %v", err),
-		})
+	// Main loop: drain I/O chunks while HTTP runs, then send final response.
+	for {
+		select {
+		case <-call.done:
+			return nil
+		case chunk := <-call.stdoutChan:
+			if err := stream.Send(&dotfilesdv1.CallPluginMessage{StdoutChunk: chunk}); err != nil {
+				return err
+			}
+		case chunk := <-call.stderrChan:
+			if err := stream.Send(&dotfilesdv1.CallPluginMessage{StderrChunk: chunk}); err != nil {
+				return err
+			}
+		case result := <-resultCh:
+			close(call.done)
+			if result.err != "" {
+				return stream.Send(&dotfilesdv1.CallPluginMessage{Error: result.err})
+			}
+			// Drain any remaining I/O chunks before final response.
+		drainLoop:
+			for {
+				select {
+				case chunk := <-call.stdoutChan:
+					if err := stream.Send(&dotfilesdv1.CallPluginMessage{StdoutChunk: chunk}); err != nil {
+						return err
+					}
+				case chunk := <-call.stderrChan:
+					if err := stream.Send(&dotfilesdv1.CallPluginMessage{StderrChunk: chunk}); err != nil {
+						return err
+					}
+				default:
+					break drainLoop
+				}
+			}
+			return stream.Send(&dotfilesdv1.CallPluginMessage{ResponseBody: result.respBody})
+		}
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Dotfiles-Context-Token", s.daemon.pluginToken)
-	httpReq.Header.Set("X-Client-ID", clientID)
-
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		return stream.Send(&dotfilesdv1.CallPluginMessage{
-			Error: fmt.Sprintf("plugin call: %v", err),
-		})
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return stream.Send(&dotfilesdv1.CallPluginMessage{
-			Error: fmt.Sprintf("read response: %v", err),
-		})
-	}
-	if resp.StatusCode >= 400 {
-		return stream.Send(&dotfilesdv1.CallPluginMessage{
-			Error: fmt.Sprintf("plugin returned HTTP %d: %s", resp.StatusCode, string(respBody)),
-		})
-	}
-
-	// 5. Send final response.
-	return stream.Send(&dotfilesdv1.CallPluginMessage{
-		ResponseBody: respBody,
-	})
 }
-

@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package dotfilesd.v1;
 
-option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
-
-import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 import "proto/dotfilesd/v1/dotfilesdv1/config.proto";
+import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 // IOService — plugins submit structured log entries to the daemon's logging
 // system. The daemon also uses this to forward stdout/stderr from plugins

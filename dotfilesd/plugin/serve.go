@@ -113,15 +113,16 @@ func Serve(cfg Config) {
 
 		var ctx Context = ctxClient
 		if clientID != "" || ro {
-			// Create a per-request context with the client-specific settings.
-			c := ctxClient
+			// Build a per-request context with client-specific settings.
+			// Must copy the struct to avoid mutating the shared singleton.
+			c := *ctxClient
 			if clientID != "" {
 				c.clientID = clientID
 			}
 			if ro {
 				c.renderOutput = true
 			}
-			ctx = c
+			ctx = &c
 		}
 		r = r.WithContext(WithContext(r.Context(), ctx))
 		mux.ServeHTTP(w, r)

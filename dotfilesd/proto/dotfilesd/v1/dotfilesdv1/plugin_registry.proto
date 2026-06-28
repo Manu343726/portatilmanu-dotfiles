@@ -70,11 +70,12 @@ message CallPluginMessage {
   string method = 3;
   bytes request_body = 4;
   string client_id = 5; // unique client identifier for stream multiplexing
+  bool render_output = 11; // true (default): plugin writes human-readable to stdout; false: return structured JSON
 
   // Streaming data (sent any direction during the call):
   bytes stdout_chunk = 6; // plugin → daemon → client
   bytes stderr_chunk = 7; // plugin → daemon → client
-  bytes stdin_chunk = 8;  // client → daemon → plugin
+  bytes stdin_chunk = 8; // client → daemon → plugin
 
   // Final response (plugin → daemon → client, set once at end):
   bytes response_body = 9;
