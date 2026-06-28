@@ -25,6 +25,15 @@ type Context interface {
 	Stderr() io.Writer
 	Log() logging.Logger
 
+	// RenderOutput returns true if the caller expects human-readable formatted
+	// output written to Stdout(). When false, handlers should return raw data
+	// in the RPC response message for programmatic consumption.
+	RenderOutput() bool
+
+	// WithRenderOutput returns a child Context that forwards the render
+	// preference to downstream plugin calls.
+	WithRenderOutput(bool) Context
+
 	// Shell execution
 	Exec(cmd string) (ExecResult, error)
 	SudoExec(cmd string) (ExecResult, error)
@@ -39,6 +48,7 @@ type Context interface {
 	// Scripts
 	RunScript(name string) (ScriptResult, error)
 }
+
 
 // ExecResult is the result of a shell command.
 type ExecResult struct {
@@ -73,6 +83,7 @@ type contextClient struct {
 	scriptClient   dotfilesdv1connect.ScriptServiceClient
 
 	token, sessionID, pluginName string
+	renderOutput                 bool
 	log                          logging.Logger
 }
 
@@ -91,6 +102,22 @@ func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 	return c
 }
 
+func (c *contextClient) RenderOutput() bool { return c.renderOutput }
+
+func (c *contextClient) WithRenderOutput(v bool) Context {
+	return &contextClient{
+		execClient:     c.execClient,
+		feedbackClient: c.feedbackClient,
+		logClient:      c.logClient,
+		scriptClient:   c.scriptClient,
+		token:          c.token,
+		sessionID:      c.sessionID,
+		pluginName:     c.pluginName,
+		renderOutput:   v,
+		log:            c.log,
+	}
+}
+
 func (c *contextClient) Log() logging.Logger { return c.log }
 
 func (c *contextClient) buildSession() *dotfilesdv1.Session {
@@ -100,6 +127,9 @@ func (c *contextClient) buildSession() *dotfilesdv1.Session {
 func (c *contextClient) setTokenHeader(req connect.AnyRequest) {
 	if c.token != "" {
 		req.Header().Set("X-Dotfiles-Context-Token", c.token)
+	}
+	if c.renderOutput {
+		req.Header().Set("X-Dotfiles-Render-Output", "true")
 	}
 }
 
@@ -290,8 +320,8 @@ type daemonLogWriter struct {
 	level  dotfilesdv1.LogLevel
 	source string
 
-	mu      sync.Mutex
-	buf     []byte
+	mu  sync.Mutex
+	buf []byte
 }
 
 func (w *daemonLogWriter) Write(p []byte) (int, error) {

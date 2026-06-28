@@ -103,8 +103,14 @@ func Serve(cfg Config) {
 
 	// Context injection middleware: wraps every request so handlers can
 	// call plugin.ExtractContext(ctx) to get daemon access.
+	// Also reads X-Dotfiles-Render-Output from the incoming request and
+	// propagates it into the plugin Context.
 	ctxWrappedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(WithContext(r.Context(), ctxClient))
+		var ctx Context = ctxClient
+		if r.Header.Get("X-Dotfiles-Render-Output") == "true" {
+			ctx = ctxClient.WithRenderOutput(true)
+		}
+		r = r.WithContext(WithContext(r.Context(), ctx))
 		mux.ServeHTTP(w, r)
 	})
 
@@ -120,9 +126,12 @@ func Serve(cfg Config) {
 
 	// Write handshake JSON to stdout so the daemon can discover us.
 	handshake := map[string]string{
-		"protocol":   "dotfilesd-plugin-v1",
-		"url":        pluginURL,
-		"session_id": sessionID,
+		"protocol":    "dotfilesd-plugin-v1",
+		"url":         pluginURL,
+		"session_id":  sessionID,
+		"name":        cfg.Name,
+		"version":     cfg.Version,
+		"description": cfg.Description,
 	}
 	enc := json.NewEncoder(os.Stdout)
 	if err := enc.Encode(handshake); err != nil {
