@@ -360,7 +360,23 @@ func buildMessageSchema(md protoreflect.MessageDescriptor, visited map[string]bo
 		schema.Messages = append(schema.Messages, buildMessageSchema(nested, visited))
 	}
 
-	// Fields.
+	// Fields — also collect message types referenced by fields (e.g. a field
+	// "RAMSnapshot ram" references a type defined elsewhere in the proto).
+	// These are appended to Messages so clients can look them up by typeName.
+	for i := 0; i < md.Fields().Len(); i++ {
+		fd := md.Fields().Get(i)
+		if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+			refMsg := fd.Message()
+			if refMsg != nil {
+				refName := string(refMsg.FullName())
+				if !visited[refName] {
+					schema.Messages = append(schema.Messages, buildMessageSchema(refMsg, visited))
+				}
+			}
+		}
+	}
+
+	// Build field schemas.
 	fields := md.Fields()
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)

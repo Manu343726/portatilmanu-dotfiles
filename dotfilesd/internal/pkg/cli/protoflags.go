@@ -305,11 +305,17 @@ func makeRunEProtoFromSchema(pluginURL, svcName string, m *dotfilesdv1.MethodSch
 			return fmt.Errorf("RPC failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 		}
 
-		var pretty bytes.Buffer
-		if err := json.Indent(&pretty, respBody, "", "  "); err != nil {
-			fmt.Println(string(respBody))
-		} else {
-			fmt.Println(pretty.String())
+		// Only print response body when --json is set (RenderOutput=false).
+		// When RenderOutput=true, the plugin handler writes human-readable
+		// output to its own stdout, which is captured by the daemon's logs.
+		// The response message is structured data for programmatic use.
+		if headers["X-Dotfiles-Render-Output"] == "false" {
+			var buf bytes.Buffer
+			if err := json.Indent(&buf, respBody, "", "  "); err != nil {
+				fmt.Println(string(respBody))
+			} else {
+				fmt.Println(buf.String())
+			}
 		}
 		return nil
 	}
