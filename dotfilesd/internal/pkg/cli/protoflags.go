@@ -28,7 +28,7 @@ type methodSchema struct {
 
 // serviceSchema holds resolved service information.
 type serviceSchema struct {
-	fullName string         // e.g. "weather.WeatherService"
+	fullName string // e.g. "weather.WeatherService"
 	methods  []methodSchema
 }
 

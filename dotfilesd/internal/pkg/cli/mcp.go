@@ -138,9 +138,9 @@ var mcpTools = []toolDef{
 		Name:        "dotfiles_git",
 		Description: "Run git commands on the dotfiles repository (status, diff, add, commit, push, log)",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"action":   {Type: "string", Description: "git action: status, diff, add, commit, push, log"},
-			"message":  {Type: "string", Description: "commit message (required when action=commit)"},
-			"paths":    {Type: "string", Description: "paths to commit (optional, comma-separated)"},
+			"action":     {Type: "string", Description: "git action: status, diff, add, commit, push, log"},
+			"message":    {Type: "string", Description: "commit message (required when action=commit)"},
+			"paths":      {Type: "string", Description: "paths to commit (optional, comma-separated)"},
 			"session_id": {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"action"}},
 	},

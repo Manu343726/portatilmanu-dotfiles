@@ -17,7 +17,7 @@ import (
 // supervisor manages a single plugin process with crash detection and
 // exponential backoff restart.
 type supervisor struct {
-	name      string
+	name       string
 	binaryPath string
 	sourceDir  string
 	cacheDir   string
