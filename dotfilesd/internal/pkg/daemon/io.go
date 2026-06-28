@@ -77,3 +77,19 @@ func (s *ioServer) Log(
 
 	return connect.NewResponse(&dotfilesdv1.LogResponse{}), nil
 }
+
+func (s *ioServer) ReadStdin(
+	ctx context.Context,
+	req *connect.Request[dotfilesdv1.StdinRequest],
+) (*connect.Response[dotfilesdv1.StdinResponse], error) {
+	clientID := req.Msg.ClientId
+	if clientID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("client_id is required"))
+	}
+
+	data, eof := ReadStdinFromCall(clientID, int(req.Msg.MaxBytes))
+	return connect.NewResponse(&dotfilesdv1.StdinResponse{
+		Data: data,
+		Eof:  eof,
+	}), nil
+}

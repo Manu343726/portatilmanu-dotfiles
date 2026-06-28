@@ -20,6 +20,9 @@ type activePluginCall struct {
 	pluginName string
 	stdoutChan chan []byte
 	stderrChan chan []byte
+	stdinBuf   bytes.Buffer
+	stdinEOF   bool
+	mu         sync.Mutex
 	done       chan struct{}
 }
 
@@ -95,6 +98,54 @@ func PushPluginOutput(pluginName, source, line, clientID string) {
 	}
 }
 
+// StoreStdin stores stdin data from the executor bidi stream for a call.
+func StoreStdin(clientID string, data []byte) {
+	activeCallsMu.RLock()
+	call := activeCallsByClient[clientID]
+	activeCallsMu.RUnlock()
+	if call == nil {
+		return
+	}
+	call.mu.Lock()
+	call.stdinBuf.Write(data)
+	call.mu.Unlock()
+}
+
+// CloseStdin marks stdin as closed for a call.
+func CloseStdin(clientID string) {
+	activeCallsMu.RLock()
+	call := activeCallsByClient[clientID]
+	activeCallsMu.RUnlock()
+	if call == nil {
+		return
+	}
+	call.mu.Lock()
+	call.stdinEOF = true
+	call.mu.Unlock()
+}
+
+// ReadStdinFromCall reads buffered stdin data for a call.
+func ReadStdinFromCall(clientID string, maxBytes int) ([]byte, bool) {
+	activeCallsMu.RLock()
+	call := activeCallsByClient[clientID]
+	activeCallsMu.RUnlock()
+	if call == nil {
+		return nil, true
+	}
+	call.mu.Lock()
+	defer call.mu.Unlock()
+	if call.stdinBuf.Len() == 0 {
+		return nil, call.stdinEOF
+	}
+	n := maxBytes
+	if n <= 0 || n > call.stdinBuf.Len() {
+		n = call.stdinBuf.Len()
+	}
+	buf := make([]byte, n)
+	call.stdinBuf.Read(buf)
+	return buf, call.stdinEOF
+}
+
 type executorServer struct {
 	daemon *Daemon
 }
@@ -138,6 +189,21 @@ func (s *executorServer) CallPlugin(
 	call := registerCall(clientID, pluginName)
 	defer unregisterCall(clientID, pluginName)
 
+	// Stream stdin chunks from client in background — buffer for ReadStdin RPC.
+	go func() {
+		for {
+			m, err := stream.Receive()
+			if err != nil {
+				return
+			}
+			if len(m.StdinChunk) > 0 {
+				StoreStdin(clientID, m.StdinChunk)
+			}
+		}
+		// On stream close, mark EOF so ReadStdin returns EOF.
+		CloseStdin(clientID)
+	}()
+
 	// Launch HTTP call in background — plugin RPC may take time.
 	type httpResult struct {
 		respBody []byte
@@ -147,7 +213,8 @@ func (s *executorServer) CallPlugin(
 
 	go func() {
 		rpcURL := fmt.Sprintf("%s/%s/%s", info.URL, svcName, methodName)
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", rpcURL, bytes.NewReader(reqBody))
+		reqReader := bytes.NewReader(reqBody)
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", rpcURL, reqReader)
 		if err != nil {
 			resultCh <- httpResult{err: fmt.Sprintf("create request: %v", err)}
 			return

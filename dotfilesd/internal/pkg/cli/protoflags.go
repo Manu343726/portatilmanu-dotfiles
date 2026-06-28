@@ -298,17 +298,33 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 
 		// Send request header with render output preference.
 		renderOutput := !jsonOutput
+		clientID := fmt.Sprintf("cli_%d", time.Now().UnixNano())
 		if err := stream.Send(&dotfilesdv1.CallPluginMessage{
 			PluginName:   stripServiceSuffix(svcName),
 			Service:      svcName,
 			Method:       m.Name,
 			RequestBody:  jsonBytes,
-			ClientId:     fmt.Sprintf("cli_%d", time.Now().UnixNano()),
+			ClientId:     clientID,
 			RenderOutput: renderOutput,
 		}); err != nil {
 			return fmt.Errorf("send request: %w", err)
 		}
-		// Close request side — we're done sending.
+
+		// Send stdin chunks from local stdin if piped, then close request.
+		if isStdinAvailable() {
+			buf := make([]byte, 4096)
+			for {
+				n, err := os.Stdin.Read(buf)
+				if n > 0 {
+					_ = stream.Send(&dotfilesdv1.CallPluginMessage{
+						StdinChunk: buf[:n],
+					})
+				}
+				if err != nil {
+					break
+				}
+			}
+		}
 		if err := stream.CloseRequest(); err != nil {
 			return fmt.Errorf("close request: %w", err)
 		}
@@ -709,4 +725,15 @@ func camelToKebab(s string) string {
 		}
 	}
 	return result.String()
+}
+
+// isStdinAvailable returns true if os.Stdin has data available to read
+// (i.e. it's not a terminal or has been redirected).
+func isStdinAvailable() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	// Check if stdin is a pipe or socket (not a terminal).
+	return (stat.Mode() & os.ModeCharDevice) == 0
 }

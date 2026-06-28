@@ -11,9 +11,23 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 // system. The daemon also uses this to forward stdout/stderr from plugins
 // back to the active CallPlugin bidi stream for real-time output relay.
 service IOService {
-  // Log submits a log entry. The daemon routes it through its logging system
-  // with the caller's identity as the logger module.
+  // Log submits a log entry. The daemon routes it through its logging system.
   rpc Log(LogRequest) returns (LogResponse);
+
+  // ReadStdin reads stdin data for a specific client call. The plugin calls
+  // this from its Stdin() reader to get stdin forwarded from the CLI through
+  // the executor's bidi stream.
+  rpc ReadStdin(StdinRequest) returns (StdinResponse);
+}
+
+message StdinRequest {
+  string client_id = 1;  // client ID from the active CallPlugin stream
+  int32 max_bytes = 2;   // max bytes to return (0 = default 4096)
+}
+
+message StdinResponse {
+  bytes data = 1;
+  bool eof = 2;  // true when the stdin stream is closed
 }
 
 // LogEntry represents a single log record from a plugin or tool.

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package stdinecho;
+
+option go_package = "plugins/stdinecho/proto/stdinecho";
+
+service StdinechoService {
+  // Echo reads lines from stdin and echoes them back.
+  rpc Echo(EchoRequest) returns (EchoResponse);
+}
+
+message EchoRequest {
+  int32 lines = 1; // Number of lines to read (default: 5)
+}
+
+message EchoResponse {
+  repeated string lines = 1;
+}

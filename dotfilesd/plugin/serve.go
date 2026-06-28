@@ -113,8 +113,6 @@ func Serve(cfg Config) {
 
 		var ctx Context = ctxClient
 		if clientID != "" || ro {
-			// Build a per-request context with client-specific settings.
-			// Must copy the struct to avoid mutating the shared singleton.
 			c := *ctxClient
 			if clientID != "" {
 				c.clientID = clientID

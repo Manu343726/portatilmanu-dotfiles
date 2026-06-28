@@ -35,13 +35,10 @@ type PluginInfo struct {
 	CacheDir    string
 
 	// DocsCache holds documentation fetched from the plugin's
-	// DocumentationService. Key is the service name ("" for plugin-level docs),
-	// value is the markdown content. Populated best-effort at load time.
+	// DocumentationService.
 	DocsCache map[string]string
 
-	// Schemas holds full introspection data (methods, fields, types, enums)
-	// extracted via grpcreflect at load time. Clients (CLI, MCP, plugins)
-	// read this from the registry — they never need direct grpcreflect.
+	// Schemas holds full introspection data (methods, fields, types, enums).
 	Schemas []*dotfilesdv1.ServiceSchema
 }
 

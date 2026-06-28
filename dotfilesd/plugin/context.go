@@ -23,6 +23,7 @@ import (
 type Context interface {
 	Stdout() io.Writer
 	Stderr() io.Writer
+	Stdin() io.Reader
 	Log() logging.Logger
 
 	// RenderOutput returns true if the caller expects human-readable formatted
@@ -84,7 +85,7 @@ type contextClient struct {
 
 	token, sessionID, pluginName string
 	renderOutput                 bool
-	clientID                     string // unique ID for this client call stream
+	clientID                     string
 	log                          logging.Logger
 }
 
@@ -332,6 +333,45 @@ func (c *contextClient) Stderr() io.Writer {
 		source:   c.pluginName + "/stderr",
 		clientID: c.clientID,
 	}
+}
+
+func (c *contextClient) Stdin() io.Reader {
+	return &stdinReader{client: c}
+}
+
+// stdinReader implements io.Reader by calling the daemon's IOService.ReadStdin
+// RPC in a loop. This lets the plugin read stdin forwarded from the CLI
+// through the executor bidi stream.
+type stdinReader struct {
+	client *contextClient
+	buf    []byte
+}
+
+func (r *stdinReader) Read(p []byte) (int, error) {
+	if len(r.buf) > 0 {
+		n := copy(p, r.buf)
+		r.buf = r.buf[n:]
+		return n, nil
+	}
+
+	req := connect.NewRequest(&dotfilesdv1.StdinRequest{
+		ClientId: r.client.clientID,
+		MaxBytes: int32(len(p)),
+	})
+	r.client.setTokenHeader(req)
+	resp, err := r.client.ioClient.ReadStdin(context.Background(), req)
+	if err != nil {
+		return 0, err
+	}
+	if len(resp.Msg.Data) == 0 && resp.Msg.Eof {
+		return 0, io.EOF
+	}
+	n := copy(p, resp.Msg.Data)
+	if n < len(resp.Msg.Data) {
+		r.buf = make([]byte, len(resp.Msg.Data)-n)
+		copy(r.buf, resp.Msg.Data[n:])
+	}
+	return n, nil
 }
 
 // daemonLogWriter is an io.Writer that sends data as log entries to the
