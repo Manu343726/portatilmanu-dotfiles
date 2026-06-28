@@ -49,6 +49,7 @@ func newSystemCmd() *cobra.Command {
 		diagStatus     string
 		diagLabel      string
 		diagAttrs      []string
+		diagFields     []string
 	)
 	diagCmd := &cobra.Command{
 		Use:   "diag",
@@ -57,7 +58,11 @@ func newSystemCmd() *cobra.Command {
 
 By default only active resources are shown. Use --time-window or
 --show-idle to include finished/crashed nodes, and --type, --status,
---label, --attr to filter the tree.`,
+--label, --attr to filter the tree.
+
+When no --fields are given, each node is printed as a single concise
+line with type-specific details. Use --fields to list specific attribute
+keys to display (e.g. --fields pid,port,command).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cli.RunDiagnostics(clients, sessionID, cli.DiagParams{
@@ -67,6 +72,7 @@ By default only active resources are shown. Use --time-window or
 				Status:     diagStatus,
 				Label:      diagLabel,
 				Attrs:      diagAttrs,
+				Fields:     diagFields,
 			})
 		},
 	}
@@ -82,6 +88,8 @@ By default only active resources are shown. Use --time-window or
 		"Filter by label regex")
 	diagCmd.Flags().StringArrayVarP(&diagAttrs, "attr", "a", nil,
 		"Filter by attr key=value (e.g. --attr client_type=cli; can repeat)")
+	diagCmd.Flags().StringSliceVarP(&diagFields, "fields", "f", nil,
+		"Show only these attribute keys, comma-separated (e.g. --fields pid,port)")
 	cmd.AddCommand(diagCmd)
 
 	return cmd

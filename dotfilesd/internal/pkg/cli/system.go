@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"time"
 
@@ -71,6 +70,7 @@ type DiagParams struct {
 	Status     string
 	Label      string
 	Attrs      []string // "key=value" pairs
+	Fields     []string // attrs to show; empty = concise one-line summary per type
 }
 
 // RunDiagnostics queries the daemon for full diagnostic state and prints a tree.
@@ -78,7 +78,7 @@ func RunDiagnostics(clients *Clients, sessionID string, params DiagParams) error
 	slog.Debug("diagnostics requested", "session_id", sessionID, "params", params)
 
 	req := connect.NewRequest(&dotfilesdv1.QueryTreeRequest{
-		ShowIdle:    params.ShowIdle,
+		ShowIdle:     params.ShowIdle,
 		IncludeTypes: params.Types,
 		StatusFilter: params.Status,
 		LabelRegex:   params.Label,
@@ -107,46 +107,119 @@ func RunDiagnostics(clients *Clients, sessionID string, params DiagParams) error
 		return fmt.Errorf("diagnostics failed: %w", err)
 	}
 
-	printTree(resp.Msg.Root, "", true)
+	printTree(resp.Msg.Root, "", true, params.Fields)
 	return nil
 }
 
-func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool) {
-	// Build the line prefix.
+func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []string) {
 	branch := "├── "
 	if isLast {
 		branch = "└── "
 	}
 
-	// Build a compact type tag.
 	typeTag := typeLabel(n.Type)
 
+	// Node header line: [type] label (status)
 	label := n.Label
 	if n.Status != "" {
 		label = fmt.Sprintf("%s (%s)", label, n.Status)
 	}
-	fmt.Printf("%s%s [%s] %s\n", prefix, branch, typeTag, label)
+	header := fmt.Sprintf("%s%s [%s] %s", prefix, branch, typeTag, label)
 
-	// Print attributes indented, with stable key order.
+	// Build per-node summary when no --fields are given.
+	if len(fields) == 0 {
+		summary := conciseSummary(n, typeTag)
+		if summary != "" {
+			header += " " + summary
+		}
+		fmt.Println(header)
+	} else {
+		fmt.Println(header)
+		childPrefix := prefix
+		if isLast {
+			childPrefix += "   "
+		} else {
+			childPrefix += "│  "
+		}
+		// Show only requested fields, in order given.
+		for _, f := range fields {
+			if v, ok := n.Attrs[f]; ok {
+				fmt.Printf("%s%s: %s\n", childPrefix, f, v)
+			}
+		}
+	}
+
+	// Children.
 	childPrefix := prefix
 	if isLast {
 		childPrefix += "   "
 	} else {
 		childPrefix += "│  "
 	}
-	keys := make([]string, 0, len(n.Attrs))
-	for k := range n.Attrs {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		fmt.Printf("%s%s: %s\n", childPrefix, k, n.Attrs[k])
-	}
-
-	// Print children.
 	for i, child := range n.Children {
-		printTree(child, childPrefix, i == len(n.Children)-1)
+		printTree(child, childPrefix, i == len(n.Children)-1, fields)
 	}
+}
+
+// conciseSummary builds a one-line suffix for a node when no --fields are given.
+func conciseSummary(n *dotfilesdv1.DiagNode, typeTag string) string {
+	a := n.Attrs
+	switch n.Type {
+	case "daemon", "plugin":
+		// Version/pid/port are already in the label, nothing extra needed.
+		return ""
+
+	case "client":
+		ct := nullget(a, "client_type", "?")
+		switch ct {
+		case "mcp":
+			return fmt.Sprintf("mcp:%s", nullget(a, "agent_id", "?"))
+		default:
+			cmd := nullget(a, "command", "")
+			if cmd != "" {
+				return fmt.Sprintf("`%s`", cmd)
+			}
+			// Fallback: show age instead of a long unreadable ID.
+			if age := nullget(a, "started_ago", ""); age != "" {
+				return fmt.Sprintf("(up %s)", age)
+			}
+			return "(no command)"
+		}
+
+	case "session":
+		return ""
+
+	case "exec":
+		if n.Status == "finished" {
+			dur := nullget(a, "duration", "")
+			s := fmt.Sprintf("exit=%s", nullget(a, "exit_code", "?"))
+			if dur != "" {
+				s += " dur:" + dur
+			}
+			return "[" + s + "]"
+		}
+		return "(running)"
+
+	case "executor":
+		return ""
+
+	case "bg_task":
+		return ""
+
+	default:
+		return ""
+	}
+}
+
+// nullget returns the value for key in m, or fallback if missing/empty.
+func nullget(m map[string]string, key, fallback string) string {
+	if m == nil {
+		return fallback
+	}
+	if v, ok := m[key]; ok && v != "" {
+		return v
+	}
+	return fallback
 }
 
 // typeLabel returns a human-readable label for a node type.
