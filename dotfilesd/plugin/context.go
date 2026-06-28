@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"dotfilesd/internal/pkg/logging"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -87,6 +88,7 @@ type contextClient struct {
 	ioClient       dotfilesdv1connect.IOServiceClient
 	scriptClient   dotfilesdv1connect.ScriptServiceClient
 	sessionClient  dotfilesdv1connect.SessionServiceClient
+	diagPostClient dotfilesdv1connect.DiagnosticsPostServiceClient
 
 	token, sessionID, pluginName string
 	renderOutput                 bool
@@ -103,6 +105,7 @@ func newContextClient(url, token, sessionID, pluginName, clientID string) *conte
 		ioClient:       dotfilesdv1connect.NewIOServiceClient(httpClient, url),
 		scriptClient:   dotfilesdv1connect.NewScriptServiceClient(httpClient, url),
 		sessionClient:  dotfilesdv1connect.NewSessionServiceClient(httpClient, url),
+		diagPostClient: dotfilesdv1connect.NewDiagnosticsPostServiceClient(httpClient, url),
 		token:          token,
 		sessionID:      sessionID,
 		pluginName:     pluginName,
@@ -143,6 +146,7 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 		ioClient:       c.ioClient,
 		scriptClient:   c.scriptClient,
 		sessionClient:  c.sessionClient,
+		diagPostClient: c.diagPostClient,
 		token:          c.token,
 		sessionID:      c.sessionID,
 		pluginName:     c.pluginName,
@@ -151,6 +155,20 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 		diagParent:     c.diagParent,
 		log:            c.log,
 	}
+}
+
+// pushDiagEvent sends a diagnostic event to the daemon.
+func (c *contextClient) pushDiagEvent(eventType, resource, parent, message string, attrs map[string]string) {
+	req := connect.NewRequest(&dotfilesdv1.DiagEvent{
+		Type:        eventType,
+		Resource:    resource,
+		Parent:      parent,
+		Message:     message,
+		TimestampNs: time.Now().UnixNano(),
+		Attrs:       attrs,
+	})
+	c.setTokenHeader(req)
+	_, _ = c.diagPostClient.PostEvent(context.Background(), req)
 }
 
 func (c *contextClient) Log() logging.Logger { return c.log }

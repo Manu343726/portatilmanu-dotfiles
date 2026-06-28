@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	dotfilesdv1connect "dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
@@ -107,6 +109,8 @@ func Serve(cfg Config) {
 	// call plugin.ExtractContext(ctx) to get daemon access.
 	// Reads X-Dotfiles-Render-Output and X-Client-ID from incoming requests
 	// and propagates them into the plugin Context for stream multiplexing.
+	// When X-Dotfiles-Diag-Parent is set, creates a sub-executor node in the
+	// diagnostics tree so plugin-to-plugin RPC chains are visible.
 	ctxWrappedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientID := r.Header.Get("X-Client-ID")
 		ro := r.Header.Get("X-Dotfiles-Render-Output") == "true"
@@ -121,9 +125,20 @@ func Serve(cfg Config) {
 			if ro {
 				c.renderOutput = true
 			}
+
+			// When called with a diagnostics parent (X-Dotfiles-Diag-Parent),
+			// create a sub-node in the diagnostics tree so the full plugin
+			// call chain is visible in the tree.
 			if diagParent != "" {
-				c.diagParent = diagParent
+				method := extractMethodName(r.URL.Path)
+				rpcID := fmt.Sprintf("plugin-rpc:%s_%x", method, time.Now().UnixNano())
+				c.pushDiagEvent("plugin_rpc_open", rpcID, diagParent,
+					fmt.Sprintf("%s.%s", cfg.Name, method), nil)
+				c.diagParent = rpcID
+				defer c.pushDiagEvent("plugin_rpc_close", rpcID, diagParent,
+					fmt.Sprintf("%s.%s", cfg.Name, method), nil)
 			}
+
 			ctx = &c
 		}
 		r = r.WithContext(WithContext(r.Context(), ctx))
@@ -197,4 +212,15 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
+}
+
+// extractMethodName extracts the method name from a Connect RPC URL path.
+// Connect paths are like "/package.Service/Method", so we take the last
+// segment after trimming trailing slash.
+func extractMethodName(path string) string {
+	path = strings.TrimSuffix(path, "/")
+	if idx := strings.LastIndex(path, "/"); idx >= 0 && idx+1 < len(path) {
+		return path[idx+1:]
+	}
+	return path
 }

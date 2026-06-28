@@ -36,8 +36,10 @@ const (
 	EventSessionEnd    EventType = "session_end"
 	EventBgTaskStart   EventType = "bg_task_start"
 	EventBgTaskStop    EventType = "bg_task_stop"
-	EventScriptStart   EventType = "script_start"
-	EventScriptStop    EventType = "script_stop"
+	EventScriptStart      EventType = "script_start"
+	EventScriptStop       EventType = "script_stop"
+	EventPluginRpcOpen    EventType = "plugin_rpc_open"
+	EventPluginRpcClose   EventType = "plugin_rpc_close"
 )
 
 // Event is a timestamped diagnostic event with structured payload.
@@ -119,8 +121,10 @@ func New() *Engine {
 		EventSessionEnd:    {MaxCount: 500, MaxAge: time.Hour},
 		EventBgTaskStart:   {MaxCount: 200, MaxAge: 5 * time.Minute},
 		EventBgTaskStop:    {MaxCount: 200, MaxAge: 5 * time.Minute},
-		EventScriptStart:   {MaxCount: 200, MaxAge: time.Hour},
-		EventScriptStop:    {MaxCount: 200, MaxAge: time.Hour},
+		EventScriptStart:      {MaxCount: 200, MaxAge: time.Hour},
+		EventScriptStop:       {MaxCount: 200, MaxAge: time.Hour},
+		EventPluginRpcOpen:    {MaxCount: 500, MaxAge: time.Hour},
+		EventPluginRpcClose:   {MaxCount: 500, MaxAge: time.Hour},
 	}
 	for typ, p := range defaults {
 		e.retention[typ] = p

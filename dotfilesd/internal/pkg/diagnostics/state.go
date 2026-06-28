@@ -94,7 +94,7 @@ func isStartType(typ EventType) bool {
 	switch typ {
 	case EventDaemonStart, EventPluginSpawn, EventClientConnect,
 		EventExecStart, EventExecutorOpen, EventSessionCreate,
-		EventBgTaskStart, EventScriptStart:
+		EventBgTaskStart, EventScriptStart, EventPluginRpcOpen:
 		return true
 	}
 	return false
@@ -105,7 +105,7 @@ func isEndType(typ EventType) bool {
 	switch typ {
 	case EventDaemonStop, EventPluginStop, EventPluginCrash,
 		EventClientDisconn, EventExecStop, EventExecutorClose,
-		EventSessionEnd, EventBgTaskStop, EventScriptStop:
+		EventSessionEnd, EventBgTaskStop, EventScriptStop, EventPluginRpcClose:
 		return true
 	}
 	return false

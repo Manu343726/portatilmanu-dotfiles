@@ -235,7 +235,7 @@ func typeLabel(t string) string {
 		return "session"
 	case "client":
 		return "client"
-	case "executor":
+	case "executor", "plugin-rpc":
 		return "plugin"
 	case "shell":
 		return "shell"
