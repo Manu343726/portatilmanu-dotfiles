@@ -50,7 +50,7 @@ var _ = Describe("execServer", func() {
 		})
 
 		It("executes within a session when session ID is provided", func() {
-			s := sessions.Create()
+			s := sessions.Create("")
 			s.SetVariables(map[string]string{"SESSION_VAR": "from_session"})
 
 			srv := httptest.NewServer(handler)
@@ -76,7 +76,7 @@ var _ = Describe("execServer", func() {
 		})
 
 		It("receives variables through the Session message", func() {
-			s := sessions.Create()
+			s := sessions.Create("")
 
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
@@ -95,7 +95,7 @@ var _ = Describe("execServer", func() {
 		})
 
 		It("degrades finalized session to ephemeral execution", func() {
-			s := sessions.Create()
+			s := sessions.Create("")
 			sessions.Finalize(s.id)
 
 			srv := httptest.NewServer(handler)

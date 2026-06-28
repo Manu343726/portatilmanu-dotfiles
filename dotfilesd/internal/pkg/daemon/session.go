@@ -298,6 +298,7 @@ func (sh *shellSession) Close() error {
 
 type Session struct {
 	id           string
+	parent       string // parent resource ID for diagnostics tree
 	createdAt    time.Time
 	lastActive   time.Time
 	requestCount int
@@ -519,17 +520,19 @@ func generateSessionID() string {
 	return fmt.Sprintf("ses_%x_%x", time.Now().UnixNano(), rand.Int63())
 }
 
-func (ss *SessionStore) Create() *Session {
+func (ss *SessionStore) Create(parent string) *Session {
 	id := generateSessionID()
 	s := newSession(id)
+	s.parent = parent
 	ss.mu.Lock()
 	ss.sessions[id] = s
 	ss.mu.Unlock()
-	slog.Debug("session created", "session_id", id)
+	slog.Debug("session created", "session_id", id, "parent", parent)
 	if ss.diag != nil {
 		ss.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventSessionCreate,
 			Resource:  "session:" + id,
+			Parent:    parent,
 			Timestamp: time.Now(),
 			Message:   id,
 		})
@@ -539,7 +542,7 @@ func (ss *SessionStore) Create() *Session {
 
 // CreateWithID creates a new session with the given ID. If a session with that
 // ID already exists, it is returned instead.
-func (ss *SessionStore) CreateWithID(id string) *Session {
+func (ss *SessionStore) CreateWithID(id, parent string) *Session {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	if existing, ok := ss.sessions[id]; ok {
@@ -547,12 +550,14 @@ func (ss *SessionStore) CreateWithID(id string) *Session {
 		return existing
 	}
 	s := newSession(id)
+	s.parent = parent
 	ss.sessions[id] = s
-	slog.Debug("session created with ID", "session_id", id)
+	slog.Debug("session created with ID", "session_id", id, "parent", parent)
 	if ss.diag != nil {
 		ss.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventSessionCreate,
 			Resource:  "session:" + id,
+			Parent:    parent,
 			Timestamp: time.Now(),
 			Message:   id,
 		})
@@ -567,7 +572,7 @@ func (ss *SessionStore) CreateEphemeral() *Session {
 
 // CreateNamed creates a session with the given ID. If a session with that
 // ID already exists, it is returned as-is. This is used for plugin sessions.
-func (ss *SessionStore) CreateNamed(id string) *Session {
+func (ss *SessionStore) CreateNamed(id, parent string) *Session {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	if s, ok := ss.sessions[id]; ok {
@@ -575,8 +580,18 @@ func (ss *SessionStore) CreateNamed(id string) *Session {
 		return s
 	}
 	s := newSession(id)
+	s.parent = parent
 	ss.sessions[id] = s
-	slog.Debug("session created (named)", "session_id", id)
+	slog.Debug("session created (named)", "session_id", id, "parent", parent)
+	if ss.diag != nil {
+		ss.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventSessionCreate,
+			Resource:  "session:" + id,
+			Parent:    parent,
+			Timestamp: time.Now(),
+			Message:   id,
+		})
+	}
 	return s
 }
 
@@ -596,6 +611,7 @@ func (ss *SessionStore) Finalize(id string) bool {
 	s.mu.Lock()
 	s.finalized = true
 	s.closeShell()
+	parent := s.parent
 	s.mu.Unlock()
 	ss.mu.Unlock()
 	slog.Debug("session finalized", "session_id", id)
@@ -603,6 +619,7 @@ func (ss *SessionStore) Finalize(id string) bool {
 		ss.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventSessionEnd,
 			Resource:  "session:" + id,
+			Parent:    parent,
 			Timestamp: time.Now(),
 			Message:   id,
 		})
@@ -685,7 +702,7 @@ func newSessionServer(store *SessionStore) *sessionServer {
 func (s *sessionServer) CreateSession(ctx context.Context, req *connect.Request[dotfilesdv1.CreateSessionRequest]) (*connect.Response[dotfilesdv1.CreateSessionResponse], error) {
 	slog.Log(ctx, levelTrace, "Session.CreateSession")
 
-	session := s.store.Create()
+	session := s.store.Create("")
 	resp := connect.NewResponse(&dotfilesdv1.CreateSessionResponse{
 		Session: session.toProto(),
 	})
@@ -694,18 +711,29 @@ func (s *sessionServer) CreateSession(ctx context.Context, req *connect.Request[
 	return resp, nil
 }
 
+// sessionParentForID determines the diagnostics parent resource for a session ID.
+// Plugin sessions (plugin-<name>) are children of the daemon.
+// CLI sessions (ses_<random>) are top-level.
+func sessionParentForID(id string) string {
+	if strings.HasPrefix(id, "plugin-") {
+		return "daemon"
+	}
+	return ""
+}
+
 func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error) {
 	slog.Log(ctx, levelTrace, "Session.Connect", "callback_url", req.Msg.CallbackUrl)
 
 	sessionMsg := req.Msg.GetSession()
 	var session *Session
 	if sessionMsg == nil || sessionMsg.GetId() == "" {
-		session = s.store.Create()
+		session = s.store.Create("")
 	} else {
-		session = s.store.Get(sessionMsg.GetId())
+		id := sessionMsg.GetId()
+		session = s.store.Get(id)
 		if session == nil {
-			// Session doesn't exist yet — create it with the requested ID.
-			session = s.store.CreateWithID(sessionMsg.GetId())
+			parent := sessionParentForID(id)
+			session = s.store.CreateWithID(id, parent)
 		} else {
 			session.touch()
 		}

@@ -156,7 +156,7 @@ var _ = Describe("sessionServer", func() {
 		})
 
 		It("connects to an existing session", func() {
-			existing := store.Create()
+			existing := store.Create("")
 
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
@@ -198,7 +198,7 @@ var _ = Describe("sessionServer", func() {
 
 	Describe("FinalizeSession", func() {
 		It("finalizes an existing session", func() {
-			existing := store.Create()
+			existing := store.Create("")
 
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
@@ -229,7 +229,7 @@ var _ = Describe("sessionServer", func() {
 
 	Describe("GetSession", func() {
 		It("returns an existing session", func() {
-			existing := store.Create()
+			existing := store.Create("")
 			existing.SetVariables(map[string]string{"KEY": "val"})
 
 			srv := httptest.NewServer(handler)
@@ -260,8 +260,8 @@ var _ = Describe("sessionServer", func() {
 
 	Describe("ListSessions", func() {
 		It("lists active sessions", func() {
-			s1 := store.Create()
-			s2 := store.Create()
+			s1 := store.Create("")
+			s2 := store.Create("")
 			store.Finalize(s2.id)
 
 			srv := httptest.NewServer(handler)

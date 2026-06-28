@@ -443,7 +443,7 @@ var _ = Describe("SessionStore", func() {
 	})
 
 	It("Create creates a new session with a non-empty ID", func() {
-		s := store.Create()
+		s := store.Create("")
 		Expect(s.id).ToNot(BeEmpty())
 		Expect(store.Get(s.id)).To(Equal(s))
 	})
@@ -458,7 +458,7 @@ var _ = Describe("SessionStore", func() {
 	})
 
 	It("Finalize marks a session as finalized and closes its shell", func() {
-		s := store.Create()
+		s := store.Create("")
 		execCommand = exec.Command
 		_, err := s.ensureShell()
 		Expect(err).To(Succeed())
@@ -474,9 +474,9 @@ var _ = Describe("SessionStore", func() {
 	})
 
 	It("List returns only non-finalized sessions", func() {
-		s1 := store.Create()
-		s2 := store.Create()
-		store.Create() // s3 — will remain active
+		s1 := store.Create("")
+		s2 := store.Create("")
+		store.Create("") // s3 — will remain active
 		store.Finalize(s2.id)
 
 		list := store.List()
@@ -502,7 +502,7 @@ var _ = Describe("SessionStore", func() {
 		})
 
 		It("resolves an existing session by ID", func() {
-			existing := store.Create()
+			existing := store.Create("")
 			s := store.ResolveSession(&dotfilesdv1.Session{Id: existing.id})
 			Expect(s.id).To(Equal(existing.id))
 		})
@@ -513,7 +513,7 @@ var _ = Describe("SessionStore", func() {
 		})
 
 		It("creates ephemeral for finalized session", func() {
-			existing := store.Create()
+			existing := store.Create("")
 			store.Finalize(existing.id)
 			s := store.ResolveSession(&dotfilesdv1.Session{Id: existing.id})
 			Expect(s.id).To(BeEmpty())
@@ -536,7 +536,7 @@ var _ = Describe("SessionStore", func() {
 					Cwd:          "/home/user",
 				},
 			})
-			existing := store.Create()
+			existing := store.Create("")
 			s2 := store.ResolveSession(&dotfilesdv1.Session{
 				Id: existing.id,
 				Shell: &dotfilesdv1.Shell{
