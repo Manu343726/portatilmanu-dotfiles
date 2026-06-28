@@ -81,29 +81,52 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool) {
 		branch = "└── "
 	}
 
+	// Build a compact type tag.
+	typeTag := typeLabel(n.Type)
+
 	label := n.Label
 	if n.Status != "" {
 		label = fmt.Sprintf("%s (%s)", label, n.Status)
 	}
-	fmt.Printf("%s%s%s\n", prefix, branch, label)
+	fmt.Printf("%s%s [%s] %s\n", prefix, branch, typeTag, label)
 
 	// Print attributes indented.
-	for k, v := range n.Attrs {
-		childPrefix := prefix + "   "
-		if !isLast {
-			childPrefix = prefix + "│  "
-		}
-		fmt.Printf("%s%s: %s\n", childPrefix, k, v)
-	}
-
-	// Print children.
 	childPrefix := prefix
 	if isLast {
 		childPrefix += "   "
 	} else {
 		childPrefix += "│  "
 	}
+	for k, v := range n.Attrs {
+		fmt.Printf("%s%s: %s\n", childPrefix, k, v)
+	}
+
+	// Print children.
 	for i, child := range n.Children {
 		printTree(child, childPrefix, i == len(n.Children)-1)
+	}
+}
+
+// typeLabel returns a human-readable label for a node type.
+func typeLabel(t string) string {
+	switch t {
+	case "root":
+		return "runtime"
+	case "daemon":
+		return "daemon"
+	case "plugin":
+		return "plugin"
+	case "session":
+		return "session"
+	case "client":
+		return "client"
+	case "executor":
+		return "executor"
+	case "shell":
+		return "shell"
+	case "bg_task":
+		return "bgtask"
+	default:
+		return t
 	}
 }
