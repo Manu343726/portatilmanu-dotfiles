@@ -499,3 +499,31 @@ against the spec document (§1–§17). All gaps are now closed.
 The weather handler also parses wttr.in's JSON format (j1) to extract structured fields
 (temp, humidity, wind, etc.) and presents them with emoji prefixes for readability.
 When `RenderOutput=false`, the raw JSON from wttr.in is returned as-is."
+
+---
+
+## [Post-CLI] — Support Repeated Message Fields in CLI via Indexed Dot-Notation
+
+**Commit:** (pending)
+**Date:** 2026-06-28
+
+### Changes
+- `dotfilesd/internal/pkg/cli/protoflags.go`: Repeated message fields now register a
+  `StringToString` flag with the indexed dot-notation syntax:
+  `--field <index>.<subfield-path>=<value>`. Added `buildRepeatedMessageFromSchema()`
+  to parse the map entries into a properly ordered JSON array with full type
+  conversion. Added `setNestedField()` to walk dot-separated paths through nested
+  message schemas and set correctly-typed leaf values. Added `parseScalarValue()`
+  to convert string values to the appropriate Go type (string, int32, uint64, float64,
+  bool, enum). Indices are validated to be consecutive from 0 to N-1 with no gaps;
+  non-consecutive indices produce clear error messages.
+
+### State
+- [x] Full build passes
+- [x] `go vet` clean
+- [x] All tests pass
+
+### Notes
+Usage: `dotfilesctl <plugin> <rpc> --<field> <idx>.<path>=<value>`. For example,
+given a repeated `ProcessInfo` field `processes` where `ProcessInfo` has fields
+`pid` (int32) and `name` (string): `--processes 0.pid=42 --processes 0.name=foo`."

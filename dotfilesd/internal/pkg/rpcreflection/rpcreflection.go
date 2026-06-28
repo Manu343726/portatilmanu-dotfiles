@@ -17,8 +17,9 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/grpcreflect"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+
+	"connectrpc.com/grpcreflect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -27,15 +28,15 @@ import (
 
 // MethodInfo describes a single RPC method discovered via reflection.
 type MethodInfo struct {
-	ServiceName string                      // e.g. "weather.WeatherService"
-	MethodName  string                      // e.g. "Forecast"
+	ServiceName string // e.g. "weather.WeatherService"
+	MethodName  string // e.g. "Forecast"
 	InputMsg    protoreflect.MessageDescriptor
 	OutputMsg   protoreflect.MessageDescriptor
 }
 
 // ServiceInfo describes a discovered service and its methods.
 type ServiceInfo struct {
-	FullName string       // e.g. "weather.WeatherService"
+	FullName string // e.g. "weather.WeatherService"
 	Methods  []MethodInfo
 	// RawFdProtos holds serialized google.protobuf.FileDescriptorProto messages
 	// for this service and its dependencies. Clients can reconstruct
@@ -346,10 +347,10 @@ func buildMessageSchema(md protoreflect.MessageDescriptor, visited map[string]bo
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
 		fs := &dotfilesdv1.FieldSchema{
-			Name:        string(fd.Name()),
-			Kind:        kindToProto(fd.Kind()),
-			Label:       labelToProto(fd),
-			TypeName:    typeNameString(fd),
+			Name:     string(fd.Name()),
+			Kind:     kindToProto(fd.Kind()),
+			Label:    labelToProto(fd),
+			TypeName: typeNameString(fd),
 		}
 		// Inline enum schema so clients have choices without cross-referencing.
 		if fd.Kind() == protoreflect.EnumKind {

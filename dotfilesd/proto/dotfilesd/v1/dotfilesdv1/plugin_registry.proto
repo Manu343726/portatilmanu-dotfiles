@@ -85,7 +85,7 @@ enum FieldLabel {
 
 // FieldSchema describes a single field in a protobuf message.
 message FieldSchema {
-  string name = 1;               // field name (e.g. "location")
+  string name = 1; // field name (e.g. "location")
   string description = 2;
   FieldKind kind = 3;
   FieldLabel label = 4;
@@ -109,7 +109,7 @@ message EnumValue {
 
 // EnumSchema describes a protobuf enum type.
 message EnumSchema {
-  string name = 1;       // fully-qualified enum name (e.g. "weather.Unit")
+  string name = 1; // fully-qualified enum name (e.g. "weather.Unit")
   string description = 2;
   repeated EnumValue values = 3;
 }
@@ -118,16 +118,16 @@ message EnumSchema {
 // field metadata. Nested messages and enums are inlined so clients have
 // everything they need without additional lookups.
 message MessageSchema {
-  string name = 1;               // fully-qualified message name (e.g. "weather.ForecastRequest")
+  string name = 1; // fully-qualified message name (e.g. "weather.ForecastRequest")
   string description = 2;
   repeated FieldSchema fields = 3;
-  repeated EnumSchema enums = 4;     // nested enums defined inside this message
+  repeated EnumSchema enums = 4; // nested enums defined inside this message
   repeated MessageSchema messages = 5; // nested messages defined inside this message
 }
 
 // MethodSchema describes an RPC method with full request/response schemas.
 message MethodSchema {
-  string name = 1;           // method name (e.g. "Forecast")
+  string name = 1; // method name (e.g. "Forecast")
   string description = 2;
   // Full schema of the request message.
   MessageSchema request = 3;

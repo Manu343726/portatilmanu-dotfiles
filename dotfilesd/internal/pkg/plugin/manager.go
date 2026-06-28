@@ -14,9 +14,10 @@ import (
 	"strings"
 	"sync"
 
-	"connectrpc.com/connect"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+
+	"connectrpc.com/connect"
 
 	"dotfilesd/internal/pkg/rpcreflection"
 )

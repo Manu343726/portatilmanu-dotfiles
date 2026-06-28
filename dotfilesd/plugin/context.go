@@ -49,7 +49,6 @@ type Context interface {
 	RunScript(name string) (ScriptResult, error)
 }
 
-
 // ExecResult is the result of a shell command.
 type ExecResult struct {
 	ExitCode int

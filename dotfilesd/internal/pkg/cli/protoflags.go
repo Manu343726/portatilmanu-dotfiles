@@ -150,6 +150,17 @@ func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pref
 	for _, fs := range msg.Fields {
 		flagName := camelToKebab(prefix + fs.Name)
 		desc := fs.Name
+		if fs.TypeName != "" {
+			desc = desc + " (" + fs.TypeName + ")"
+		}
+
+		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
+			// Repeated message fields use StringToString with the pattern
+			// --field <index>.<subfield-path>=<value>, e.g. --a 0.b.c=1 --a 1.b.c=2
+			cmd.Flags().StringToString(flagName, nil,
+				"Repeated "+fs.TypeName+". Usage: --"+flagName+" <idx>.<field>=<value>")
+			continue
+		}
 
 		switch fs.Label {
 		case dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED:
@@ -243,7 +254,10 @@ func addRepeatedFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldS
 // from cobra flags using registry MethodSchema and invokes the RPC.
 func makeRunEProtoFromSchema(pluginURL, svcName string, m *dotfilesdv1.MethodSchema) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		body := buildJSONFromSchema(cmd, m.Request, "")
+		body, err := buildJSONFromSchema(cmd, m.Request, "")
+		if err != nil {
+			return fmt.Errorf("build request body: %w", err)
+		}
 		jsonBytes, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("marshal request: %w", err)
@@ -303,7 +317,7 @@ func makeRunEProtoFromSchema(pluginURL, svcName string, m *dotfilesdv1.MethodSch
 
 // buildJSONFromSchema recursively builds a JSON-compatible map from cobra flags,
 // driven by a registry MessageSchema.
-func buildJSONFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, prefix string) map[string]any {
+func buildJSONFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, prefix string) (map[string]any, error) {
 	result := make(map[string]any)
 	for _, fs := range msg.Fields {
 		flagName := camelToKebab(prefix + fs.Name)
@@ -314,7 +328,11 @@ func buildJSONFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pre
 		fieldName := fs.Name
 
 		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
-			// Repeated message: not directly supported via flags — skip.
+			arr, err := buildRepeatedMessageFromSchema(cmd, flagName, fs, msg)
+			if err != nil {
+				return nil, fmt.Errorf("field %q: %w", fieldName, err)
+			}
+			result[fieldName] = arr
 			continue
 		}
 
@@ -323,47 +341,252 @@ func buildJSONFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pre
 			continue
 		}
 
-		result[fieldName] = buildScalarFromSchema(cmd, flagName, fs, msg)
+		v, err := buildScalarFromSchema(cmd, flagName, fs, msg)
+		if err != nil {
+			return nil, fmt.Errorf("field %q: %w", fieldName, err)
+		}
+		result[fieldName] = v
 	}
-	return result
+	return result, nil
+}
+
+// buildRepeatedMessageFromSchema builds a JSON array from a StringToString flag
+// where each key is "<index>.<field-path>" and value is the typed field value.
+//
+// Example: --a 0.b.c=1 --a 1.b.c=2 produces [{"b":{"c":1}},{"b":{"c":2}}]
+//
+// Indices must be consecutive from 0 to N-1 with no gaps.
+func buildRepeatedMessageFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, parentMsg *dotfilesdv1.MessageSchema) ([]any, error) {
+	rawMap, err := cmd.Flags().GetStringToString(flagName)
+	if err != nil {
+		return nil, fmt.Errorf("invalid flag value for %q: %w", flagName, err)
+	}
+	if len(rawMap) == 0 {
+		return nil, nil
+	}
+
+	// Find the nested message schema for this field type.
+	nestedMsg := findNestedMessageInSchema(parentMsg, fs.TypeName)
+	if nestedMsg == nil {
+		return nil, fmt.Errorf("unknown message type %q", fs.TypeName)
+	}
+
+	// Parse entries: group by array index.
+	// Key format: "<idx>.<rest>" where <rest> may contain multiple dots.
+	type entry struct {
+		idx   int
+		path  string // field path after the index, e.g. "b.c"
+		value string
+	}
+	var entries []entry
+	seenIndices := make(map[int]bool)
+	maxIdx := -1
+	for key, val := range rawMap {
+		dotPos := strings.Index(key, ".")
+		if dotPos < 0 {
+			return nil, fmt.Errorf("invalid key %q: expected <index>.<field-path>, got no dot", key)
+		}
+		idxStr := key[:dotPos]
+		rest := key[dotPos+1:]
+
+		var parsedIdx int
+		if n, _ := fmt.Sscanf(idxStr, "%d", &parsedIdx); n == 0 || parsedIdx < 0 {
+			return nil, fmt.Errorf("invalid key %q: expected numeric index, got %q", key, idxStr)
+		}
+
+		if seenIndices[parsedIdx] {
+			return nil, fmt.Errorf("duplicate index %d for field %q", parsedIdx, flagName)
+		}
+		seenIndices[parsedIdx] = true
+		if parsedIdx > maxIdx {
+			maxIdx = parsedIdx
+		}
+		entries = append(entries, entry{idx: parsedIdx, path: rest, value: val})
+	}
+
+	// Validate consecutive indices.
+	for i := 0; i <= maxIdx; i++ {
+		if !seenIndices[i] {
+			return nil, fmt.Errorf("non-consecutive indices for %q: missing index %d (got %d entries, max=%d)",
+				flagName, i, len(entries), maxIdx)
+		}
+	}
+
+	// Build array: for each index, apply all paths for that index.
+	result := make([]any, maxIdx+1)
+	for i := 0; i <= maxIdx; i++ {
+		result[i] = make(map[string]any)
+	}
+
+	// Group entries by index.
+	byIdx := make(map[int][]entry)
+	for _, e := range entries {
+		byIdx[e.idx] = append(byIdx[e.idx], e)
+	}
+
+	for idx, idxEntries := range byIdx {
+		obj := make(map[string]any)
+		for _, e := range idxEntries {
+			if err := setNestedField(obj, e.path, e.value, nestedMsg); err != nil {
+				return nil, fmt.Errorf("index %d: %w", idx, err)
+			}
+		}
+		result[idx] = obj
+	}
+
+	return result, nil
+}
+
+// setNestedField walks a dot-separated field path (e.g. "b.c") into a nested
+// message schema, setting the leaf value in the target map with the correct
+// Go type according to the field's schema kind. Intermediate path components
+// must be message fields; the final component must be a scalar or enum field.
+func setNestedField(obj map[string]any, path, value string, msg *dotfilesdv1.MessageSchema) error {
+	parts := strings.Split(path, ".")
+	if len(parts) == 0 {
+		return fmt.Errorf("empty field path")
+	}
+
+	// Walk all but the last part.
+	current := msg
+	for i := 0; i < len(parts)-1; i++ {
+		part := parts[i]
+		var found bool
+		for _, f := range current.Fields {
+			if f.Name == part {
+				if f.Kind != dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
+					return fmt.Errorf("field %q is not a message but path continues after it", part)
+				}
+				nested := findNestedMessageInSchema(current, f.TypeName)
+				if nested == nil {
+					return fmt.Errorf("unknown message type %q for field %q", f.TypeName, part)
+				}
+				// Create the nested map if it doesn't exist.
+				if _, ok := obj[part]; !ok {
+					obj[part] = make(map[string]any)
+				}
+				obj = obj[part].(map[string]any)
+				current = nested
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("unknown field %q in message %q", part, current.Name)
+		}
+	}
+
+	// Set the leaf value.
+	lastPart := parts[len(parts)-1]
+	for _, f := range current.Fields {
+		if f.Name == lastPart {
+			typed, err := parseScalarValue(value, f.Kind)
+			if err != nil {
+				return fmt.Errorf("field %q: %w", lastPart, err)
+			}
+			obj[lastPart] = typed
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown field %q in message %q (for path %q)", lastPart, current.Name, path)
+}
+
+// parseScalarValue converts a string value to the appropriate Go type
+// for the given FieldKind.
+func parseScalarValue(val string, kind dotfilesdv1.FieldKind) (any, error) {
+	switch kind {
+	case dotfilesdv1.FieldKind_FIELD_KIND_STRING, dotfilesdv1.FieldKind_FIELD_KIND_BYTES,
+		dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
+		return val, nil
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT32,
+		dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32:
+		var v int32
+		if n, _ := fmt.Sscanf(val, "%d", &v); n == 0 {
+			return nil, fmt.Errorf("expected int32, got %q", val)
+		}
+		return v, nil
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT64, dotfilesdv1.FieldKind_FIELD_KIND_SINT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64:
+		var v int64
+		if n, _ := fmt.Sscanf(val, "%d", &v); n == 0 {
+			return nil, fmt.Errorf("expected int64, got %q", val)
+		}
+		return v, nil
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED32:
+		var v uint32
+		if n, _ := fmt.Sscanf(val, "%d", &v); n == 0 {
+			return nil, fmt.Errorf("expected uint32, got %q", val)
+		}
+		return v, nil
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_UINT64, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64:
+		var v uint64
+		if n, _ := fmt.Sscanf(val, "%d", &v); n == 0 {
+			return nil, fmt.Errorf("expected uint64, got %q", val)
+		}
+		return v, nil
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT:
+		var v float64
+		if n, _ := fmt.Sscanf(val, "%f", &v); n == 0 {
+			return nil, fmt.Errorf("expected float, got %q", val)
+		}
+		return v, nil
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_BOOL:
+		switch val {
+		case "true", "1", "yes":
+			return true, nil
+		case "false", "0", "no":
+			return false, nil
+		default:
+			return nil, fmt.Errorf("expected bool, got %q", val)
+		}
+
+	default:
+		return val, nil
+	}
 }
 
 // buildScalarFromSchema extracts a single flag value from cobra flags,
 // typed according to the field's FieldKind.
-func buildScalarFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, parentMsg *dotfilesdv1.MessageSchema) any {
+func buildScalarFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, parentMsg *dotfilesdv1.MessageSchema) (any, error) {
 	switch fs.Kind {
 	case dotfilesdv1.FieldKind_FIELD_KIND_STRING, dotfilesdv1.FieldKind_FIELD_KIND_BYTES:
 		v, _ := cmd.Flags().GetString(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT32, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32:
 		v, _ := cmd.Flags().GetInt32(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_INT64, dotfilesdv1.FieldKind_FIELD_KIND_SINT64, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64:
 		v, _ := cmd.Flags().GetInt64(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED32:
 		v, _ := cmd.Flags().GetUint32(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_UINT64, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64:
 		v, _ := cmd.Flags().GetUint64(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT:
 		v, _ := cmd.Flags().GetFloat64(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_BOOL:
 		v, _ := cmd.Flags().GetBool(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
 		v, _ := cmd.Flags().GetString(flagName)
-		return v
+		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE:
 		nested := findNestedMessageInSchema(parentMsg, fs.TypeName)
 		if nested != nil {
 			return buildJSONFromSchema(cmd, nested, flagName+".")
 		}
-		return nil
+		return nil, nil
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
