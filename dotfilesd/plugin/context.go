@@ -103,11 +103,12 @@ func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 
 	// Register a real daemon session so that Exec() calls from background
 	// tasks have a proper session context (avoids "session not found" warnings).
-	// The initial sessionID from SESSION_ID env is a sentinel; we replace it
-	// with a real daemon-issued session ID.
+	// Pass the plugin name as session ID so daemon logs show which plugin
+	// is issuing commands.
 	ctx := context.Background()
 	connectReq := connect.NewRequest(&dotfilesdv1.ConnectRequest{
 		CallbackUrl: "",
+		Session: &dotfilesdv1.Session{Id: c.sessionID},
 	})
 	c.setTokenHeader(connectReq)
 	connectResp, err := c.sessionClient.Connect(ctx, connectReq)

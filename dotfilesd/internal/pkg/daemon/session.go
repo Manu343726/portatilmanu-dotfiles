@@ -513,6 +513,21 @@ func (ss *SessionStore) Create() *Session {
 	return s
 }
 
+// CreateWithID creates a new session with the given ID. If a session with that
+// ID already exists, it is returned instead.
+func (ss *SessionStore) CreateWithID(id string) *Session {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	if existing, ok := ss.sessions[id]; ok {
+		existing.touch()
+		return existing
+	}
+	s := newSession(id)
+	ss.sessions[id] = s
+	slog.Debug("session created with ID", "session_id", id)
+	return s
+}
+
 func (ss *SessionStore) CreateEphemeral() *Session {
 	s := newSession("")
 	return s
@@ -649,9 +664,11 @@ func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfil
 	} else {
 		session = s.store.Get(sessionMsg.GetId())
 		if session == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session %s not found", sessionMsg.GetId()))
+			// Session doesn't exist yet — create it with the requested ID.
+			session = s.store.CreateWithID(sessionMsg.GetId())
+		} else {
+			session.touch()
 		}
-		session.touch()
 	}
 
 	// Apply session variables and shell context from the Connect request.

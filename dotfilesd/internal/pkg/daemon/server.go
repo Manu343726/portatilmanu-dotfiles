@@ -100,15 +100,15 @@ func (d *Daemon) Start() error {
 		p, h := dotfilesdv1connect.NewSessionServiceHandler(sessionSvc)
 		mux.Handle(p, h)
 	}
+	{
+		p, h := dotfilesdv1connect.NewScriptServiceHandler(scriptSvc)
+		mux.Handle(p, h)
+	}
 
 	// —— Services accessible with X-Dotfiles-Context-Token auth ——
 	auth := d.tokenAuthMiddleware
 	{
 		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
-		mux.Handle(p, auth(h))
-	}
-	{
-		p, h := dotfilesdv1connect.NewScriptServiceHandler(scriptSvc)
 		mux.Handle(p, auth(h))
 	}
 	{
