@@ -84,10 +84,11 @@ type contextClient struct {
 
 	token, sessionID, pluginName string
 	renderOutput                 bool
+	clientID                     string // unique ID for this client call stream
 	log                          logging.Logger
 }
 
-func newContextClient(url, token, sessionID, pluginName string) *contextClient {
+func newContextClient(url, token, sessionID, pluginName, clientID string) *contextClient {
 	httpClient := &http.Client{}
 	c := &contextClient{
 		execClient:     dotfilesdv1connect.NewExecServiceClient(httpClient, url),
@@ -98,6 +99,7 @@ func newContextClient(url, token, sessionID, pluginName string) *contextClient {
 		token:          token,
 		sessionID:      sessionID,
 		pluginName:     pluginName,
+		clientID:       clientID,
 	}
 	c.log = &pluginLogger{client: c, pluginName: pluginName}
 
@@ -130,6 +132,7 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 		token:          c.token,
 		sessionID:      c.sessionID,
 		pluginName:     c.pluginName,
+		clientID:       c.clientID,
 		renderOutput:   v,
 		log:            c.log,
 	}
@@ -315,17 +318,19 @@ func (c *contextClient) RunScript(name string) (ScriptResult, error) {
 
 func (c *contextClient) Stdout() io.Writer {
 	return &daemonLogWriter{
-		client: c,
-		level:  dotfilesdv1.LogLevel_LOG_LEVEL_INFO,
-		source: c.pluginName + "/stdout",
+		client:   c,
+		level:    dotfilesdv1.LogLevel_LOG_LEVEL_INFO,
+		source:   c.pluginName + "/stdout",
+		clientID: c.clientID,
 	}
 }
 
 func (c *contextClient) Stderr() io.Writer {
 	return &daemonLogWriter{
-		client: c,
-		level:  dotfilesdv1.LogLevel_LOG_LEVEL_WARN,
-		source: c.pluginName + "/stderr",
+		client:   c,
+		level:    dotfilesdv1.LogLevel_LOG_LEVEL_WARN,
+		source:   c.pluginName + "/stderr",
+		clientID: c.clientID,
 	}
 }
 
@@ -333,9 +338,10 @@ func (c *contextClient) Stderr() io.Writer {
 // daemon's LogService. Writes are buffered and flushed on newline or at
 // a max buffer size to avoid excessive RPC calls.
 type daemonLogWriter struct {
-	client *contextClient
-	level  dotfilesdv1.LogLevel
-	source string
+	client   *contextClient
+	level    dotfilesdv1.LogLevel
+	source   string
+	clientID string
 
 	mu  sync.Mutex
 	buf []byte
@@ -368,13 +374,17 @@ func (w *daemonLogWriter) Write(p []byte) (int, error) {
 }
 
 func (w *daemonLogWriter) flushLine(line string) {
+	attrs := map[string]string{}
+	if w.clientID != "" {
+		attrs["client_id"] = w.clientID
+	}
 	req := connect.NewRequest(&dotfilesdv1.LogRequest{
 		Session: w.client.buildSession(),
 		Source:  w.source,
 		Entry: &dotfilesdv1.LogEntry{
 			Level:      w.level,
 			Message:    strings.TrimRight(line, "\r\n"),
-			Attributes: nil,
+			Attributes: attrs,
 		},
 	})
 	w.client.setTokenHeader(req)

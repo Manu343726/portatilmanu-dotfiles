@@ -54,19 +54,31 @@ message RegistryListPluginsResponse {
 // bidi stream, sends the request, and receives real-time stdout/stderr
 // chunks from the plugin followed by the final response.
 service PluginExecutorService {
-  rpc CallPlugin(CallPluginRequest) returns (CallPluginResponse);
+  // CallPlugin opens a bidi stream between a client (CLI/MCP) and a plugin.
+  //  1. Client sends CallPluginRequest (plugin, service, method, body)
+  //  2. Daemon forwards the call to the plugin, connecting the client's
+  //     stdin/stdout/stderr to the plugin's via the daemon
+  //  3. Plugin responds with chunks (stdout, stderr, final response)
+  //  4. Client can send stdin chunks for interactive plugins
+  rpc CallPlugin(stream CallPluginMessage) returns (stream CallPluginMessage);
 }
 
-message CallPluginRequest {
+message CallPluginMessage {
+  // Request fields (sent once at start by client):
   string plugin_name = 1;
   string service = 2;
   string method = 3;
   bytes request_body = 4;
-}
+  string client_id = 5; // unique client identifier for stream multiplexing
 
-message CallPluginResponse {
-  bytes response_body = 1;
-  string error = 2;
+  // Streaming data (sent any direction during the call):
+  bytes stdout_chunk = 6; // plugin → daemon → client
+  bytes stderr_chunk = 7; // plugin → daemon → client
+  bytes stdin_chunk = 8;  // client → daemon → plugin
+
+  // Final response (plugin → daemon → client, set once at end):
+  bytes response_body = 9;
+  string error = 10;
 }
 
 // ─────────────────────────────────────────────

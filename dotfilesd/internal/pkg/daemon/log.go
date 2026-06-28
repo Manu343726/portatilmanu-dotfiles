@@ -60,14 +60,18 @@ func (s *logServer) Log(
 		slog.Log(ctx, logLevelToSlog(entry.Level), entry.Message, "source", req.Msg.Source, "attrs", entry.Attributes)
 	}
 
-	// If this is stdout/stderr from a plugin (source like "resources/stdout"),
-	// forward to any active CallPlugin streaming session.
+	// If this is stdout/stderr from a plugin, forward to any active
+	// CallPlugin bidi stream for that client.
 	source := req.Msg.Source
 	if slash := strings.LastIndexByte(source, '/'); slash > 0 {
 		pluginName := source[:slash]
 		suffix := source[slash:]
 		if suffix == "/stdout" || suffix == "/stderr" {
-			PushPluginOutput(pluginName, source, entry.Message)
+			clientID := ""
+			if entry.Attributes != nil {
+				clientID = entry.Attributes["client_id"]
+			}
+			PushPluginOutput(pluginName, source, entry.Message, clientID)
 		}
 	}
 

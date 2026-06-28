@@ -3,18 +3,21 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/http2"
 )
 
 // BuildPluginCommand creates a cobra command for a plugin, generating
@@ -277,29 +280,60 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			}
 		}
 
-		// Invoke via daemon's PluginExecutorService.
+		// Open bidi stream to daemon's PluginExecutorService.
+		// Use h2c transport since bidi streaming requires HTTP/2.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		execClient := dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, daemonURL)
-		execReq := connect.NewRequest(&dotfilesdv1.CallPluginRequest{
+		h2cTransport := &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		}
+		h2cClient := &http.Client{Transport: h2cTransport}
+		execClient := dotfilesdv1connect.NewPluginExecutorServiceClient(h2cClient, daemonURL)
+		stream := execClient.CallPlugin(ctx)
+
+		// Send request header.
+		if err := stream.Send(&dotfilesdv1.CallPluginMessage{
 			PluginName:  stripServiceSuffix(svcName),
 			Service:     svcName,
 			Method:      m.Name,
 			RequestBody: jsonBytes,
-		})
-		execResp, err := execClient.CallPlugin(ctx, execReq)
-		if err != nil {
-			return fmt.Errorf("plugin call via daemon: %w", err)
+			ClientId:    fmt.Sprintf("cli_%d", time.Now().UnixNano()),
+		}); err != nil {
+			return fmt.Errorf("send request: %w", err)
+		}
+		// Close request side — we're done sending.
+		if err := stream.CloseRequest(); err != nil {
+			return fmt.Errorf("close request: %w", err)
 		}
 
-		// Only print JSON response body when --json is set.
-		if jsonOutput && execResp.Msg.ResponseBody != nil {
-			var buf bytes.Buffer
-			if err := json.Indent(&buf, execResp.Msg.ResponseBody, "", "  "); err != nil {
-				fmt.Println(string(execResp.Msg.ResponseBody))
-			} else {
-				fmt.Println(buf.String())
+		// Receive streaming response.
+		for {
+			msg, err := stream.Receive()
+			if err != nil {
+				break
+			}
+			if msg.Error != "" {
+				return fmt.Errorf("plugin error: %s", msg.Error)
+			}
+			if len(msg.StdoutChunk) > 0 {
+				fmt.Print(string(msg.StdoutChunk))
+			}
+			if len(msg.StderrChunk) > 0 {
+				fmt.Fprint(os.Stderr, string(msg.StderrChunk))
+			}
+			// Print JSON response body only when --json is set.
+			if len(msg.ResponseBody) > 0 && jsonOutput {
+				var buf bytes.Buffer
+				if err := json.Indent(&buf, msg.ResponseBody, "", "  "); err != nil {
+					fmt.Println(string(msg.ResponseBody))
+				} else {
+					fmt.Println(buf.String())
+				}
 			}
 		}
 		return nil

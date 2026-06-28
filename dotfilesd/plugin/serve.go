@@ -63,7 +63,7 @@ func Serve(cfg Config) {
 		os.Exit(1)
 	}
 
-	ctxClient := newContextClient(ctxURL, ctxToken, sessionID, cfg.Name)
+	ctxClient := newContextClient(ctxURL, ctxToken, sessionID, cfg.Name, "")
 
 	mux := http.NewServeMux()
 
@@ -105,12 +105,23 @@ func Serve(cfg Config) {
 
 	// Context injection middleware: wraps every request so handlers can
 	// call plugin.ExtractContext(ctx) to get daemon access.
-	// Also reads X-Dotfiles-Render-Output from the incoming request and
-	// propagates it into the plugin Context.
+	// Reads X-Dotfiles-Render-Output and X-Client-ID from incoming requests
+	// and propagates them into the plugin Context for stream multiplexing.
 	ctxWrappedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clientID := r.Header.Get("X-Client-ID")
+		ro := r.Header.Get("X-Dotfiles-Render-Output") == "true"
+
 		var ctx Context = ctxClient
-		if r.Header.Get("X-Dotfiles-Render-Output") == "true" {
-			ctx = ctxClient.WithRenderOutput(true)
+		if clientID != "" || ro {
+			// Create a per-request context with the client-specific settings.
+			c := ctxClient
+			if clientID != "" {
+				c.clientID = clientID
+			}
+			if ro {
+				c.renderOutput = true
+			}
+			ctx = c
 		}
 		r = r.WithContext(WithContext(r.Context(), ctx))
 		mux.ServeHTTP(w, r)

@@ -13,6 +13,9 @@ import (
 	"dotfilesd/internal/pkg/logging"
 	"dotfilesd/internal/pkg/plugin"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type Config struct {
@@ -137,7 +140,7 @@ func (d *Daemon) Start() error {
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)
 	d.server = &http.Server{
 		Addr:    rpcAddr,
-		Handler: mux,
+		Handler: h2c.NewHandler(mux, &http2.Server{}),
 	}
 
 	// Start the HTTP server in a goroutine BEFORE loading plugins so that
