@@ -77,8 +77,8 @@ type Engine struct {
 	mu    sync.RWMutex
 	state *StateCache
 
-	history  map[EventType][]Event
-	metrics  map[string][]MetricPoint
+	history   map[EventType][]Event
+	metrics   map[string][]MetricPoint
 	retention map[EventType]RetentionPolicy
 
 	// Subscribers for live updates.
@@ -94,11 +94,11 @@ type Engine struct {
 //   - All other events: max 200, 5 minute TTL
 func New() *Engine {
 	e := &Engine{
-		state:    NewStateCache(),
-		history:  make(map[EventType][]Event),
-		metrics:  make(map[string][]MetricPoint),
+		state:     NewStateCache(),
+		history:   make(map[EventType][]Event),
+		metrics:   make(map[string][]MetricPoint),
 		retention: make(map[EventType]RetentionPolicy),
-		subs:     make(map[string]chan Event),
+		subs:      make(map[string]chan Event),
 	}
 	// Default retention policies.
 	defaults := map[EventType]RetentionPolicy{

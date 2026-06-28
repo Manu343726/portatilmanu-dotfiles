@@ -10,20 +10,20 @@ import (
 type ResourceStatus string
 
 const (
-	StatusPending   ResourceStatus = "pending"
-	StatusActive    ResourceStatus = "active"
-	StatusFinished  ResourceStatus = "finished"
-	StatusCrashed   ResourceStatus = "crashed"
+	StatusPending  ResourceStatus = "pending"
+	StatusActive   ResourceStatus = "active"
+	StatusFinished ResourceStatus = "finished"
+	StatusCrashed  ResourceStatus = "crashed"
 )
 
 // ResourceState tracks the full lifecycle of a single resource.
 // Instances are created by the engine as events arrive and mutated in place
 // under the StateCache lock.
 type ResourceState struct {
-	ID        string
-	Type      string // "daemon", "plugin", "client", etc.
-	Label     string // Human-readable name
-	ParentID  string // Empty = root-level (daemon child)
+	ID       string
+	Type     string // "daemon", "plugin", "client", etc.
+	Label    string // Human-readable name
+	ParentID string // Empty = root-level (daemon child)
 
 	// Lifecycle phase
 	Status ResourceStatus
