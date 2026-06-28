@@ -236,7 +236,7 @@ func typeLabel(t string) string {
 	case "client":
 		return "client"
 	case "executor":
-		return "executor"
+		return "plugin"
 	case "shell":
 		return "shell"
 	case "bg_task":
