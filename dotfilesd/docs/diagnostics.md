@@ -964,17 +964,67 @@ dotfilesctl system resources --status crashed --limit 10
 
 ## 8. TUI Plugin
 
-A plugin named `tui-diag` implements an interactive htop-like browser:
+A plugin named `tui-diag` implements an interactive htop-like browser.
 
-- **Tree view** — live-updating diagnostics tree with expand/collapse
-- **Filter bar** — filter by type, status, label, text search
-- **History view** — browse events with time-based grouping
-- **Metrics view** — sparklines for numeric metrics
-- **Keybindings:** `F5` refresh, `/` search, `Tab` switch view, `q` quit
+### 8.1 Views
 
-The TUI uses `DiagnosticsQueryService.StreamEvents` for real-time updates.
+The TUI has two primary views for browsing the runtime state, switchable via
+`Tab` or `F2`:
+
+| View | Data Source | RPC | Description |
+|------|-------------|-----|-------------|
+| **Tree view** | `QueryTree` + `StreamEvents` | Hierarchical `DiagNode` | Expand/collapse tree of daemon → plugin → session → executor relationships. Best for understanding parent/child ancestry and runtime structure. |
+| **Table view** | `QueryResources` + `StreamEvents` | Flat `ResourceState` list | Sortable table with columns (type, label, status, started, duration). Best for filtering, searching, and sorting specific resources. Built-in support for `--type`, `--status`, `--sort-by` toggles. |
+
+Switching views preserves the active filter — both views share the same filter
+bar, so a filter configured in tree view applies immediately when switching to
+table view and vice versa.
+
+### 8.2 Shared Features (both views)
+
+- **Filter bar** — filter by type, status, label, text search, time window
+- **History view** (`F3`) — browse events with time-based grouping
+- **Metrics view** (`F4`) — sparklines for numeric metrics
+- **Live updates** — both views subscribe via `StreamEvents` and apply the
+  client-side reconstruction algorithm (§4.7, Tier 3) so the display updates
+  in real time as events arrive
+- **Keybindings:** `F5` refresh, `/` search, `Tab` / `F2` switch view,
+  `F3` history, `F4` metrics, `q` quit
+
+### 8.3 Client-Side Reconstruction
+
+Both views maintain a local `StateCache` that is kept in sync via the
+three-tier mechanism described in §4.7:
+
+```
+On connect:
+  QueryTree(time_window=5m)   → initial tree state (or QueryResources for table)
+  StreamEvents()              → real-time event stream
+
+On each DiagEvent received:
+  Apply state transition to local cache
+  Re-run local ReconstructTree()   (tree view)
+  Re-run local filter + sort       (table view)
+  Re-render
+
+On filter/time_window change:
+  Re-run local ReconstructTree() / filter + sort
+  Re-render (zero network latency)
+```
+
+When the user switches from tree view to table view, the local cache is already
+populated — the switch is instant with no network round-trip.
+
+### 8.4 Data Flow Between Views
+
+```
+StreamEvents ──→ Local StateCache ──→ ReconstructTree() ──→ Tree view
+                                      ──→ filter + sort  ──→ Table view
+```
 
 ---
+
+## 9. Implementation Order
 
 ## 9. Implementation Order
 
