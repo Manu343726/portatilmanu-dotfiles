@@ -1,11 +1,14 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 
 	"dotfilesd/internal/pkg/logging"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -263,12 +266,74 @@ func (c *contextClient) RunScript(name string) (ScriptResult, error) {
 	}, nil
 }
 
-func (c *contextClient) Stdout() io.Writer { return &nopWriter{} }
-func (c *contextClient) Stderr() io.Writer { return &nopWriter{} }
+func (c *contextClient) Stdout() io.Writer {
+	return &daemonLogWriter{
+		client: c,
+		level:  dotfilesdv1.LogLevel_LOG_LEVEL_INFO,
+		source: c.pluginName + "/stdout",
+	}
+}
 
-type nopWriter struct{}
+func (c *contextClient) Stderr() io.Writer {
+	return &daemonLogWriter{
+		client: c,
+		level:  dotfilesdv1.LogLevel_LOG_LEVEL_WARN,
+		source: c.pluginName + "/stderr",
+	}
+}
 
-func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
+// daemonLogWriter is an io.Writer that sends data as log entries to the
+// daemon's LogService. Writes are buffered and flushed on newline or at
+// a max buffer size to avoid excessive RPC calls.
+type daemonLogWriter struct {
+	client *contextClient
+	level  dotfilesdv1.LogLevel
+	source string
+
+	mu      sync.Mutex
+	buf     []byte
+}
+
+func (w *daemonLogWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	total := len(p)
+	for len(p) > 0 {
+		// Find the next newline or end of data.
+		idx := bytes.IndexByte(p, '\n')
+		if idx < 0 {
+			// No newline — buffer it.
+			w.buf = append(w.buf, p...)
+			return total, nil
+		}
+
+		// Include everything up to and including the newline.
+		w.buf = append(w.buf, p[:idx+1]...)
+		p = p[idx+1:]
+
+		// Flush the line.
+		line := string(w.buf)
+		w.buf = w.buf[:0]
+		w.flushLine(line)
+	}
+	return total, nil
+}
+
+func (w *daemonLogWriter) flushLine(line string) {
+	req := connect.NewRequest(&dotfilesdv1.LogRequest{
+		Session: w.client.buildSession(),
+		Source:  w.source,
+		Entry: &dotfilesdv1.LogEntry{
+			Level:      w.level,
+			Message:    strings.TrimRight(line, "\r\n"),
+			Attributes: nil,
+		},
+	})
+	w.client.setTokenHeader(req)
+	// Best-effort; use background context so we don't block on log delivery.
+	_, _ = w.client.logClient.Log(context.Background(), req)
+}
 
 // pluginLogger implements logging.Logger by calling the daemon's Log RPC.
 type pluginLogger struct {
