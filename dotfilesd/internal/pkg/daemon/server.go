@@ -84,16 +84,14 @@ func (d *Daemon) Start() error {
 	}
 
 	mux := http.NewServeMux()
+
+	// —— Services accessible without auth (CLI, MCP, agent) ——
 	{
 		p, h := dotfilesdv1connect.NewSystemServiceHandler(sysSvc)
 		mux.Handle(p, h)
 	}
 	{
 		p, h := dotfilesdv1connect.NewDotfilesServiceHandler(dotSvc)
-		mux.Handle(p, h)
-	}
-	{
-		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
 		mux.Handle(p, h)
 	}
 	{
@@ -104,21 +102,28 @@ func (d *Daemon) Start() error {
 		p, h := dotfilesdv1connect.NewSessionServiceHandler(sessionSvc)
 		mux.Handle(p, h)
 	}
+
+	// —— Services accessible with X-Dotfiles-Context-Token auth ——
+	auth := d.tokenAuthMiddleware
+	{
+		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
+		mux.Handle(p, auth(h))
+	}
 	{
 		p, h := dotfilesdv1connect.NewScriptServiceHandler(scriptSvc)
-		mux.Handle(p, h)
+		mux.Handle(p, auth(h))
 	}
 	{
 		p, h := dotfilesdv1connect.NewFeedbackServiceHandler(newFeedbackServer(d.sessions))
-		mux.Handle(p, h)
+		mux.Handle(p, auth(h))
 	}
 	{
 		p, h := dotfilesdv1connect.NewLogServiceHandler(newLogServer(d))
-		mux.Handle(p, h)
+		mux.Handle(p, auth(h))
 	}
 	{
 		p, h := dotfilesdv1connect.NewPluginRegistryServiceHandler(newRegistryServer(d.sessions, d))
-		mux.Handle(p, h)
+		mux.Handle(p, auth(h))
 	}
 
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)
@@ -148,6 +153,31 @@ func (d *Daemon) Start() error {
 	case err := <-errCh:
 		return err
 	}
+}
+
+// tokenAuthHeader is the header that plugins MUST include on daemon-facing
+// RPCs. The value must match the token generated at daemon startup.
+const tokenAuthHeader = "X-Dotfiles-Context-Token"
+
+// tokenAuthMiddleware wraps an http.Handler to require a valid plugin token.
+// If the token is missing or wrong, it returns 401.
+func (d *Daemon) tokenAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if d.pluginToken == "" {
+			http.Error(w, `{"code":"unauthenticated","message":"daemon has no plugin token"}`, http.StatusInternalServerError)
+			return
+		}
+		token := r.Header.Get(tokenAuthHeader)
+		if token == "" {
+			http.Error(w, `{"code":"unauthenticated","message":"missing X-Dotfiles-Context-Token header"}`, http.StatusUnauthorized)
+			return
+		}
+		if token != d.pluginToken {
+			http.Error(w, `{"code":"unauthenticated","message":"invalid plugin token"}`, http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // restartDaemon is a function variable that can be replaced in tests.
