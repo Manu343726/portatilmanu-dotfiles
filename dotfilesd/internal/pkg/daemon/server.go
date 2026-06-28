@@ -79,14 +79,31 @@ func (d *Daemon) ScriptsRegistry() *ScriptRegistry {
 func (d *Daemon) Start() error {
 	d.setupLogging()
 
+	// Push daemon start event.
+	d.diag.PushEvent(diagnostics.Event{
+		Type:      diagnostics.EventDaemonStart,
+		Resource:  "daemon",
+		Timestamp: time.Now(),
+		Message:   fmt.Sprintf("dotfilesd v0.1.0 (pid %d, port %s)", os.Getpid(), d.config.Port),
+		Attrs: map[string]string{
+			"pid":  fmt.Sprintf("%d", os.Getpid()),
+			"port": d.config.Port,
+		},
+	})
+
 	sysSvc := &systemServer{startedAt: time.Now(), sessions: d.sessions, daemon: d}
 	dotSvc := &dotfilesServer{sessions: d.sessions}
-	execSvc := &execServer{sessions: d.sessions, bgTasks: newBackgroundTaskManager()}
+	bgTasks := newBackgroundTaskManager()
+	bgTasks.SetDiagEngine(d.diag)
+	execSvc := &execServer{sessions: d.sessions, bgTasks: bgTasks, diag: d.diag}
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)
 	diagPostSvc := newDiagnosticsPostServer(d.diag)
 	diagQuerySvc := newDiagnosticsQueryServer(d.diag)
+
+	// Wire diagnostics engine into session store.
+	d.sessions.SetDiagEngine(d.diag)
 
 	// Build the mux with all service handlers BEFORE starting plugins.
 	// This ensures PluginRegistryService is available when plugins try
@@ -182,6 +199,12 @@ func (d *Daemon) Start() error {
 	select {
 	case <-sig:
 		slog.Info("shutting down")
+		d.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventDaemonStop,
+			Resource:  "daemon",
+			Timestamp: time.Now(),
+			Message:   "shutdown",
+		})
 		if d.pluginMgr != nil {
 			d.ShutdownPlugins()
 		}

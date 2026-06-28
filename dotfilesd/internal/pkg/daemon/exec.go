@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	"dotfilesd/internal/pkg/diagnostics"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
@@ -19,11 +21,48 @@ import (
 type execServer struct {
 	sessions *SessionStore
 	bgTasks  *backgroundTaskManager
+	diag     *diagnostics.Engine
 }
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
 	session := s.sessions.ResolveSession(req.Msg.GetSession())
 	slog.Log(ctx, levelTrace, "Exec", "session_id", session.id, "command", req.Msg.Command, "sudo", req.Msg.Sudo)
+
+	execID := fmt.Sprintf("exec:%s_%d", req.Msg.Command, time.Now().UnixNano())
+	execStart := time.Now()
+
+	if s.diag != nil {
+		s.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventExecStart,
+			Resource:  execID,
+			Parent:    "session:" + session.id,
+			Timestamp: execStart,
+			Message:   req.Msg.Command,
+			Attrs:     map[string]string{"sudo": fmt.Sprintf("%t", req.Msg.Sudo)},
+		})
+	}
+
+	// defer exec_stop so we always capture it regardless of early returns
+	var execExitCode int32 = -1
+	defer func() {
+		if s.diag != nil {
+			execDur := time.Since(execStart)
+			attrs := map[string]string{
+				"exit_code":   fmt.Sprintf("%d", execExitCode),
+				"duration_ns": fmt.Sprintf("%d", execDur.Nanoseconds()),
+			}
+			s.diag.PushEvent(diagnostics.Event{
+				Type:      diagnostics.EventExecStop,
+				Resource:  execID,
+				Parent:    "session:" + session.id,
+				Timestamp: time.Now(),
+				Message:   req.Msg.Command,
+				Attrs:     attrs,
+			})
+		}
+	}()
+
+	// --- start of original function body ---
 
 	if req.Msg.Sudo {
 		vars := session.Variables()
@@ -67,6 +106,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	}
 
 	stdout, stderr, exitCode := shell.Exec(req.Msg.Command, session.Variables())
+	execExitCode = int32(exitCode)
 
 	if exitCode != 0 {
 		slog.Warn("Exec command failed", "session_id", session.id, "command", req.Msg.Command, "exit_code", exitCode, "stderr", truncate(stderr, 200))

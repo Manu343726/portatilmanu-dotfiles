@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
+	"dotfilesd/internal/pkg/diagnostics"
 	"dotfilesd/internal/pkg/plugin"
 )
 
@@ -45,6 +47,19 @@ func (d *Daemon) InitPlugins() error {
 	slog.Info("plugins loaded", "count", len(plugins))
 	for _, p := range plugins {
 		slog.Info("  plugin", "name", p.Name, "version", p.Version, "display", p.DisplayName, "services", p.Services)
+		now := time.Now()
+		d.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventPluginSpawn,
+			Resource:  "plugin:" + p.Name,
+			Parent:    "daemon",
+			Timestamp: now,
+			Message:   fmt.Sprintf("%s v%s", p.DisplayName, p.Version),
+			Attrs: map[string]string{
+				"pid":      fmt.Sprintf("%d", p.Process.Pid),
+				"url":      p.URL,
+				"services": fmt.Sprintf("%d", len(p.Services)),
+			},
+		})
 	}
 
 	return nil
@@ -60,6 +75,15 @@ func generatePluginToken() string {
 // ShutdownPlugins shuts down the plugin manager and all supervisors.
 func (d *Daemon) ShutdownPlugins() {
 	if d.pluginMgr != nil {
+		plugins := d.pluginMgr.ListPlugins()
+		for _, p := range plugins {
+			d.diag.PushEvent(diagnostics.Event{
+				Type:      diagnostics.EventPluginStop,
+				Resource:  "plugin:" + p.Name,
+				Timestamp: time.Now(),
+				Message:   fmt.Sprintf("%s v%s", p.DisplayName, p.Version),
+			})
+		}
 		d.pluginMgr.Shutdown()
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"dotfilesd/internal/pkg/diagnostics"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
@@ -19,10 +20,16 @@ import (
 type backgroundTaskManager struct {
 	mu    sync.Mutex
 	tasks map[string]*backgroundTask
+	diag  *diagnostics.Engine
 }
 
 func newBackgroundTaskManager() *backgroundTaskManager {
 	return &backgroundTaskManager{tasks: make(map[string]*backgroundTask)}
+}
+
+// SetDiagEngine configures the diagnostics engine for background task events.
+func (m *backgroundTaskManager) SetDiagEngine(eng *diagnostics.Engine) {
+	m.diag = eng
 }
 
 // ListTasks returns a snapshot of all active background tasks.
@@ -55,7 +62,25 @@ func (m *backgroundTaskManager) start(
 	m.tasks[task.id] = task
 	m.mu.Unlock()
 
+	if m.diag != nil {
+		m.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventBgTaskStart,
+			Resource:  "bg_task:" + task.id,
+			Timestamp: time.Now(),
+			Message:   cmd.String(),
+		})
+	}
+
 	task.run(ctx)
+
+	if m.diag != nil {
+		m.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventBgTaskStop,
+			Resource:  "bg_task:" + task.id,
+			Timestamp: time.Now(),
+			Message:   cmd.String(),
+		})
+	}
 
 	m.mu.Lock()
 	delete(m.tasks, task.id)

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"dotfilesd/internal/pkg/diagnostics"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
@@ -500,12 +501,18 @@ func (s *Session) RequestChoose(ctx context.Context, prompt string, options []st
 type SessionStore struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
+	diag     *diagnostics.Engine
 }
 
 func NewSessionStore() *SessionStore {
 	return &SessionStore{
 		sessions: make(map[string]*Session),
 	}
+}
+
+// SetDiagEngine configures the diagnostics engine for session events.
+func (ss *SessionStore) SetDiagEngine(eng *diagnostics.Engine) {
+	ss.diag = eng
 }
 
 func generateSessionID() string {
@@ -519,6 +526,14 @@ func (ss *SessionStore) Create() *Session {
 	ss.sessions[id] = s
 	ss.mu.Unlock()
 	slog.Debug("session created", "session_id", id)
+	if ss.diag != nil {
+		ss.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventSessionCreate,
+			Resource:  "session:" + id,
+			Timestamp: time.Now(),
+			Message:   id,
+		})
+	}
 	return s
 }
 
@@ -534,6 +549,14 @@ func (ss *SessionStore) CreateWithID(id string) *Session {
 	s := newSession(id)
 	ss.sessions[id] = s
 	slog.Debug("session created with ID", "session_id", id)
+	if ss.diag != nil {
+		ss.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventSessionCreate,
+			Resource:  "session:" + id,
+			Timestamp: time.Now(),
+			Message:   id,
+		})
+	}
 	return s
 }
 
@@ -576,6 +599,14 @@ func (ss *SessionStore) Finalize(id string) bool {
 	s.mu.Unlock()
 	ss.mu.Unlock()
 	slog.Debug("session finalized", "session_id", id)
+	if ss.diag != nil {
+		ss.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventSessionEnd,
+			Resource:  "session:" + id,
+			Timestamp: time.Now(),
+			Message:   id,
+		})
+	}
 	return true
 }
 

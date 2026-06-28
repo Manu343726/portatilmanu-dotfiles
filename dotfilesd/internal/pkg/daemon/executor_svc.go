@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"dotfilesd/internal/pkg/diagnostics"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
@@ -192,6 +193,41 @@ func (s *executorServer) CallPlugin(
 
 	call := registerCall(clientID, pluginName, svcName, methodName)
 	defer unregisterCall(clientID, pluginName)
+
+	executorID := fmt.Sprintf("executor:call_%d", time.Now().UnixNano())
+	openTime := time.Now()
+	if s.daemon.diag != nil {
+		s.daemon.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventExecutorOpen,
+			Resource:  executorID,
+			Parent:    "client:" + clientID,
+			Timestamp: openTime,
+			Message:   fmt.Sprintf("%s.%s", svcName, methodName),
+			Attrs: map[string]string{
+				"plugin": pluginName,
+				"client": clientID,
+				"method": svcName + "." + methodName,
+			},
+		})
+	}
+	defer func() {
+		if s.daemon.diag != nil {
+			closeTime := time.Now()
+			dur := closeTime.Sub(openTime)
+			s.daemon.diag.PushEvent(diagnostics.Event{
+				Type:      diagnostics.EventExecutorClose,
+				Resource:  executorID,
+				Parent:    "client:" + clientID,
+				Timestamp: closeTime,
+				Message:   fmt.Sprintf("%s.%s", svcName, methodName),
+				Attrs: map[string]string{
+					"plugin":      pluginName,
+					"client":      clientID,
+					"duration_ns": fmt.Sprintf("%d", dur.Nanoseconds()),
+				},
+			})
+		}
+	}()
 
 	// Stream stdin chunks from client in background — buffer for ReadStdin RPC.
 	go func() {
