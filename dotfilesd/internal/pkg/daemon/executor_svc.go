@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"dotfilesd/internal/pkg/diagnostics"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
@@ -194,11 +193,8 @@ func (s *executorServer) CallPlugin(
 	call := registerCall(clientID, pluginName, svcName, methodName)
 	defer unregisterCall(clientID, pluginName)
 
-	executorID := fmt.Sprintf("executor:call_%d", time.Now().UnixNano())
-	openTime := time.Now()
-
-	// Determine parent: prefer the caller's session when available (CLI context),
-	// fall back to the plugin for background executor calls.
+	// Determine parent for the diagnostics tree: prefer the caller's session
+	// when available (CLI context), fall back to the plugin.
 	execParent := "plugin:" + pluginName
 	if sessionID := extractSessionFromClientID(clientID); sessionID != "" {
 		execParent = "session:" + sessionID
@@ -206,43 +202,16 @@ func (s *executorServer) CallPlugin(
 
 	pluginSessionID := "session:plugin-" + pluginName
 
+	// Temporarily reparent the plugin session to the caller so exec calls
+	// from the plugin show under the right place. The middleware inside the
+	// plugin will create a proper sub-node via plugin_rpc_open events.
 	if s.daemon.diag != nil {
-		s.daemon.diag.PushEvent(diagnostics.Event{
-			Type:      diagnostics.EventExecutorOpen,
-			Resource:  executorID,
-			Parent:    execParent,
-			Timestamp: openTime,
-			Message:   fmt.Sprintf("%s.%s", svcName, methodName),
-			Attrs: map[string]string{
-				"plugin": pluginName,
-				"client": clientID,
-				"method": svcName + "." + methodName,
-			},
-		})
-		// Reparent the plugin's session to hang from this executor call so
-		// any exec calls the plugin makes during this RPC show up under
-		// the correct node in the tree (client -> session -> plugin -> exec).
-		s.daemon.diag.UpdateParent(pluginSessionID, executorID)
+		s.daemon.diag.UpdateParent(pluginSessionID, execParent)
 	}
 	defer func() {
+		// Restore the plugin session's parent back to the plugin so
+		// background exec calls appear under the plugin node.
 		if s.daemon.diag != nil {
-			closeTime := time.Now()
-			dur := closeTime.Sub(openTime)
-			s.daemon.diag.PushEvent(diagnostics.Event{
-				Type:      diagnostics.EventExecutorClose,
-				Resource:  executorID,
-				Parent:    execParent,
-				Timestamp: closeTime,
-				Message:   fmt.Sprintf("%s.%s", svcName, methodName),
-				Attrs: map[string]string{
-					"plugin":      pluginName,
-					"client":      clientID,
-					"duration_ns": fmt.Sprintf("%d", dur.Nanoseconds()),
-				},
-			})
-			// Restore the plugin session's parent back to the plugin so
-			// background exec calls appear under the plugin node, not under
-			// a stale executor node.
 			s.daemon.diag.UpdateParent(pluginSessionID, "plugin:"+pluginName)
 		}
 	}()
@@ -279,7 +248,7 @@ func (s *executorServer) CallPlugin(
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("X-Dotfiles-Context-Token", s.daemon.pluginToken)
 		httpReq.Header.Set("X-Client-ID", clientID)
-		httpReq.Header.Set("X-Dotfiles-Diag-Parent", executorID)
+		httpReq.Header.Set("X-Dotfiles-Diag-Parent", execParent)
 		if renderOutput {
 			httpReq.Header.Set("X-Dotfiles-Render-Output", "true")
 		}

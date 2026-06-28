@@ -130,13 +130,11 @@ func Serve(cfg Config) {
 			// create a sub-node in the diagnostics tree so the full plugin
 			// call chain is visible in the tree.
 			if diagParent != "" {
-				method := extractMethodName(r.URL.Path)
-				rpcID := fmt.Sprintf("plugin-rpc:%s_%x", method, time.Now().UnixNano())
-				c.pushDiagEvent("plugin_rpc_open", rpcID, diagParent,
-					fmt.Sprintf("%s.%s", cfg.Name, method), nil)
+				rpcName := extractMethodName(r.URL.Path)
+				rpcID := fmt.Sprintf("plugin-rpc:%s_%x", rpcName, time.Now().UnixNano())
+				c.pushDiagEvent("plugin_rpc_open", rpcID, diagParent, rpcName, nil)
 				c.diagParent = rpcID
-				defer c.pushDiagEvent("plugin_rpc_close", rpcID, diagParent,
-					fmt.Sprintf("%s.%s", cfg.Name, method), nil)
+				defer c.pushDiagEvent("plugin_rpc_close", rpcID, diagParent, rpcName, nil)
 			}
 
 			ctx = &c
@@ -217,10 +215,19 @@ func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 // extractMethodName extracts the method name from a Connect RPC URL path.
 // Connect paths are like "/package.Service/Method", so we take the last
 // segment after trimming trailing slash.
+// extractMethodName extracts the full "Service.Method" from a Connect RPC URL path.
+// Connect paths are like "/resources.ResourcesService/Current", so we take the
+// last two segments and join them with a dot.
 func extractMethodName(path string) string {
 	path = strings.TrimSuffix(path, "/")
-	if idx := strings.LastIndex(path, "/"); idx >= 0 && idx+1 < len(path) {
-		return path[idx+1:]
+	// Split into segments.
+	parts := strings.Split(path, "/")
+	if len(parts) >= 2 {
+		// parts[len-2] is Service, parts[len-1] is Method
+		return parts[len(parts)-2] + "." + parts[len(parts)-1]
+	}
+	if len(parts) == 1 {
+		return parts[0]
 	}
 	return path
 }
