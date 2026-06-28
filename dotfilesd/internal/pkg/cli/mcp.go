@@ -135,6 +135,24 @@ var mcpTools = []toolDef{
 	},
 
 	{
+		Name:        "dotfiles_git",
+		Description: "Run git commands on the dotfiles repository (status, diff, add, commit, push, log)",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"action":   {Type: "string", Description: "git action: status, diff, add, commit, push, log"},
+			"message":  {Type: "string", Description: "commit message (required when action=commit)"},
+			"paths":    {Type: "string", Description: "paths to commit (optional, comma-separated)"},
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}, Required: []string{"action"}},
+	},
+	{
+		Name:        "config_reload",
+		Description: "Reload dotfiles daemon configuration (e.g. reload all, reload wayland, reload i3)",
+		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+			"target":     {Type: "string", Description: "reload target: all, wayland, i3, kitty, etc."},
+			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+		}},
+	},
+	{
 		Name:        "_sudo_submit_password",
 		Description: "Internal: Submit sudo password from the MCP Apps webview. Only callable from within the UI view (visibility: app).",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
