@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
@@ -70,6 +71,7 @@ type Clients struct {
 	DiagPost  dotfilesdv1connect.DiagnosticsPostServiceClient
 	Feedback  *FeedbackServer
 	SessionID string
+	ClientID  string
 	mu        sync.Mutex
 	connected bool
 }
@@ -241,11 +243,28 @@ func (c *Clients) Connect(ctx context.Context) error {
 
 	// Detect client capabilities and pass them as session variables so the
 	// daemon can choose the best sudo authentication strategy.
+	// Also pass _diag_parent to link this session to the client node.
+	if c.ClientID == "" {
+		c.ClientID = fmt.Sprintf("cli_%x_%x", time.Now().UnixNano(), os.Getpid())
+	}
+
 	session := &dotfilesdv1.Session{Id: c.SessionID}
 	caps := detectCapabilities()
-	if len(caps) > 0 {
-		session.Variables = caps
-		slog.Debug("client capabilities", "caps", caps)
+	if caps == nil {
+		caps = make(map[string]string)
+	}
+	caps["_diag_parent"] = "client:" + c.ClientID
+	session.Variables = caps
+	slog.Debug("client capabilities", "caps", caps)
+
+	// Push client_connect diagnostic event.
+	if _, err := c.DiagPost.PostEvent(ctx, connect.NewRequest(&dotfilesdv1.DiagEvent{
+		Type:        "client_connect",
+		Resource:    "client:" + c.ClientID,
+		Message:     c.ClientID,
+		TimestampNs: time.Now().UnixNano(),
+	})); err != nil {
+		slog.Debug("diag post client_connect failed", "error", err)
 	}
 
 	req := connect.NewRequest(&dotfilesdv1.ConnectRequest{
@@ -269,6 +288,17 @@ func (c *Clients) Connect(ctx context.Context) error {
 }
 
 func (c *Clients) Close() {
+	if c.ClientID != "" {
+		_, err := c.DiagPost.PostEvent(context.Background(), connect.NewRequest(&dotfilesdv1.DiagEvent{
+			Type:        "client_disconnect",
+			Resource:    "client:" + c.ClientID,
+			Message:     c.ClientID,
+			TimestampNs: time.Now().UnixNano(),
+		}))
+		if err != nil {
+			slog.Debug("diag post client_disconnect failed", "error", err)
+		}
+	}
 	if c.Feedback != nil {
 		c.Feedback.Close()
 	}
