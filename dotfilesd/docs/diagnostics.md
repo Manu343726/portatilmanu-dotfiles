@@ -6,6 +6,15 @@
 > collecting, storing, and querying real-time state and metrics from the
 > dotfiles runtime.
 
+> **⚠️ Full rewrite — no backwards compatibility.** This document describes
+> a ground-up redesign of the diagnostics system. The existing
+> `SystemService.Diagnostics` RPC, the ad-hoc tree builder in
+> `daemon/system.go`, and the old `DiagNode`-based snapshot model are all
+> **removed and replaced**. There is no migration path, no compatibility
+> shim, and no hybrid mode. Old CLI workflows that consume the previous
+> diagnostics output will break until updated to use the new
+> `DiagnosticsQueryService` / `DiagnosticsPostService` RPCs.
+
 ---
 
 ## 1. Architecture Overview
@@ -865,6 +874,9 @@ The TUI uses `DiagnosticsQueryService.StreamEvents` for real-time updates.
 
 ## 9. Implementation Order
 
+0. **Remove old diagnostics:** Delete `SystemService.Diagnostics` RPC handler,
+   the ad-hoc tree builder in `daemon/system.go`, and any references to the
+   old `DiagNode`-based snapshot model. This is a clean-slate replacement.
 1. **Proto:** Add `DiagnosticsPostService`, `DiagnosticsQueryService`, events,
    metrics messages to `diagnostics.proto`
 2. **Engine package:** `internal/pkg/diagnostics/` with `Engine`, current state
