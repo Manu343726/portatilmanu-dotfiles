@@ -69,6 +69,7 @@ type handshake struct {
 	URL         string `json:"url"`
 	SessionID   string `json:"session_id"`
 	Name        string `json:"name,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
 	Version     string `json:"version,omitempty"`
 	Description string `json:"description,omitempty"`
 }
@@ -195,7 +196,10 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 		docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
 
 		// Step g: Store PluginInfo + start supervisor.
-		displayName := hs.Name
+		displayName := hs.DisplayName
+		if displayName == "" {
+			displayName = hs.Name
+		}
 		if displayName == "" {
 			displayName = name
 		}

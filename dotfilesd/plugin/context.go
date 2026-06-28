@@ -442,5 +442,3 @@ func (l *pluginLogger) Enabled(level logging.Level) bool { return true }
 func (c *contextClient) BackgroundExec(cmd string, sudo bool) (BackgroundTask, error) {
 	return startBackgroundTask(c.execClient, c.token, c.buildSession(), c.Stdout(), c.Stderr(), cmd, sudo)
 }
-
-// ExtractContext extracts the plugin Context from a connect.Context.

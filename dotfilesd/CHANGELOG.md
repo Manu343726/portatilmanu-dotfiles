@@ -334,22 +334,104 @@ to get service/method/field descriptors. If a plugin is unreachable (not
 loaded or not running), the command falls back to static info display. The
 MCP tool listing still uses the simple one-tool-per-plugin approach; MCP
 can be extended for per-method tool definitions in a future session.
-**Date:** 2026-06-27
+
+---
+
+## [Post-CLI] — Refactor protoflags to grpcreflect + Add supervisor + rpcreflection package
+
+**Commits:** `84a6ad5`, `2cbfadf`, `44ee679`, `9c3c806`, `ff7dfb5`, `8df6321`, `7ef0ccc`, `c53eb32`, `17c4914`
+**Date:** 2026-06-28
 
 ### Changes
-- `.config/dotfilesd/plugins/resources/proto/resources/.gitkeep`: Created proto
-  directory for resources plugin.
-- `.config/dotfilesd/plugins/tmuxbar/`: Created new plugin directory.
-- `.config/dotfilesd/plugins/tmuxbar/go.mod`: Module `plugins/tmuxbar` with
-  replace directives for `dotfilesd` and `plugins/resources`.
-- `.config/dotfilesd/plugins/tmuxbar/proto/tmuxbar/.gitkeep`: Created proto
-  directory for tmuxbar plugin.
+- `dotfilesd/internal/pkg/cli/protoflags.go`: Replaced `github.com/fullstorydev/grpcurl` +
+  `github.com/jhump/protoreflect/desc` with `connectrpc.com/grpcreflect` (HTTP-based
+  reflection). Replaced `newDescriptorSource()` (gRPC Dial with WithBlock) with
+  `discoverPluginSchema()` using `grpcreflect.NewClient(httpClient, url)`. Replaced
+  `desc.*` types with `protoreflect.*` types throughout.
+- `dotfilesd/internal/pkg/cli/mcp.go`: Added missing `dotfiles_git` and `config_reload`
+  to `mcpTools` array (was handled in `callTool()` switch but undiscoverable via
+  `tools/list`).
+- `dotfilesd/internal/pkg/daemon/server.go`: Added `tokenAuthMiddleware` to validate
+  plugin token on daemon-facing RPCs (Exec, Script, Feedback, Log, PluginRegistry).
+  Token generated at startup in `InitPlugins()`, stored in `Daemon.pluginToken`.
+- `dotfilesd/internal/pkg/plugin/supervisor.go`: Created with crash detection
+  (exponential backoff 1s→2s→…→30s), auto-rebuild on restart, and clean shutdown.
+  Integrated into `Manager.LoadPlugins()` and `Manager.Shutdown()`.
+- `dotfilesd/internal/pkg/plugin/manager.go`: `LoadPlugins()` now starts a supervisor
+  for each launched plugin. Added `DisplayName`, `Version`, `Description` to
+  `handshake` struct.
+- `dotfilesd/plugin/context.go`: Replaced `nopWriter` Stdout/Stderr with
+  `daemonLogWriter` sending lines to daemon LogService.
+- `dotfilesd/plugin/context.go` + `plugin/context.go`: Added `RenderOutput() bool` and
+  `WithRenderOutput(bool)` Context methods. Forward `X-Dotfiles-Render-Output` header
+  on outgoing Connect RPC calls.
+- `dotfilesd/plugin/serve.go`: Added `name`, `version`, `description`, `display_name`
+  to handshake JSON. Context middleware reads `X-Dotfiles-Render-Output` from incoming
+  requests.
+- `dotfilesd/internal/pkg/rpcreflection/rpcreflection.go`: Created new package with
+  `Client` type wrapping HTTP-based grpcreflect, `DiscoverServices()` returning
+  `ServiceInfo`/`MethodInfo`, `CallJSON()`/`CallStruct()` for RPC invocation, and
+  `IsSystemService()` helper.
+- `dotfilesd/internal/pkg/cli/protoflags.go`: Refactored to delegate discovery and
+  invocation to the `rpcreflection` package. CLI cobra-specific code remains in
+  `protoflags.go`.
+- Whitespace alignment fixes in `protoflags.go`, `mcp.go`, `supervisor.go`.
 
 ### State
-- [ ] Build passes (N/A — no code yet, directories only)
-- [ ] Daemon starts (N/A)
+- [x] Full build passes
+- [x] `go vet` clean
+- [x] Daemon binary builds
+- [x] CLI binary builds
+- [x] All plugins build
+- [ ] Daemon starts and loads plugins (not yet tested)
+- [ ] Plugin RPCs work (not yet tested)
 
 ### Notes
-Weather plugin directory was already scaffolded (proto/ and go.mod existed from
-earlier work). Resources plugin had go.mod but no proto/ — created it. Tmuxbar
-is entirely new. Empty proto dirs use `.gitkeep` so git tracks the structure.
+These commits form a continuous series of refinements after the initial protoflags CLI
+implementation. The rpcreflection package was extracted to share reflection logic between
+protoflags.go and mcp.go. The supervisor enables automatic crash recovery for plugins.
+Token auth middleware secures daemon-facing plugin RPCs.
+
+---
+
+## [Post-CLI] — Close All 4 RPC Architecture Implementation Gaps
+
+**Commit:** `df370fc`
+**Date:** 2026-06-28
+
+### Changes
+- `dotfilesd/internal/pkg/plugin/manager.go` (Gap 1): Added `fetchDocumentation()`
+  helper that calls `GetDocumentation` via Connect RPC client if plugin exposes
+  DocumentationService. Caches plugin-level and per-service docs in
+  `PluginInfo.DocsCache` map. Best-effort: failures are logged but don't block
+  plugin loading.
+- `dotfilesd/internal/pkg/cli/mcp.go` (Gap 2): Extended `propSchema` with
+  `Properties` (nested objects) and `Items` (arrays). Added `messageToToolSchema()`
+  to convert protobuf descriptors → JSON Schema. `getPluginTools()` now uses
+  rpcreflection to discover per-method tools with typed input schemas.
+  `dispatchPluginTool()` proxies MCP tool calls → plugin RPC endpoints. Tool
+  naming: `<plugin>_<MethodName>`.
+- `dotfilesd/internal/pkg/cli/protoflags.go` (Gap 3): Added `elideRPC` flag: when a
+  service has exactly one method, its flags and RunE are promoted to the parent
+  command level. Counts only non-system services for elision decisions. Preserves
+  plugin root command metadata when both `elideSvc`+`elideRPC` apply.
+- `dotfilesd/internal/pkg/plugin/supervisor.go` (Gap 4): `rebuild()` now calls
+  `stepProto()` before `go build`, matching the same two-phase build used in
+  `LoadPlugins()`. Proto recompilation failures are non-fatal.
+- `dotfilesd/docs/plugins.md`: Deprecation banners pointing to
+  `plugin-rpc-architecture.md` as authoritative spec. Updated stale references
+  to old Tool-based API.
+- `dotfilesd/docs/architecture.md`: Deprecation banners and updated references.
+- `dotfilesd/docs/development.md`: Updated stale references.
+
+### State
+- [x] Full build passes
+- [x] `go vet` clean
+- [x] Daemon binary builds
+- [x] CLI binary builds
+- [x] All plugins build
+- [ ] Daemon starts and loads plugins (not yet tested)
+
+### Notes
+These four gaps were identified by a systematic audit of the entire implementation
+against the spec document (§1–§17). All gaps are now closed.

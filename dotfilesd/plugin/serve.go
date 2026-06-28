@@ -126,12 +126,13 @@ func Serve(cfg Config) {
 
 	// Write handshake JSON to stdout so the daemon can discover us.
 	handshake := map[string]string{
-		"protocol":    "dotfilesd-plugin-v1",
-		"url":         pluginURL,
-		"session_id":  sessionID,
-		"name":        cfg.Name,
-		"version":     cfg.Version,
-		"description": cfg.Description,
+		"protocol":     "dotfilesd-plugin-v1",
+		"url":          pluginURL,
+		"session_id":   sessionID,
+		"name":         cfg.Name,
+		"display_name": cfg.DisplayName,
+		"version":      cfg.Version,
+		"description":  cfg.Description,
 	}
 	enc := json.NewEncoder(os.Stdout)
 	if err := enc.Encode(handshake); err != nil {

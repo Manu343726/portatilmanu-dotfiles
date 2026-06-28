@@ -122,7 +122,10 @@ func (s *supervisor) launch(ctx context.Context) (*PluginInfo, error) {
 	}
 
 	// Build PluginInfo without Process field (set in start()).
-	displayName := hs.Name
+	displayName := hs.DisplayName
+	if displayName == "" {
+		displayName = hs.Name
+	}
 	if displayName == "" {
 		displayName = s.name
 	}
