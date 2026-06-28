@@ -89,131 +89,129 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 	s.sessions.ResolveSession(req.Msg.GetSession())
 
 	d := s.daemon
-	root := &dotfilesdv1.DiagNode{
-		Type:  "daemon",
-		Label: "dotfilesd",
-		Attrs: map[string]string{
-			"pid":     fmt.Sprintf("%d", os.Getpid()),
-			"uptime":  fmt.Sprintf("%ds", int64(time.Since(s.startedAt).Seconds())),
-			"port":    d.config.Port,
-			"version": "0.1.0",
-		},
+	execCalls := ListActiveCalls()
+	allSessions := s.sessions.List()
+
+	// Index sessions by ID for quick lookup.
+	sessByID := make(map[string]*Session)
+	for _, sess := range allSessions {
+		sessByID[sess.id] = sess
 	}
 
-	// ─── Clients & Executor streams ───
-	execCalls := ListActiveCalls()
-	clientNode := &dotfilesdv1.DiagNode{Type: "clients", Label: fmt.Sprintf("Clients (%d)", len(execCalls))}
-	seenClients := make(map[string]bool)
-	for _, call := range execCalls {
-		clientID := call.clientID
-		if !seenClients[clientID] {
-			seenClients[clientID] = true
-			cl := &dotfilesdv1.DiagNode{Type: "client", Label: clientID}
-			clientNode.Children = append(clientNode.Children, cl)
+	// Determine which plugins have background workers.
+	// A plugin has a background worker if its session (plugin-{name}) has a shell.
+	plugins := d.pluginMgr.ListPlugins()
+	pluginHasBG := make(map[string]bool)
+	pluginHasActiveCall := make(map[string]bool)
+	pluginPIDs := make(map[string]int)
+	for _, info := range plugins {
+		pluginPIDs[info.Name] = info.Process.Pid
+		if sess, ok := sessByID["plugin-"+info.Name]; ok && sess.shell != nil {
+			pluginHasBG[info.Name] = true
 		}
-		// Find parent and add executor child.
-		for _, cl := range clientNode.Children {
-			if cl.Label == clientID {
-				cl.Children = append(cl.Children, &dotfilesdv1.DiagNode{
-					Type:   "executor",
-					Label:  fmt.Sprintf("%s.%s", call.service, call.method),
-					Attrs:  map[string]string{"plugin": call.pluginName},
-				})
+		for _, call := range execCalls {
+			if call.pluginName == info.Name {
+				pluginHasActiveCall[info.Name] = true
 				break
 			}
 		}
 	}
-	root.Children = append(root.Children, clientNode)
 
-	// ─── Sessions ───
-	sessions := s.sessions.List()
-	sessNode := &dotfilesdv1.DiagNode{Type: "sessions", Label: fmt.Sprintf("Sessions (%d)", len(sessions))}
-	for i := range sessions {
-		sess := sessions[i]
-		status := "active"
-		if sess.finalized {
-			status = "finalized"
+	// Build list of active clients (clients with active executor streams).
+	clientIDs := make(map[string]bool)
+	for _, call := range execCalls {
+		if call.clientID != "" {
+			clientIDs[call.clientID] = true
 		}
-		sn := &dotfilesdv1.DiagNode{
-			Type:   "session",
-			Label:  sess.id,
-			Status: status,
-			Attrs: map[string]string{
-				"created":  sess.createdAt.Format(time.RFC3339),
-				"callback": sess.callbackURL,
-			},
+	}
+
+	// ─── Tree 1: Daemon root (plugins with bg workers + scripts) ───
+	root := &dotfilesdv1.DiagNode{
+		Type:  "daemon",
+		Label: fmt.Sprintf("dotfilesd (pid %d, port %s, up %ds)", os.Getpid(), d.config.Port, int64(time.Since(s.startedAt).Seconds())),
+	}
+
+	// Plugins with background workers under daemon.
+	for _, info := range plugins {
+		if !pluginHasBG[info.Name] {
+			continue
 		}
-		if sess.shell != nil {
-			sn.Children = append(sn.Children, &dotfilesdv1.DiagNode{
-				Type: "shell", Label: "bash",
+		pl := &dotfilesdv1.DiagNode{
+			Type:   "plugin",
+			Label:  fmt.Sprintf("%s v%s", info.DisplayName, info.Version),
+			Status: "bg_worker",
+			Attrs:  map[string]string{"pid": fmt.Sprintf("%d", info.Process.Pid), "url": info.URL},
+		}
+		// Add the background shell session.
+		if sess, ok := sessByID["plugin-"+info.Name]; ok && sess.shell != nil {
+			pl.Children = append(pl.Children, &dotfilesdv1.DiagNode{
+				Type: "shell", Label: "bash", Status: "running",
 				Attrs: map[string]string{"cwd": sess.shell.cwd},
 			})
 		}
-		sessNode.Children = append(sessNode.Children, sn)
-	}
-	root.Children = append(root.Children, sessNode)
-
-	// ─── Plugins ───
-	if d.pluginMgr != nil {
-		plugins := d.pluginMgr.ListPlugins()
-		pn := &dotfilesdv1.DiagNode{Type: "plugins", Label: fmt.Sprintf("Plugins (%d)", len(plugins))}
-		for _, info := range plugins {
-			pl := &dotfilesdv1.DiagNode{
-				Type:   "plugin",
-				Label:  fmt.Sprintf("%s v%s", info.DisplayName, info.Version),
-				Status: "running",
-				Attrs: map[string]string{
-					"url": info.URL,
-					"pid": fmt.Sprintf("%d", info.Process.Pid),
-				},
-			}
-			for _, svc := range info.Services {
-				pl.Children = append(pl.Children, &dotfilesdv1.DiagNode{
-					Type: "service", Label: svc, Status: "available",
-				})
-			}
-			for _, call := range execCalls {
-				if call.pluginName == info.Name {
-					pl.Children = append(pl.Children, &dotfilesdv1.DiagNode{
-						Type: "caller", Label: call.clientID,
-						Attrs: map[string]string{"svc": call.service, "method": call.method},
-					})
-				}
-			}
-			pn.Children = append(pn.Children, pl)
-		}
-		root.Children = append(root.Children, pn)
+		root.Children = append(root.Children, pl)
 	}
 
-	// ─── Background Tasks ───
+	// Background tasks under daemon.
 	if d.bgTasks != nil {
 		tasks := d.bgTasks.ListTasks()
-		bn := &dotfilesdv1.DiagNode{Type: "bg_tasks", Label: fmt.Sprintf("Background tasks (%d)", len(tasks))}
 		for _, t := range tasks {
-			bn.Children = append(bn.Children, &dotfilesdv1.DiagNode{
+			root.Children = append(root.Children, &dotfilesdv1.DiagNode{
 				Type: "bg_task", Label: t.id,
 				Attrs: map[string]string{"command": t.cmd.String()},
 			})
 		}
-		root.Children = append(root.Children, bn)
 	}
 
-	// ─── Scripts ───
+	// Scripts (always shown, counted as "available").
 	scripts, err := d.scripts.ListScripts()
 	if err == nil && len(scripts) > 0 {
-		sn := &dotfilesdv1.DiagNode{Type: "scripts", Label: fmt.Sprintf("Scripts (%d)", len(scripts))}
+		sn := &dotfilesdv1.DiagNode{Type: "scripts", Label: "Available scripts"}
 		sn.Children = buildScriptNodes(scripts)
 		root.Children = append(root.Children, sn)
 	}
 
-	slog.Log(ctx, levelTrace, "Diagnostics done", "tree_size", countNodes(root))
-	return connect.NewResponse(&dotfilesdv1.DiagnosticsResponse{Root: root}), nil
+	// ─── Tree 2: Per-client trees ───
+	// Build a list of response trees: first is daemon, rest are clients.
+	var trees []*dotfilesdv1.DiagNode
+	trees = append(trees, root)
+
+	for cid := range clientIDs {
+		ct := &dotfilesdv1.DiagNode{
+			Type:  "client",
+			Label: cid,
+		}
+
+		// Active executor streams for this client.
+		for _, call := range execCalls {
+			if call.clientID != cid {
+				continue
+			}
+			ct.Children = append(ct.Children, &dotfilesdv1.DiagNode{
+				Type:   "executor",
+				Label:  fmt.Sprintf("%s.%s", call.service, call.method),
+				Attrs:  map[string]string{"plugin": call.pluginName},
+			})
+		}
+
+		trees = append(trees, ct)
+	}
+
+	// Combine trees under a synthetic root for the response.
+	combined := &dotfilesdv1.DiagNode{
+		Type:  "root",
+		Label: fmt.Sprintf("dotfilesd diagnostics — %d tree(s)", len(trees)),
+	}
+	combined.Children = trees
+
+	slog.Log(ctx, levelTrace, "Diagnostics done", "trees", len(trees))
+	return connect.NewResponse(&dotfilesdv1.DiagnosticsResponse{Root: combined}), nil
 }
 
 func buildScriptNodes(entries []*dotfilesdv1.ScriptEntry) []*dotfilesdv1.DiagNode {
 	var nodes []*dotfilesdv1.DiagNode
 	for _, e := range entries {
-		n := &dotfilesdv1.DiagNode{Type: "script", Label: e.Name, Status: "available"}
+		n := &dotfilesdv1.DiagNode{Type: "script", Label: e.Name}
 		if e.Path != "" {
 			n.Attrs = map[string]string{"path": e.Path}
 		}
@@ -223,12 +221,4 @@ func buildScriptNodes(entries []*dotfilesdv1.ScriptEntry) []*dotfilesdv1.DiagNod
 		nodes = append(nodes, n)
 	}
 	return nodes
-}
-
-func countNodes(n *dotfilesdv1.DiagNode) int {
-	c := 1
-	for _, ch := range n.Children {
-		c += countNodes(ch)
-	}
-	return c
 }
