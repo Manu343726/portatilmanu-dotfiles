@@ -63,8 +63,8 @@ func RunSudoMethods(clients *Clients, sessionID string) error {
 // RunDiagnostics queries the daemon for full diagnostic state and prints a tree.
 func RunDiagnostics(clients *Clients, sessionID string) error {
 	slog.Debug("diagnostics requested", "session_id", sessionID)
-	req := connect.NewRequest(&dotfilesdv1.DiagnosticsRequest{Session: sessionProto(sessionID)})
-	resp, err := clients.Sys.Diagnostics(context.Background(), req)
+	req := connect.NewRequest(&dotfilesdv1.QueryTreeRequest{})
+	resp, err := clients.DiagQuery.QueryTree(context.Background(), req)
 	if err != nil {
 		slog.Error("diagnostics failed", "error", err)
 		return fmt.Errorf("diagnostics failed: %w", err)

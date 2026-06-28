@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package dotfilesd.v1;
 
-option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
-
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 // SystemService — daemon health and runtime environment (admin-only).
 // Ping returns daemon identity. RuntimeInfo describes the OS and host.
@@ -15,9 +15,6 @@ service SystemService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc RuntimeInfo(RuntimeInfoRequest) returns (RuntimeInfoResponse);
   rpc SudoMethods(SudoMethodsRequest) returns (SudoMethodsResponse);
-
-  // Diagnostics returns a structured diagnostic tree of the daemon state.
-  rpc Diagnostics(DiagnosticsRequest) returns (DiagnosticsResponse);
 }
 
 message PingRequest {
@@ -56,28 +53,4 @@ message SudoMethodsResponse {
   repeated string available_methods = 1;
   string current_method = 2;
   bool has_elevation = 3;
-}
-
-// ─────────────────────────────────────────────
-// Diagnostics messages
-// ─────────────────────────────────────────────
-
-message DiagnosticsRequest {
-  Session session = 100;
-}
-
-// DiagNode represents one node in the daemon state tree.
-// Each node has a type label, a description, optional metadata,
-// and child nodes forming a parent-child hierarchy.
-message DiagNode {
-  string type = 1;    // node type: "daemon", "client", "executor", "session",
-                       // "plugin", "bg_task", "script", "exec_command"
-  string label = 2;   // human-readable name (e.g. "cli_xxx", "resources.ResourcesService.Current")
-  string status = 3;  // status: "active", "idle", "finalized", "running"
-  map<string, string> attrs = 4; // key-value details (pid, url, version, command, callback, etc.)
-  repeated DiagNode children = 5;
-}
-
-message DiagnosticsResponse {
-  DiagNode root = 1;  // full tree rooted at the daemon
 }

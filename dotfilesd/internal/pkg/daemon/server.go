@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"dotfilesd/internal/pkg/diagnostics"
 	"dotfilesd/internal/pkg/logging"
 	"dotfilesd/internal/pkg/plugin"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
@@ -39,6 +40,9 @@ type Daemon struct {
 	// Logging system.
 	logger *logging.Manager
 
+	// Diagnostics engine.
+	diag *diagnostics.Engine
+
 	// Plugin system.
 	pluginMgr   *plugin.Manager
 	pluginToken string
@@ -58,6 +62,7 @@ func New(cfg Config) *Daemon {
 		config:   cfg,
 		sessions: NewSessionStore(),
 		scripts:  NewScriptRegistry(scriptsDir),
+		diag:     diagnostics.New(),
 	}
 }
 
@@ -80,6 +85,8 @@ func (d *Daemon) Start() error {
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)
+	diagPostSvc := newDiagnosticsPostServer(d.diag)
+	diagQuerySvc := newDiagnosticsQueryServer(d.diag)
 
 	// Build the mux with all service handlers BEFORE starting plugins.
 	// This ensures PluginRegistryService is available when plugins try
@@ -105,6 +112,14 @@ func (d *Daemon) Start() error {
 	}
 	{
 		p, h := dotfilesdv1connect.NewScriptServiceHandler(scriptSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewDiagnosticsPostServiceHandler(diagPostSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewDiagnosticsQueryServiceHandler(diagQuerySvc)
 		mux.Handle(p, h)
 	}
 

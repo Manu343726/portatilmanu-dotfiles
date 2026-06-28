@@ -158,22 +158,6 @@ func newExecutorServer(d *Daemon) *executorServer {
 	return &executorServer{daemon: d}
 }
 
-// ListActiveCalls returns a snapshot of all active executor bidi streams.
-func ListActiveCalls() []*activePluginCall {
-	activeCallsMu.RLock()
-	defer activeCallsMu.RUnlock()
-	seen := make(map[string]bool)
-	var out []*activePluginCall
-	for _, call := range activeCallsByClient {
-		if seen[call.clientID] {
-			continue
-		}
-		seen[call.clientID] = true
-		out = append(out, call)
-	}
-	return out
-}
-
 func (s *executorServer) CallPlugin(
 	ctx context.Context,
 	stream *connect.BidiStream[dotfilesdv1.CallPluginMessage, dotfilesdv1.CallPluginMessage],

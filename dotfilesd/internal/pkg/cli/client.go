@@ -66,6 +66,8 @@ type Clients struct {
 	Script    dotfilesdv1connect.ScriptServiceClient
 	Registry  dotfilesdv1connect.PluginRegistryServiceClient
 	Executor  dotfilesdv1connect.PluginExecutorServiceClient
+	DiagQuery dotfilesdv1connect.DiagnosticsQueryServiceClient
+	DiagPost  dotfilesdv1connect.DiagnosticsPostServiceClient
 	Feedback  *FeedbackServer
 	SessionID string
 	mu        sync.Mutex
@@ -83,6 +85,8 @@ func NewClients(port string) *Clients {
 		Script:   dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
 		Registry: dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, baseURL),
 		Executor: dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, baseURL),
+		DiagQuery: dotfilesdv1connect.NewDiagnosticsQueryServiceClient(http.DefaultClient, baseURL),
+		DiagPost:  dotfilesdv1connect.NewDiagnosticsPostServiceClient(http.DefaultClient, baseURL),
 	}
 }
 

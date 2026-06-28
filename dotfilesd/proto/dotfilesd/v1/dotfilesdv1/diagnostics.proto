@@ -1,0 +1,167 @@
+syntax = "proto3";
+
+package dotfilesd.v1;
+
+import "google/protobuf/duration.proto";
+
+option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
+
+// ─────────────────────────────────────────────
+// Core state tree
+// ─────────────────────────────────────────────
+
+// DiagNode represents one node in the daemon state tree.
+// Each node has a type label, a human-readable description, optional metadata,
+// and child nodes forming a parent-child hierarchy.
+message DiagNode {
+  string type = 1; // node type: "root", "daemon", "client", "executor",
+  // "session", "plugin", "bg_task", "shell"
+  string label = 2; // human-readable name
+  string status = 3; // "active", "pending", "finished", "crashed"
+  map<string, string> attrs = 4; // key-value metadata
+  repeated DiagNode children = 5;
+}
+
+// ─────────────────────────────────────────────
+// Events
+// ─────────────────────────────────────────────
+
+message DiagEvent {
+  string id = 1;
+  int64 timestamp_ns = 2;         // unix nanos
+  string type = 3;                // EventType string
+  string resource = 4;            // e.g. "plugin:weather"
+  string parent = 5;              // parent resource ID for tree reconstruction, empty = root
+  map<string, string> labels = 6;
+  string message = 7;
+  map<string, string> attrs = 8;
+}
+
+message MetricPoint {
+  int64 timestamp_ns = 1;
+  string name = 2;
+  double value = 3;
+  map<string, string> labels = 4;
+}
+
+// ─────────────────────────────────────────────
+// Post service — daemon components push data here
+// ─────────────────────────────────────────────
+
+service DiagnosticsPostService {
+  // PostEvent records an event.
+  rpc PostEvent(DiagEvent) returns (PostEventResponse);
+  // PostMetric records a metric data point.
+  rpc PostMetric(MetricPoint) returns (PostMetricResponse);
+  // PostSnapshot replaces the current state for a resource subtree.
+  rpc PostSnapshot(DiagNode) returns (PostSnapshotResponse);
+}
+
+message PostEventResponse {}
+message PostMetricResponse {}
+message PostSnapshotResponse {}
+
+// ─────────────────────────────────────────────
+// Query service — CLI/TUI query the engine
+// ─────────────────────────────────────────────
+
+service DiagnosticsQueryService {
+  // QueryTree returns a filtered state tree.
+  rpc QueryTree(QueryTreeRequest) returns (QueryTreeResponse);
+  // QueryResources returns filtered resources as a flat list (no tree
+  // reconstruction). Uses the same filter logic as QueryTree.
+  rpc QueryResources(QueryResourcesRequest) returns (QueryResourcesResponse);
+  // QueryHistory returns historical events.
+  rpc QueryHistory(QueryHistoryRequest) returns (QueryHistoryResponse);
+  // QueryMetrics returns metric data points.
+  rpc QueryMetrics(QueryMetricsRequest) returns (QueryMetricsResponse);
+  // StreamEvents subscribes to real-time events.
+  rpc StreamEvents(StreamEventsRequest) returns (stream DiagEvent);
+}
+
+message QueryTreeRequest {
+  // Include only nodes matching these filters (AND).
+  repeated string include_types = 1;     // e.g. ["daemon", "plugin"]
+  string label_regex = 2;                // filter by label pattern
+  string status_filter = 3;              // e.g. "running", "bg_worker"
+  map<string, string> attr_filters = 4;  // key=value filter on attrs
+  // Show idle/inactive nodes too (default: active only).
+  bool show_idle = 5;
+  // Time window for finished/crashed nodes (takes precedence over show_idle).
+  //   0 or unset        → active-only (default)
+  //   positive duration → include finished nodes within this window
+  //   -1 / "inf"        → no pruning (like show_idle=true)
+  google.protobuf.Duration time_window = 6;
+}
+
+message QueryTreeResponse {
+  DiagNode root = 1;
+}
+
+message QueryHistoryRequest {
+  repeated string types = 1;             // event types to include
+  string resource_regex = 2;             // filter by resource ID pattern
+  int64 since_ns = 3;                    // only events after this timestamp
+  int64 until_ns = 4;                    // only events before this timestamp
+  int32 limit = 5;                       // max results (0 = default 100)
+}
+
+message QueryHistoryResponse {
+  repeated DiagEvent events = 1;
+}
+
+message QueryMetricsRequest {
+  string name_regex = 1;                 // metric name pattern
+  map<string, string> labels = 2;        // label filter
+  int64 since_ns = 3;
+  int64 until_ns = 4;
+  int32 limit = 5;
+}
+
+message QueryMetricsResponse {
+  repeated MetricPoint points = 1;
+}
+
+message StreamEventsRequest {
+  repeated string types = 1;             // event types to subscribe to
+}
+
+// ─────────────────────────────────────────────
+// Flat list queries
+// ─────────────────────────────────────────────
+
+message QueryResourcesRequest {
+  // All filter fields are identical to QueryTreeRequest.
+  repeated string include_types = 1;     // e.g. ["daemon", "plugin"]
+  string label_regex = 2;                // filter by label pattern
+  string status_filter = 3;              // e.g. "running", "bg_worker"
+  map<string, string> attr_filters = 4;  // key=value filter on attrs
+  // Time window for finished/crashed nodes.
+  //   0 or unset        → active-only
+  //   positive duration → include finished nodes within this window
+  //   -1 / "inf"        → no pruning
+  google.protobuf.Duration time_window = 6;
+  // Sort order for results.
+  string sort_by = 7;                    // "started_at", "type", "label", "status"
+  bool sort_desc = 8;                    // descending order (default: ascending)
+  int32 limit = 9;                       // max results (0 = no limit)
+}
+
+message QueryResourcesResponse {
+  repeated ResourceState resources = 1;
+  int32 total_count = 2;                 // total matching before limit
+}
+
+message ResourceState {
+  string id = 1;
+  string type = 2;
+  string label = 3;
+  string parent_id = 4;
+  string status = 5;
+  int64 created_at_ns = 6;
+  int64 started_at_ns = 7;
+  int64 finished_at_ns = 8;             // 0 if still active
+  int64 duration_ns = 9;                // 0 if still active
+  map<string, string> attrs = 10;
+  int32 exit_code = 11;
+}
