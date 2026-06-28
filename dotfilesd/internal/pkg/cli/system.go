@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -90,15 +91,20 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool) {
 	}
 	fmt.Printf("%s%s [%s] %s\n", prefix, branch, typeTag, label)
 
-	// Print attributes indented.
+	// Print attributes indented, with stable key order.
 	childPrefix := prefix
 	if isLast {
 		childPrefix += "   "
 	} else {
 		childPrefix += "│  "
 	}
-	for k, v := range n.Attrs {
-		fmt.Printf("%s%s: %s\n", childPrefix, k, v)
+	keys := make([]string, 0, len(n.Attrs))
+	for k := range n.Attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Printf("%s%s: %s\n", childPrefix, k, n.Attrs[k])
 	}
 
 	// Print children.
