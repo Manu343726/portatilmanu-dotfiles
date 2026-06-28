@@ -711,29 +711,29 @@ func (s *sessionServer) CreateSession(ctx context.Context, req *connect.Request[
 	return resp, nil
 }
 
-// sessionParentForID determines the diagnostics parent resource for a session ID.
-// Plugin sessions (plugin-<name>) are children of the daemon.
-// CLI sessions (ses_<random>) are top-level.
-func sessionParentForID(id string) string {
-	if strings.HasPrefix(id, "plugin-") {
-		return "daemon"
-	}
-	return ""
-}
+// diagParentKey is the session variable key used to pass the diagnostics
+// parent resource ID. Plugin SDK sets this to "plugin:<name>".
+const diagParentKey = "_diag_parent"
 
 func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfilesdv1.ConnectRequest]) (*connect.Response[dotfilesdv1.ConnectResponse], error) {
 	slog.Log(ctx, levelTrace, "Session.Connect", "callback_url", req.Msg.CallbackUrl)
 
 	sessionMsg := req.Msg.GetSession()
+
+	// Extract diagnostics parent from session variables before creating.
+	diagParent := ""
+	if sessionMsg != nil {
+		diagParent = sessionMsg.GetVariables()[diagParentKey]
+	}
+
 	var session *Session
 	if sessionMsg == nil || sessionMsg.GetId() == "" {
-		session = s.store.Create("")
+		session = s.store.Create(diagParent)
 	} else {
 		id := sessionMsg.GetId()
 		session = s.store.Get(id)
 		if session == nil {
-			parent := sessionParentForID(id)
-			session = s.store.CreateWithID(id, parent)
+			session = s.store.CreateWithID(id, diagParent)
 		} else {
 			session.touch()
 		}

@@ -200,7 +200,7 @@ func (s *executorServer) CallPlugin(
 		s.daemon.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventExecutorOpen,
 			Resource:  executorID,
-			Parent:    "client:" + clientID,
+			Parent:    "plugin:" + pluginName,
 			Timestamp: openTime,
 			Message:   fmt.Sprintf("%s.%s", svcName, methodName),
 			Attrs: map[string]string{
@@ -209,6 +209,8 @@ func (s *executorServer) CallPlugin(
 				"method": svcName + "." + methodName,
 			},
 		})
+		// Reparent the plugin's background session to hang from this call.
+		s.daemon.diag.UpdateParent("session:plugin-"+pluginName, executorID)
 	}
 	defer func() {
 		if s.daemon.diag != nil {
@@ -217,7 +219,7 @@ func (s *executorServer) CallPlugin(
 			s.daemon.diag.PushEvent(diagnostics.Event{
 				Type:      diagnostics.EventExecutorClose,
 				Resource:  executorID,
-				Parent:    "client:" + clientID,
+				Parent:    "plugin:" + pluginName,
 				Timestamp: closeTime,
 				Message:   fmt.Sprintf("%s.%s", svcName, methodName),
 				Attrs: map[string]string{

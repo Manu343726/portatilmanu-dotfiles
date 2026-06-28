@@ -154,6 +154,21 @@ func (e *Engine) PushEvent(evt Event) {
 	e.notifySubscribers(evt)
 }
 
+// UpdateParent changes the parent of an existing resource in the state cache.
+// This is used to reparent sessions when they are used in the context of
+// an exec command or executor call, giving the tree the correct ownership
+// chain (e.g. client → exec → session).
+func (e *Engine) UpdateParent(resourceID, newParent string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	rs, ok := e.state.resources[resourceID]
+	if !ok {
+		return
+	}
+	rs.ParentID = newParent
+	e.state.version++
+}
+
 // PushMetric records a metric data point.
 func (e *Engine) PushMetric(m MetricPoint) {
 	e.mu.Lock()

@@ -111,7 +111,12 @@ func newContextClient(url, token, sessionID, pluginName, clientID string) *conte
 	ctx := context.Background()
 	connectReq := connect.NewRequest(&dotfilesdv1.ConnectRequest{
 		CallbackUrl: "",
-		Session:     &dotfilesdv1.Session{Id: c.sessionID},
+		Session: &dotfilesdv1.Session{
+			Id: c.sessionID,
+			Variables: map[string]string{
+				"_diag_parent": "plugin:" + pluginName,
+			},
+		},
 	})
 	c.setTokenHeader(connectReq)
 	connectResp, err := c.sessionClient.Connect(ctx, connectReq)
