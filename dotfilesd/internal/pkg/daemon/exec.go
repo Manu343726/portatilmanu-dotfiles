@@ -131,19 +131,67 @@ func (s *execServer) ExecStream(
 	session := s.sessions.ResolveSession(req.Msg.GetSession())
 	slog.Log(ctx, levelTrace, "ExecStream", "session_id", session.id, "command", req.Msg.Command, "sudo", req.Msg.Sudo)
 
+	execID := fmt.Sprintf("exec:%s_%d", req.Msg.Command, time.Now().UnixNano())
+	execStart := time.Now()
+
+	pushStart := func() {
+		if s.diag == nil {
+			return
+		}
+		s.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventExecStart,
+			Resource:  execID,
+			Parent:    "session:" + session.id,
+			Timestamp: execStart,
+			Message:   req.Msg.Command,
+			Attrs:     map[string]string{"sudo": fmt.Sprintf("%t", req.Msg.Sudo)},
+		})
+	}
+	pushStop := func(exitCode int32) {
+		if s.diag == nil {
+			return
+		}
+		execDur := time.Since(execStart)
+		s.diag.PushEvent(diagnostics.Event{
+			Type:     diagnostics.EventExecStop,
+			Resource: execID,
+			Parent:   "session:" + session.id,
+			Timestamp: time.Now(),
+			Message:  req.Msg.Command,
+			Attrs: map[string]string{
+				"exit_code":   fmt.Sprintf("%d", exitCode),
+				"duration_ns": fmt.Sprintf("%d", execDur.Nanoseconds()),
+			},
+		})
+	}
+
 	if req.Msg.Sudo {
-		// For streaming sudo, we use pkexec (graphical auth) or prompt
-		// for password via the session, then run with the password.
 		vars := session.Variables()
 
 		if vars["_cap_graphical"] == "true" && hasPkexec() {
-			return runCmdStreamWithSudo(ctx, stream, req.Msg.Command)
+			pushStart()
+			err := runCmdStreamWithSudo(ctx, stream, req.Msg.Command)
+			ec := int32(-1)
+			if err == nil {
+				ec = 0
+			}
+			pushStop(ec)
+			return err
 		}
 
 		if (vars["_cap_elicitation"] == "true" || vars["_cap_terminal"] == "true") && session.HasCallbackURL() {
-			return s.execStreamSudoWithPassword(ctx, req.Msg.Command, session, stream)
+			pushStart()
+			err := s.execStreamSudoWithPassword(ctx, req.Msg.Command, session, stream)
+			ec := int32(-1)
+			if err == nil {
+				ec = 0
+			}
+			pushStop(ec)
+			return err
 		}
 
+		pushStart()
+		pushStop(-1)
 		return stream.Send(&dotfilesdv1.ExecStreamResponse{
 			Done:         true,
 			ExitCode:     -1,
@@ -153,11 +201,20 @@ func (s *execServer) ExecStream(
 
 	// Non-sudo streaming: use raw exec or session shell.
 	if session.id == "" {
-		return runCmdStream(ctx, stream, req.Msg.Command)
+		pushStart()
+		err := runCmdStream(ctx, stream, req.Msg.Command)
+		ec := int32(-1)
+		if err == nil {
+			ec = 0
+		}
+		pushStop(ec)
+		return err
 	}
 
 	shell, err := session.ensureShell()
 	if err != nil {
+		pushStart()
+		pushStop(-1)
 		return stream.Send(&dotfilesdv1.ExecStreamResponse{
 			Done:         true,
 			ExitCode:     -1,
@@ -166,7 +223,14 @@ func (s *execServer) ExecStream(
 	}
 
 	// Session shell: run via shell and stream line-by-line.
-	return shell.ExecStream(ctx, stream, req.Msg.Command, session.Variables())
+	pushStart()
+	err = shell.ExecStream(ctx, stream, req.Msg.Command, session.Variables())
+	ec := int32(-1)
+	if err == nil {
+		ec = 0
+	}
+	pushStop(ec)
+	return err
 }
 
 // execStreamSudoWithPassword prompts for the sudo password, then runs the
