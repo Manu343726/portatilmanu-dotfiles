@@ -21,6 +21,16 @@ service PluginRegistryService {
 
   // ListPlugins returns all registered plugins.
   rpc ListPlugins(RegistryListPluginsRequest) returns (RegistryListPluginsResponse);
+
+  // LoadPlugin loads a plugin by name, including its dependencies.
+  rpc LoadPlugin(RegistryLoadPluginRequest) returns (RegistryLoadPluginResponse);
+
+  // UnloadPlugin stops a plugin by name.
+  rpc UnloadPlugin(RegistryUnloadPluginRequest) returns (RegistryUnloadPluginResponse);
+
+  // ReloadPlugins rescans the plugins directory, loading new plugins
+  // and removing plugins whose directories no longer exist.
+  rpc ReloadPlugins(RegistryReloadPluginsRequest) returns (RegistryReloadPluginsResponse);
 }
 
 message RegistryGetPluginRequest {
@@ -48,6 +58,32 @@ message RegistryListPluginsRequest {
 
 message RegistryListPluginsResponse {
   repeated RegistryGetPluginResponse plugins = 1;
+}
+
+message RegistryLoadPluginRequest {
+  string plugin_name = 1;
+}
+
+message RegistryLoadPluginResponse {
+  RegistryGetPluginResponse plugin = 1;
+  repeated string loaded_deps = 2; // dependencies loaded alongside
+  string error = 3;
+}
+
+message RegistryUnloadPluginRequest {
+  string plugin_name = 1;
+}
+
+message RegistryUnloadPluginResponse {
+  string error = 1;
+}
+
+message RegistryReloadPluginsRequest {}
+
+message RegistryReloadPluginsResponse {
+  repeated string loaded = 1;
+  repeated string unloaded = 2;
+  string error = 3;
 }
 
 // PluginExecutorService proxies RPC calls to plugins. The CLI opens a

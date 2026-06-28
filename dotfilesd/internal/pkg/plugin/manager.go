@@ -120,133 +120,272 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 
 	for _, name := range buildOrder {
 		sourceDir := filepath.Join(pluginsDir, name)
-
-		// Step a: Proto compilation.
-		if err := stepProto(sourceDir, name); err != nil {
-			slog.Error("proto compile failed", "name", name, "error", err)
+		if err := m.loadPlugin(ctx, name, sourceDir, cacheDir); err != nil {
+			slog.Error("load plugin failed", "name", name, "error", err)
 			continue
 		}
-
-		// Step b: Go build.
-		slog.Info("building plugin", "name", name)
-		binaryPath := filepath.Join(cacheDir, name, name)
-		if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
-			slog.Error("mkdir failed", "name", name, "error", err)
-			continue
-		}
-		cmd := exec.Command("go", "build", "-o", binaryPath, ".")
-		cmd.Dir = sourceDir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			slog.Error("build failed", "name", name, "error", err, "output", string(out))
-			continue
-		}
-
-		// Step c: Launch subprocess.
-		sessionID := fmt.Sprintf("plugin-%s", name)
-		procCmd := exec.Command(binaryPath)
-		procCmd.Env = append(os.Environ(),
-			"EXECUTION_CONTEXT_URL="+m.CtxURL,
-			"EXECUTION_CONTEXT_TOKEN="+m.CtxToken,
-			"SESSION_ID="+sessionID,
-		)
-		stdout, err := procCmd.StdoutPipe()
-		if err != nil {
-			slog.Error("stdout pipe failed", "name", name, "error", err)
-			continue
-		}
-		procCmd.Stderr = os.Stderr
-		if err := procCmd.Start(); err != nil {
-			slog.Error("start failed", "name", name, "error", err)
-			continue
-		}
-
-		// Step d: Read handshake JSON from stdout.
-		var hs handshake
-		if err := readJSONLine(stdout, &hs); err != nil {
-			procCmd.Process.Kill()
-			slog.Error("handshake read failed", "name", name, "error", err)
-			continue
-		}
-		if hs.Protocol != "dotfilesd-plugin-v1" {
-			procCmd.Process.Kill()
-			slog.Error("unknown handshake protocol", "name", name, "protocol", hs.Protocol)
-			continue
-		}
-		slog.Info("plugin launched", "name", name, "url", hs.URL, "pid", procCmd.Process.Pid)
-
-		// Step e: grpcreflect discovery via rpcreflection — get full method/type metadata.
-		refClient := rpcreflection.NewClient(hs.URL)
-		svcInfos, discErr := refClient.DiscoverServices(ctx)
-		if discErr != nil {
-			procCmd.Process.Kill()
-			slog.Error("grpcreflect discovery failed", "name", name, "error", discErr)
-			continue
-		}
-
-		// Extract service names (filtering out reflection services).
-		var services []string
-		var nonSystemInfos []rpcreflection.ServiceInfo
-		for _, si := range svcInfos {
-			if rpcreflection.IsSystemService(si.FullName) {
-				continue
-			}
-			services = append(services, si.FullName)
-			nonSystemInfos = append(nonSystemInfos, si)
-		}
-
-		// Build full type introspection schemas for CLI/MCP clients.
-		schemas := rpcreflection.BuildServiceSchemas(nonSystemInfos)
-
-		// Step f: If DocumentationService is exposed, call it (best-effort).
-		httpClient := &http.Client{}
-		docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
-
-		// Step g: Store PluginInfo + start supervisor.
-		displayName := hs.DisplayName
-		if displayName == "" {
-			displayName = hs.Name
-		}
-		if displayName == "" {
-			displayName = name
-		}
-		info := &PluginInfo{
-			Name:        name,
-			DisplayName: displayName,
-			Version:     hs.Version,
-			Description: hs.Description,
-			URL:         hs.URL,
-			Services:    services,
-			DocsCache:   docsCache,
-			Schemas:     schemas,
-			Process:     procCmd.Process,
-			SourceDir:   sourceDir,
-			CacheDir:    cacheDir,
-		}
-		// Register plugin BEFORE starting supervisor so that cross-plugin
-		// discovery (e.g. tmuxbar calling GetPlugin for resources) works
-		// without deadlocking. Lock is only held during map writes.
-		m.mu.Lock()
-		m.plugins[name] = info
-		m.mu.Unlock()
-
-		// Start crash supervisor with exponential backoff (adopts existing process).
-		sup := newSupervisor(name, binaryPath, sourceDir, cacheDir, m.CtxURL, m.CtxToken, sessionID)
-		if err := sup.startAdopt(ctx, info); err != nil {
-			procCmd.Process.Kill()
-			slog.Error("supervisor start failed", "name", name, "error", err)
-			m.mu.Lock()
-			delete(m.plugins, name)
-			m.mu.Unlock()
-			continue
-		}
-		m.mu.Lock()
-		m.supervisors[name] = sup
-		m.mu.Unlock()
-		slog.Info("plugin registered with supervisor", "name", name, "services", services)
 	}
 
 	slog.Info("plugins loaded", "count", len(m.plugins))
 	return nil
+}
+
+// LoadPluginByName loads a single plugin and its dependencies by name.
+// Returns the loaded PluginInfo and a list of dependency names that were
+// loaded as a side effect. Returns error if the plugin or a dependency
+// cannot be found or fails to load.
+func (m *Manager) LoadPluginByName(ctx context.Context, name string) (*PluginInfo, []string, error) {
+	pluginsDir := expandHome(m.PluginsDir)
+	cacheDir := expandHome(m.CacheDir)
+	sourceDir := filepath.Join(pluginsDir, name)
+
+	if !isGoPlugin(sourceDir) {
+		return nil, nil, fmt.Errorf("plugin %q not found in %s", name, pluginsDir)
+	}
+
+	// Check if already loaded.
+	m.mu.RLock()
+	_, exists := m.plugins[name]
+	m.mu.RUnlock()
+	if exists {
+		info, _ := m.GetPlugin(name)
+		return info, nil, nil
+	}
+
+	// Parse deps and load dependencies first.
+	deps, err := parsePluginDeps(sourceDir, pluginsDir)
+	if err != nil {
+		slog.Warn("parse deps failed", "name", name, "error", err)
+		deps = []string{}
+	}
+
+	var loadedDeps []string
+	for _, dep := range deps {
+		depDir := filepath.Join(pluginsDir, dep)
+		if !isGoPlugin(depDir) {
+			continue
+		}
+		m.mu.RLock()
+		_, depExists := m.plugins[dep]
+		m.mu.RUnlock()
+		if depExists {
+			continue
+		}
+		if err := m.loadPlugin(ctx, dep, depDir, cacheDir); err != nil {
+			return nil, loadedDeps, fmt.Errorf("load dependency %q: %w", dep, err)
+		}
+		loadedDeps = append(loadedDeps, dep)
+	}
+
+	if err := m.loadPlugin(ctx, name, sourceDir, cacheDir); err != nil {
+		return nil, loadedDeps, err
+	}
+
+	info, _ := m.GetPlugin(name)
+	return info, loadedDeps, nil
+}
+
+// UnloadPluginByName stops a plugin supervisor and removes it from the registry.
+func (m *Manager) UnloadPluginByName(name string) error {
+	m.mu.Lock()
+	sup, hasSup := m.supervisors[name]
+	info, hasInfo := m.plugins[name]
+	if hasSup {
+		delete(m.supervisors, name)
+	}
+	if hasInfo {
+		delete(m.plugins, name)
+	}
+	m.mu.Unlock()
+
+	if !hasInfo {
+		return fmt.Errorf("plugin %q not found", name)
+	}
+
+	if hasSup {
+		sup.stop()
+	} else if info.Process != nil {
+		info.Process.Kill()
+	}
+
+	return nil
+}
+
+// loadPlugin performs the full build-launch-discover-register cycle for one plugin.
+// This is the shared implementation used by both LoadPlugins (startup) and
+// LoadPluginByName (runtime dynamic loading).
+func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir string) error {
+	// Step a: Proto compilation.
+	if err := stepProto(sourceDir, name); err != nil {
+		return fmt.Errorf("proto compile: %w", err)
+	}
+
+	// Step b: Go build.
+	binaryPath := filepath.Join(cacheDir, name, name)
+	if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
+	}
+	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
+	cmd.Dir = sourceDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("go build: %w\n%s", err, string(out))
+	}
+
+	// Step c: Launch subprocess.
+	sessionID := fmt.Sprintf("plugin-%s", name)
+	procCmd := exec.Command(binaryPath)
+	procCmd.Env = append(os.Environ(),
+		"EXECUTION_CONTEXT_URL="+m.CtxURL,
+		"EXECUTION_CONTEXT_TOKEN="+m.CtxToken,
+		"SESSION_ID="+sessionID,
+	)
+	stdout, err := procCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("stdout pipe: %w", err)
+	}
+	procCmd.Stderr = os.Stderr
+	if err := procCmd.Start(); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+
+	// Step d: Read handshake JSON from stdout.
+	var hs handshake
+	if err := readJSONLine(stdout, &hs); err != nil {
+		procCmd.Process.Kill()
+		return fmt.Errorf("handshake read: %w", err)
+	}
+	if hs.Protocol != "dotfilesd-plugin-v1" {
+		procCmd.Process.Kill()
+		return fmt.Errorf("unknown handshake protocol: %s", hs.Protocol)
+	}
+	slog.Info("plugin launched", "name", name, "url", hs.URL, "pid", procCmd.Process.Pid)
+
+	// Step e: grpcreflect discovery via rpcreflection.
+	refClient := rpcreflection.NewClient(hs.URL)
+	svcInfos, discErr := refClient.DiscoverServices(ctx)
+	if discErr != nil {
+		procCmd.Process.Kill()
+		return fmt.Errorf("grpcreflect discovery: %w", discErr)
+	}
+
+	var services []string
+	var nonSystemInfos []rpcreflection.ServiceInfo
+	for _, si := range svcInfos {
+		if rpcreflection.IsSystemService(si.FullName) {
+			continue
+		}
+		services = append(services, si.FullName)
+		nonSystemInfos = append(nonSystemInfos, si)
+	}
+
+	// Build schemas for CLI/MCP clients.
+	schemas := rpcreflection.BuildServiceSchemas(nonSystemInfos)
+
+	// Step f: DocumentationService.
+	httpClient := &http.Client{}
+	docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
+
+	// Step g: Store PluginInfo + start supervisor.
+	displayName := hs.DisplayName
+	if displayName == "" {
+		displayName = hs.Name
+	}
+	if displayName == "" {
+		displayName = name
+	}
+	info := &PluginInfo{
+		Name:        name,
+		DisplayName: displayName,
+		Version:     hs.Version,
+		Description: hs.Description,
+		URL:         hs.URL,
+		Services:    services,
+		DocsCache:   docsCache,
+		Schemas:     schemas,
+		Process:     procCmd.Process,
+		SourceDir:   sourceDir,
+		CacheDir:    cacheDir,
+	}
+	m.mu.Lock()
+	m.plugins[name] = info
+	m.mu.Unlock()
+
+	sup := newSupervisor(name, binaryPath, sourceDir, cacheDir, m.CtxURL, m.CtxToken, sessionID)
+	if err := sup.startAdopt(ctx, info); err != nil {
+		procCmd.Process.Kill()
+		m.mu.Lock()
+		delete(m.plugins, name)
+		m.mu.Unlock()
+		return fmt.Errorf("supervisor start: %w", err)
+	}
+	m.mu.Lock()
+	m.supervisors[name] = sup
+	m.mu.Unlock()
+	slog.Info("plugin registered with supervisor", "name", name, "services", services)
+
+	return nil
+}
+
+// ReloadPlugins rescans the plugins directory, loading new plugins and
+// unloading plugins whose directories no longer exist.
+func (m *Manager) ReloadPlugins(ctx context.Context) (loaded, unloaded []string, _ error) {
+	pluginsDir := expandHome(m.PluginsDir)
+	cacheDir := expandHome(m.CacheDir)
+
+	// Get current plugins.
+	m.mu.RLock()
+	current := make(map[string]bool)
+	for name := range m.plugins {
+		current[name] = true
+	}
+	m.mu.RUnlock()
+
+	// Discover what's on disk now.
+	entries, err := os.ReadDir(pluginsDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read plugins dir: %w", err)
+	}
+
+	onDisk := make(map[string]bool)
+	for _, entry := range entries {
+		if entry.IsDir() && isGoPlugin(filepath.Join(pluginsDir, entry.Name())) {
+			onDisk[entry.Name()] = true
+		}
+	}
+
+	// Unload plugins no longer on disk.
+	for name := range current {
+		if !onDisk[name] {
+			if err := m.UnloadPluginByName(name); err != nil {
+				slog.Warn("unload failed during reload", "name", name, "error", err)
+			} else {
+				unloaded = append(unloaded, name)
+			}
+		}
+	}
+
+	// Load new plugins.
+	pluginDeps, err := m.discoverPlugins(pluginsDir)
+	if err != nil {
+		return loaded, unloaded, fmt.Errorf("discover plugins: %w", err)
+	}
+	buildOrder := topologicalSort(pluginDeps)
+	for _, name := range buildOrder {
+		m.mu.RLock()
+		_, exists := m.plugins[name]
+		m.mu.RUnlock()
+		if exists {
+			continue
+		}
+		sourceDir := filepath.Join(pluginsDir, name)
+		if err := m.loadPlugin(ctx, name, sourceDir, cacheDir); err != nil {
+			slog.Warn("load failed during reload", "name", name, "error", err)
+			continue
+		}
+		loaded = append(loaded, name)
+	}
+
+	return loaded, unloaded, nil
 }
 
 // discoverPlugins scans the plugins directory and builds a dependency graph.
