@@ -33,6 +33,7 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 		slog.Debug("daemon not reachable, skipping dynamic command registration", "port", daemonPort)
 		return
 	}
+	defer dynClients.Close()
 	slog.Debug("connected to daemon for dynamic command registration")
 
 	// Register plugin list commands (one per plugin) from the registry.
