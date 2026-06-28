@@ -33,11 +33,12 @@ func SetDaemonPort(port string) {
 }
 
 type shellSession struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	reader *bufio.Reader
-	mu     sync.Mutex
-	cwd    string
+	cmd         *exec.Cmd
+	stdin       io.WriteCloser
+	reader      *bufio.Reader
+	mu          sync.Mutex
+	cwd         string
+	lastCommand string
 }
 
 // buildShellEnv constructs the environment variable list for a shell session.
@@ -172,7 +173,11 @@ func bashQuote(s string) string {
 
 func (sh *shellSession) Exec(command string, variables map[string]string) (string, string, int) {
 	sh.mu.Lock()
-	defer sh.mu.Unlock()
+	sh.lastCommand = command
+	defer func() {
+		sh.lastCommand = ""
+		sh.mu.Unlock()
+	}()
 
 	delim := fmt.Sprintf("__GS_%x__", rand.Int63())
 
@@ -223,7 +228,11 @@ func (sh *shellSession) ExecStream(
 	variables map[string]string,
 ) error {
 	sh.mu.Lock()
-	defer sh.mu.Unlock()
+	sh.lastCommand = command
+	defer func() {
+		sh.lastCommand = ""
+		sh.mu.Unlock()
+	}()
 
 	delim := fmt.Sprintf("__GS_%x__", rand.Int63())
 

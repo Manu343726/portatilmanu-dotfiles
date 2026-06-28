@@ -92,32 +92,21 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 	execCalls := ListActiveCalls()
 	allSessions := s.sessions.List()
 
-	// Index sessions by ID for quick lookup.
+	// Index sessions by ID.
 	sessByID := make(map[string]*Session)
 	for _, sess := range allSessions {
 		sessByID[sess.id] = sess
 	}
 
-	// Determine which plugins have background workers.
-	// A plugin has a background worker if its session (plugin-{name}) has a shell.
 	plugins := d.pluginMgr.ListPlugins()
 	pluginHasBG := make(map[string]bool)
-	pluginHasActiveCall := make(map[string]bool)
-	pluginPIDs := make(map[string]int)
 	for _, info := range plugins {
-		pluginPIDs[info.Name] = info.Process.Pid
 		if sess, ok := sessByID["plugin-"+info.Name]; ok && sess.shell != nil {
 			pluginHasBG[info.Name] = true
 		}
-		for _, call := range execCalls {
-			if call.pluginName == info.Name {
-				pluginHasActiveCall[info.Name] = true
-				break
-			}
-		}
 	}
 
-	// Build list of active clients (clients with active executor streams).
+	// Build set of active client IDs.
 	clientIDs := make(map[string]bool)
 	for _, call := range execCalls {
 		if call.clientID != "" {
@@ -125,13 +114,31 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 		}
 	}
 
-	// ─── Tree 1: Daemon root (plugins with bg workers + scripts) ───
+	// Map: sessionID → set of client IDs that have a shell in that session.
+	// A CLI client creates a session, which may get a shell for exec.
+	// We show sessions that have an active shell or a callback (active clients).
+	sessionHasActiveClient := make(map[string]bool)
+	for _, sess := range allSessions {
+		if sess.shell != nil && sess.shell.lastCommand != "" {
+			sessionHasActiveClient[sess.id] = true
+		}
+		if sess.callbackURL != "" {
+			sessionHasActiveClient[sess.id] = true
+		}
+	}
+
+	// ─── Tree 1: Daemon root ───
 	root := &dotfilesdv1.DiagNode{
 		Type:  "daemon",
 		Label: fmt.Sprintf("dotfilesd (pid %d, port %s, up %ds)", os.Getpid(), d.config.Port, int64(time.Since(s.startedAt).Seconds())),
+		Attrs: map[string]string{
+			"version": "0.1.0",
+			"plugins": fmt.Sprintf("%d loaded", len(plugins)),
+			"sessions": fmt.Sprintf("%d total", len(allSessions)),
+		},
 	}
 
-	// Plugins with background workers under daemon.
+	// Plugins with background workers.
 	for _, info := range plugins {
 		if !pluginHasBG[info.Name] {
 			continue
@@ -140,13 +147,23 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 			Type:   "plugin",
 			Label:  fmt.Sprintf("%s v%s", info.DisplayName, info.Version),
 			Status: "bg_worker",
-			Attrs:  map[string]string{"pid": fmt.Sprintf("%d", info.Process.Pid), "url": info.URL},
+			Attrs: map[string]string{
+				"pid":      fmt.Sprintf("%d", info.Process.Pid),
+				"url":      info.URL,
+				"services": fmt.Sprintf("%d", len(info.Services)),
+			},
 		}
-		// Add the background shell session.
 		if sess, ok := sessByID["plugin-"+info.Name]; ok && sess.shell != nil {
+			cmdAttr := "(idle)"
+			if sess.shell.lastCommand != "" {
+				cmdAttr = sess.shell.lastCommand
+			}
 			pl.Children = append(pl.Children, &dotfilesdv1.DiagNode{
 				Type: "shell", Label: "bash", Status: "running",
-				Attrs: map[string]string{"cwd": sess.shell.cwd},
+				Attrs: map[string]string{
+					"cwd":    sess.shell.cwd,
+					"active": cmdAttr,
+				},
 			})
 		}
 		root.Children = append(root.Children, pl)
@@ -163,8 +180,7 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 		}
 	}
 
-	// ─── Tree 2: Per-client trees ───
-	// Build a list of response trees: first is daemon, rest are clients.
+	// ─── Tree 2+: Per-client trees ───
 	var trees []*dotfilesdv1.DiagNode
 	trees = append(trees, root)
 
@@ -174,22 +190,44 @@ func (s *systemServer) Diagnostics(ctx context.Context, req *connect.Request[dot
 			Label: cid,
 		}
 
+		// Find the session this client uses.
+		for _, sess := range allSessions {
+			if sess.callbackURL != "" && sess.id != "" {
+				// Associate client with its session if callback URL matches.
+				// For simplicity, show the session if it has a callback (active).
+				ct.Attrs = map[string]string{"session": sess.id}
+				if sess.shell != nil {
+					cmdAttr := "(idle)"
+					if sess.shell.lastCommand != "" {
+						cmdAttr = sess.shell.lastCommand
+					}
+					ct.Children = append(ct.Children, &dotfilesdv1.DiagNode{
+						Type: "shell", Label: "bash",
+						Attrs: map[string]string{
+							"cwd":    sess.shell.cwd,
+							"active": cmdAttr,
+						},
+					})
+				}
+				break
+			}
+		}
+
 		// Active executor streams for this client.
 		for _, call := range execCalls {
 			if call.clientID != cid {
 				continue
 			}
 			ct.Children = append(ct.Children, &dotfilesdv1.DiagNode{
-				Type:   "executor",
-				Label:  fmt.Sprintf("%s.%s", call.service, call.method),
-				Attrs:  map[string]string{"plugin": call.pluginName},
+				Type:  "executor",
+				Label: fmt.Sprintf("%s.%s", call.service, call.method),
+				Attrs: map[string]string{"plugin": call.pluginName},
 			})
 		}
 
 		trees = append(trees, ct)
 	}
 
-	// Combine trees under a synthetic root for the response.
 	combined := &dotfilesdv1.DiagNode{
 		Type:  "root",
 		Label: fmt.Sprintf("dotfilesd diagnostics — %d tree(s)", len(trees)),
