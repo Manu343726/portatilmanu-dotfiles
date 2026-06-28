@@ -1,175 +1,270 @@
-# Diagnostics — Daemon Runtime State Tree
+# Diagnostics System — Design Document
 
-> **Status:** Implemented
+> **Status:** Draft
 > **Date:** 2026-06-28
-> **RPC:** `SystemService.Diagnostics`
-> **CLI:** `dotfilesctl system diag`
+> **Purpose:** Specify the daemon diagnostics subsystem — a real-time tree showing
+> everything happening in the dotfiles runtime (plugins, clients, sessions, exec
+> commands, background tasks, I/O streams).
 
-## Purpose
+---
 
-Diagnostics provides a real-time hierarchical view of all active runtime
-state in the dotfiles daemon. Think of it as `htop` for the dotfiles
-runtime — it shows exactly what the daemon is doing, who invoked what,
-and what is currently running.
+## 1. Overview
 
-## Architecture
+The diagnostics system produces a **live tree of active runtime entities**.
+It is the `htop` of the dotfiles daemon — showing only things that are
+currently running or have active work to do. Idle entities are hidden.
+
+The tree is split into **multiple roots**, one per *owner*:
 
 ```
-CLI: dotfilesctl system diag
-        │
-        ▼ unary RPC
-SystemService.Diagnostics()
-        │
-        ▼
-Diagnostics handler (system.go)
-  ├── session.go — sessions + shell sessions
-  ├── executor_svc.go — active bidi executor streams
-  ├── background_task.go — running background tasks
-  ├── manager.go — loaded plugins
-  └── scripts_registry.go — registered scripts
-        │
-        ▼
-DiagnosticsResponse { DiagNode root }
-  └── tree rendered by CLI (box-drawing)
+└── Diagnostics (dotfilesd runtime state)
+   ├── Daemon (dotfilesd)
+   │  └── Plugins with background workers
+   │      └── Shell session (bash)
+   │  └── Background tasks
+   │
+   └── Client (cli_xxx)
+      └── Session (ses_xxx)
+         └── Shell (bash) — with active exec command
+      └── Executor stream — service.method calling plugin
 ```
 
-## Data Model
+### Principles
+
+1. **Only active things.** If it's not doing work right now, it's hidden.
+2. **Owner-based trees.** Each active client gets its own tree showing what it's doing.
+3. **Parents contain children.** A session contains its shell. A shell contains its active exec command. A client contains its executor streams.
+4. **No polling.** The data is a snapshot collected atomically from daemon subsystem state.
+
+---
+
+## 2. Data Model (Protobuf)
 
 ```protobuf
+// DiagNode represents one node in the daemon state tree.
 message DiagNode {
-  string type = 1;    // node type classifier
-  string label = 2;   // human-readable name
-  string status = 3;  // status: running, idle, active, bg_worker, etc.
-  map<string, string> attrs = 4;  // key-value metadata
-  repeated DiagNode children = 5; // child nodes
+  string type = 1;                    // node type (see §3)
+  string label = 2;                   // human-readable name
+  string status = 3;                  // status string (see §3)
+  map<string, string> attrs = 4;      // key-value metadata
+  repeated DiagNode children = 5;     // child nodes
+}
+
+message DiagnosticsResponse {
+  DiagNode root = 1;                  // synthetic root containing all trees
 }
 ```
 
-Every node in the tree uses the same recursive `DiagNode` message. The
-`type` field lets consumers (CLI renderer, web UI, MCP tools) know what
-kind of node they're looking at and how to display it.
+The response contains a single `DiagNode` tree. The immediate children of
+the root are the *owner trees* (daemon, client-1, client-2, ...).
 
-### Node Types
+---
 
-| Type | Parent | Meaning | Attributes |
-|------|--------|---------|------------|
-| `daemon` | root | The dotfilesd process | pid, port, uptime, version |
-| `plugin` | daemon, client | A loaded plugin | pid, url, services count |
-| `shell` | session | A managed bash shell session | cwd, active command |
-| `session` | client | A daemon session | created, callback URL |
-| `executor` | client | An active bidi stream calling a plugin | plugin, service, method |
-| `client` | root | An active CLI/MCP client | client ID, session ID |
-| `bg_task` | daemon | A running background exec task | command |
+## 3. Node Types
 
-### Node Type Rules
+### 3.1 `type: "daemon"` — The dotfilesd process itself
 
-- **Only active things are shown.** Plugins without background workers
-  and no active executor calls are hidden. Sessions without shells and
-  no callback URL are hidden. Scripts (files on disk, not runtime) are
-  never shown.
-- **One tree per active root.** The response combines multiple trees:
-  one for the daemon (plugins with bg workers, bg tasks) and one per
-  active client (their session, shell, executor streams).
-- **`bg_worker` status** means the plugin has a background shell session
-  running (e.g. the resources plugin's collector goroutine).
+| Field | Value |
+|-------|-------|
+| `label` | `dotfilesd (pid %d, port %s, up %ds)` |
+| `attrs.pid` | OS pid |
+| `attrs.port` | RPC port |
+| `attrs.uptime` | Seconds since start |
+| `attrs.version` | Version string |
+| `attrs.plugins` | "N loaded" |
+| `attrs.sessions` | "N total" (all sessions count) |
 
-## Tree Structure
+**Parent:** root (always present)
+**Children:** plugins with bg workers, background tasks
+
+### 3.2 `type: "plugin"` — A running plugin
+
+| Field | Value |
+|-------|-------|
+| `label` | `Name vX.X.X` |
+| `status` | `"bg_worker"` if it has a background goroutine (i.e. its plugin session has a shell) |
+| `attrs.pid` | Plugin process PID |
+| `attrs.url` | Plugin HTTP URL |
+| `attrs.services` | Count of services exposed (e.g. `"2"`) |
+
+**Parent:** daemon
+**Children:** shell (if bg worker has a shell session)
+
+**Visibility:** Only shown if the plugin has a background worker (`Config.Background != nil`).
+
+### 3.3 `type: "shell"` — A bash session
+
+| Field | Value |
+|-------|-------|
+| `label` | `"bash"` |
+| `status` | `"running"` |
+| `attrs.cwd` | Current working directory |
+| `attrs.active` | Currently executing command string, or `"(idle)"` |
+
+**Parent:** session (or plugin with bg worker)
+**Children:** none
+
+**Visibility:** Only shown if the shell exists and is attached to an active parent.
+
+### 3.4 `type: "session"` — A daemon session (grouping of requests)
+
+| Field | Value |
+|-------|-------|
+| `label` | Session ID (e.g. `"ses_xxx"` or `"plugin-resources"`) |
+| `attrs.created` | Creation timestamp (RFC3339) |
+| `attrs.callback` | Callback URL (if set) |
+
+**Parent:** client tree (implicitly via client → session → shell)
+**Children:** shell (if any)
+
+**Visibility:** Hidden in the current design (sessions without active work
+are not shown). The session ID is shown as an attribute on the client node.
+
+### 3.5 `type: "client"` — An active connected client
+
+| Field | Value |
+|-------|-------|
+| `label` | Client ID (e.g. `"cli_xxx"`) |
+| `attrs.session` | Associated session ID |
+| `attrs.pid` | Client PID (if available) |
+
+**Parent:** root (each client is a separate tree)
+**Children:** shell (if session has one), executor calls
+
+**Visibility:** Only shown if the client has at least one active executor
+stream or an active shell.
+
+### 3.6 `type: "executor"` — An active bidi stream proxying a plugin RPC call
+
+| Field | Value |
+|-------|-------|
+| `label` | `"ServiceName.MethodName"` |
+| `attrs.plugin` | Plugin name being called |
+| `attrs.service` | Full service name |
+| `attrs.method` | Method name |
+
+**Parent:** client (the client that initiated the call)
+**Children:** none
+
+**Visibility:** Only shown while the bidi stream is active.
+
+### 3.7 `type: "bg_task"` — A daemon-managed background task
+
+| Field | Value |
+|-------|-------|
+| `label` | Task ID (e.g. `"bg_xxx"`) |
+| `attrs.command` | Shell command being executed |
+| `attrs.session` | Session ID that launched the task (future) |
+
+**Parent:** daemon
+**Children:** none
+
+**Visibility:** Only shown while the task is running.
+
+---
+
+## 4. Tree Structure
+
+### 4.1 Daemon tree
 
 ```
-root "dotfilesd diagnostics — N tree(s)"
+daemon
+├── plugin (bg_worker)
+│   └── shell (bash, active: "cat /proc/meminfo")
+├── plugin (bg_worker)
+│   └── shell (bash, active: "(idle)")
+└── bg_task (bg_xxx, command: "pacman -Syu")
+```
+
+### 4.2 Client tree
+
+```
+client (cli_xxx, session: ses_yyy)
+├── shell (bash, active: "dotfilesctl weather --location=Madrid")
+├── executor (resources.ResourcesService.Current, plugin: resources)
+└── executor (weather.WeatherService.Forecast, plugin: weather)
+```
+
+### 4.3 Full compound view
+
+```
+root
+├── daemon (dotfilesd pid 1234, port 9105, up 42s)
+│   ├── Resources v1.0.0 (bg_worker)
+│   │   └── bash (running)
+│   │      cwd: /home/user
+│   │      active: cat /proc/meminfo
+│   └── bg_task (bg_1)
+│       command: pacman -Syu --noconfirm
 │
-├── daemon "dotfilesd (pid X, port 9105, up Xs)"
-│   ├── attrs: version, plugins loaded count, sessions total
-│   │
-│   ├── plugin "Resources v1.0.0 (bg_worker)"   ← only plugins with bg
-│   │   ├── attrs: pid, url, services count
-│   │   └── shell "bash (running)"
-│   │       └── attrs: cwd, active command (or idle)
-│   │
-│   └── bg_task "bg_xxxxx"                      ← running bg tasks
-│       └── attrs: command
-│
-└── client "cli_xxxxxx"                          ← one per active client
-    ├── attrs: session ID
-    │
-    ├── shell "bash"                             ← if session has shell
-    │   └── attrs: cwd, active command
-    │
-    └── executor "resources.ResourcesService.Current"  ← active calls
-        └── attrs: plugin name
+└── client (cli_1782667918360771514, session: ses_abc)
+    ├── bash (running)
+    │   cwd: /home/user
+    │   active: (idle)
+    └── weather.WeatherService.Forecast
+        plugin: weather
 ```
 
-## Data Sources
+---
 
-### Sessions (`session.go`)
-- `SessionStore.List()` returns all sessions
-- Each session may have:
-  - A `shellSession` (bash process) for Exec/ExecStream
-  - A `callbackURL` for interactive feedback
-  - A `finalized` flag
-- Shell sessions track their `lastCommand` (currently executing command)
+## 5. Data Sources
 
-### Executor Streams (`executor_svc.go`)
-- `ListActiveCalls()` returns all active bidi `CallPlugin` streams
-- Each call has: clientID, pluginName, service, method
-- Stored in two maps: `activeCallsByClient` and `activeCallsByPlugin`
+The diagnostics handler collects data from these daemon subsystems:
 
-### Background Tasks (`background_task.go`)
-- `backgroundTaskManager.ListTasks()` returns running tasks
-- Each task has: id, command (exec.Cmd.String())
+| Subsystem | Data | Accessor |
+|-----------|------|----------|
+| `plugin.Manager` | List loaded plugins with metadata | `manager.ListPlugins()` |
+| `SessionStore` | List all sessions with shell/status | `store.List()` |
+| `executor_svc.go` | Active bidi executor streams | `ListActiveCalls()` |
+| `background_task.go` | Running background tasks | `bgTaskManager.ListTasks()` |
 
-### Plugins (`manager.go`)
-- `Manager.ListPlugins()` returns all loaded plugins
-- Each PluginInfo has: Name, DisplayName, Version, URL, Process.Pid, Services, SourceDir, CacheDir
+### 5.1 Active call tracking
 
-## CLI Rendering
+The executor service (`executor_svc.go`) maintains two maps:
+
+- `activeCallsByClient[clientID]` → `activePluginCall`
+- `activeCallsByPlugin[pluginName]` → `activePluginCall`
+
+Each `activePluginCall` stores:
+- `clientID` — who initiated the call
+- `pluginName` — which plugin is being called
+- `service` / `method` — the specific RPC being invoked
+
+### 5.2 Shell command tracking
+
+Each `shellSession` stores a `lastCommand` field. It is set to the
+command string when `Exec()` or `ExecStream()` starts, and cleared
+when the command completes. The diagnostics snapshot reads this field
+to show what command is currently executing.
+
+---
+
+## 6. CLI Rendering
+
+The CLI client renders the `DiagNode` tree as Unicode box-drawing:
 
 ```
-dotfilesctl system diag
+└── label (status)
+   attr: value
+   ├── child-1 (status)
+   │  nested attr: value
+   └── child-2 (status)
 ```
 
-The CLI uses recursive box-drawing:
+Implementation: `RunDiagnostics()` in `internal/pkg/cli/system.go`
+calls a recursive `printTree()` function that walks `DiagNode.children`
+and prints `type`/`label`/`status`/`attrs` at each level with proper
+`├──`/`└──`/`│` prefixes.
 
-```go
-func printTree(n *DiagNode, prefix string, isLast bool) {
-    branch := "├── "
-    if isLast { branch = "└──" }
+---
 
-    label := n.Label
-    if n.Status != "" {
-        label = fmt.Sprintf("%s (%s)", label, n.Status)
-    }
-    fmt.Printf("%s%s%s\n", prefix, branch, label)
+## 7. Future Extensions
 
-    for k, v := range n.Attrs {
-        // indented under the node
-    }
-
-    for i, child := range n.Children {
-        printTree(child, childPrefix, i == len(n.Children)-1)
-    }
-}
-```
-
-## Extensions
-
-### Future Node Types
-- `exec_command` — currently running exec inside a shell session
-  (already partially tracked via `lastCommand`)
-- `script` — only when actively executing
-- `mcp_client` — MCP-connected agent sessions
-- `feedback_session` — interactive input/confirm/choose in progress
-
-### Future Improvements
-- Add exec command history per session
-- Show plugin-to-plugin calls (not just client→plugin)
-- Add resource usage per plugin (CPU, memory from `/proc`)
-- Filter by tree type (`--daemon`, `--clients`, `--plugins`)
-- Watch mode (`dotfilesctl system diag --watch`)
-- JSON output (`--json`) for machine parsing
-- WebSocket live updates
-
-### Integration with daemon RPCs
-- `SystemService.Diagnostics` is a read-only admin RPC (no auth required)
-- MCP tools can call it and present the tree as structured data
-- Third-party tools can consume the `/dotfilesd.v1.SystemService/Diagnostics` HTTP endpoint
+- **Stale detection:** Show if a plugin's process is dead but not yet removed.
+- **CPU/memory:** Show resource usage per plugin process.
+- **Exec command history:** Show last N completed exec commands per session.
+- **Active MCP clients:** Track MCP bridge connections as client nodes.
+- **Plugin-to-plugin calls:** Show executor streams where a plugin is the caller.
+- **I/O rates:** Show bytes/second on active executor streams.
+- **Filter by type:** CLI flags to show only certain node types.
+- **Watch mode:** `dotfilesctl system diag --watch` to refresh every N seconds.
