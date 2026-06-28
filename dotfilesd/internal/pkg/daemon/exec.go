@@ -31,11 +31,22 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	execID := fmt.Sprintf("exec:%s_%d", req.Msg.Command, time.Now().UnixNano())
 	execStart := time.Now()
 
+	// Determine exec parent: check for _diag_parent in the incoming request's
+	// session variables (set by plugin SDK for plugin-to-plugin traceability).
+	// Fall back to "session:<id>". We read from req.Msg directly to avoid
+	// permanently mutating the stored session's variables.
+	execParent := "session:" + session.id
+	if sm := req.Msg.GetSession(); sm != nil {
+		if dp, ok := sm.GetVariables()["_diag_parent"]; ok && dp != "" {
+			execParent = dp
+		}
+	}
+
 	if s.diag != nil {
 		s.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventExecStart,
 			Resource:  execID,
-			Parent:    "session:" + session.id,
+			Parent:    execParent,
 			Timestamp: execStart,
 			Message:   req.Msg.Command,
 			Attrs:     map[string]string{"sudo": fmt.Sprintf("%t", req.Msg.Sudo)},
@@ -54,7 +65,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 			s.diag.PushEvent(diagnostics.Event{
 				Type:      diagnostics.EventExecStop,
 				Resource:  execID,
-				Parent:    "session:" + session.id,
+				Parent:    execParent,
 				Timestamp: time.Now(),
 				Message:   req.Msg.Command,
 				Attrs:     attrs,
@@ -134,6 +145,15 @@ func (s *execServer) ExecStream(
 	execID := fmt.Sprintf("exec:%s_%d", req.Msg.Command, time.Now().UnixNano())
 	execStart := time.Now()
 
+	// Determine exec parent: check _diag_parent in the incoming request's
+	// session variables (plugin-to-plugin traceability).
+	execParent := "session:" + session.id
+	if sm := req.Msg.GetSession(); sm != nil {
+		if dp, ok := sm.GetVariables()["_diag_parent"]; ok && dp != "" {
+			execParent = dp
+		}
+	}
+
 	pushStart := func() {
 		if s.diag == nil {
 			return
@@ -141,7 +161,7 @@ func (s *execServer) ExecStream(
 		s.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventExecStart,
 			Resource:  execID,
-			Parent:    "session:" + session.id,
+			Parent:    execParent,
 			Timestamp: execStart,
 			Message:   req.Msg.Command,
 			Attrs:     map[string]string{"sudo": fmt.Sprintf("%t", req.Msg.Sudo)},
@@ -155,7 +175,7 @@ func (s *execServer) ExecStream(
 		s.diag.PushEvent(diagnostics.Event{
 			Type:     diagnostics.EventExecStop,
 			Resource: execID,
-			Parent:   "session:" + session.id,
+			Parent:   execParent,
 			Timestamp: time.Now(),
 			Message:  req.Msg.Command,
 			Attrs: map[string]string{

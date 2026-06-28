@@ -110,9 +110,10 @@ func Serve(cfg Config) {
 	ctxWrappedMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientID := r.Header.Get("X-Client-ID")
 		ro := r.Header.Get("X-Dotfiles-Render-Output") == "true"
+		diagParent := r.Header.Get("X-Dotfiles-Diag-Parent")
 
 		var ctx Context = ctxClient
-		if clientID != "" || ro {
+		if clientID != "" || ro || diagParent != "" {
 			c := *ctxClient
 			if clientID != "" {
 				c.clientID = clientID
@@ -120,10 +121,26 @@ func Serve(cfg Config) {
 			if ro {
 				c.renderOutput = true
 			}
+			if diagParent != "" {
+				c.diagParent = diagParent
+			}
 			ctx = &c
 		}
 		r = r.WithContext(WithContext(r.Context(), ctx))
 		mux.ServeHTTP(w, r)
+	})
+
+	// Wrap DefaultTransport to propagate X-Dotfiles-Diag-Parent on outgoing
+	// Connect calls (plugin-to-plugin RPC). Reads the header from the request
+	// context's plugin Context, which is set by the incoming request middleware.
+	baseTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if pc := ExtractContext(r.Context()); pc != nil {
+			if dp := pc.DiagParent(); dp != "" {
+				r.Header.Set("X-Dotfiles-Diag-Parent", dp)
+			}
+		}
+		return baseTransport.RoundTrip(r)
 	})
 
 	// Listen on a random available port.
@@ -173,4 +190,11 @@ func Serve(cfg Config) {
 		<-sigCh
 	}
 	_ = srv.Shutdown(context.Background())
+}
+
+// roundTripperFunc is an http.RoundTripper that calls a function.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }

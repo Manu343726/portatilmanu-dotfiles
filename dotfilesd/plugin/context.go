@@ -31,6 +31,11 @@ type Context interface {
 	// in the RPC response message for programmatic consumption.
 	RenderOutput() bool
 
+	// DiagParent returns the diagnostic parent resource ID (set by the daemon
+	// executor for CLI-triggered calls). Empty string means no parent override.
+	// Plugins can propagate this to downstream calls for full traceability.
+	DiagParent() string
+
 	// WithRenderOutput returns a child Context that forwards the render
 	// preference to downstream plugin calls.
 	WithRenderOutput(bool) Context
@@ -86,6 +91,7 @@ type contextClient struct {
 	token, sessionID, pluginName string
 	renderOutput                 bool
 	clientID                     string
+	diagParent                   string // set by incoming request X-Dotfiles-Diag-Parent
 	log                          logging.Logger
 }
 
@@ -128,6 +134,8 @@ func newContextClient(url, token, sessionID, pluginName, clientID string) *conte
 
 func (c *contextClient) RenderOutput() bool { return c.renderOutput }
 
+func (c *contextClient) DiagParent() string { return c.diagParent }
+
 func (c *contextClient) WithRenderOutput(v bool) Context {
 	return &contextClient{
 		execClient:     c.execClient,
@@ -140,6 +148,7 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 		pluginName:     c.pluginName,
 		clientID:       c.clientID,
 		renderOutput:   v,
+		diagParent:     c.diagParent,
 		log:            c.log,
 	}
 }
@@ -147,7 +156,11 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 func (c *contextClient) Log() logging.Logger { return c.log }
 
 func (c *contextClient) buildSession() *dotfilesdv1.Session {
-	return &dotfilesdv1.Session{Id: c.sessionID}
+	s := &dotfilesdv1.Session{Id: c.sessionID}
+	if c.diagParent != "" {
+		s.Variables = map[string]string{"_diag_parent": c.diagParent}
+	}
+	return s
 }
 
 func (c *contextClient) setTokenHeader(req connect.AnyRequest) {

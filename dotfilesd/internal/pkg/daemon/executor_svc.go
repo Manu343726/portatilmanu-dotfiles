@@ -240,6 +240,10 @@ func (s *executorServer) CallPlugin(
 					"duration_ns": fmt.Sprintf("%d", dur.Nanoseconds()),
 				},
 			})
+			// Restore the plugin session's parent back to the plugin so
+			// background exec calls appear under the plugin node, not under
+			// a stale executor node.
+			s.daemon.diag.UpdateParent(pluginSessionID, "plugin:"+pluginName)
 		}
 	}()
 
@@ -275,6 +279,7 @@ func (s *executorServer) CallPlugin(
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("X-Dotfiles-Context-Token", s.daemon.pluginToken)
 		httpReq.Header.Set("X-Client-ID", clientID)
+		httpReq.Header.Set("X-Dotfiles-Diag-Parent", executorID)
 		if renderOutput {
 			httpReq.Header.Set("X-Dotfiles-Render-Output", "true")
 		}
