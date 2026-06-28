@@ -21,13 +21,13 @@ service IOService {
 }
 
 message StdinRequest {
-  string client_id = 1;  // client ID from the active CallPlugin stream
-  int32 max_bytes = 2;   // max bytes to return (0 = default 4096)
+  string client_id = 1; // client ID from the active CallPlugin stream
+  int32 max_bytes = 2; // max bytes to return (0 = default 4096)
 }
 
 message StdinResponse {
   bytes data = 1;
-  bool eof = 2;  // true when the stdin stream is closed
+  bool eof = 2; // true when the stdin stream is closed
 }
 
 // LogEntry represents a single log record from a plugin or tool.

@@ -38,5 +38,13 @@ func newSystemCmd() *cobra.Command {
 			return cli.RunSudoMethods(clients, sessionID)
 		},
 	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "diag",
+		Short: "diagnostic tree of daemon state",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.RunDiagnostics(clients, sessionID)
+		},
+	})
 	return cmd
 }

@@ -25,6 +25,20 @@ func newBackgroundTaskManager() *backgroundTaskManager {
 	return &backgroundTaskManager{tasks: make(map[string]*backgroundTask)}
 }
 
+// ListTasks returns a snapshot of all active background tasks.
+func (m *backgroundTaskManager) ListTasks() []*dotfilesdv1.BackgroundTaskNode {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	nodes := make([]*dotfilesdv1.BackgroundTaskNode, 0, len(m.tasks))
+	for _, t := range m.tasks {
+		nodes = append(nodes, &dotfilesdv1.BackgroundTaskNode{
+			Id:      t.id,
+			Command: t.cmd.String(),
+		})
+	}
+	return nodes
+}
+
 // start launches a command in the background and streams its output
 // on the bidi stream. The stream is owned by this task until the
 // command exits or the client cancels.

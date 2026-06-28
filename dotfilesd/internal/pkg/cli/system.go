@@ -59,3 +59,63 @@ func RunSudoMethods(clients *Clients, sessionID string) error {
 	fmt.Printf("available: %s\n", strings.Join(resp.Msg.AvailableMethods, ", "))
 	return nil
 }
+
+// RunDiagnostics queries the daemon for full diagnostic state and prints a tree.
+func RunDiagnostics(clients *Clients, sessionID string) error {
+	slog.Debug("diagnostics requested", "session_id", sessionID)
+	req := connect.NewRequest(&dotfilesdv1.DiagnosticsRequest{Session: sessionProto(sessionID)})
+	resp, err := clients.Sys.Diagnostics(context.Background(), req)
+	if err != nil {
+		slog.Error("diagnostics failed", "error", err)
+		return fmt.Errorf("diagnostics failed: %w", err)
+	}
+	d := resp.Msg
+
+	fmt.Printf("Daemon v%s (pid %d, up %ds)\n", d.Version, d.Pid, d.UptimeSecs)
+	fmt.Println()
+
+	// Sessions tree.
+	fmt.Printf("═══ Sessions (%d)\n", len(d.Sessions))
+	for _, s := range d.Sessions {
+		status := "active"
+		if s.Finalized {
+			status = "finalized"
+		}
+		fmt.Printf("  ├─ %s (%s)\n", s.Id, status)
+		if s.CallbackUrl != "" {
+			fmt.Printf("  │  callback: %s\n", s.CallbackUrl)
+		}
+		fmt.Printf("  │  created: %s\n", s.CreatedAt)
+	}
+	fmt.Println()
+
+	// Plugins tree.
+	fmt.Printf("═══ Plugins (%d)\n", len(d.Plugins))
+	for _, p := range d.Plugins {
+		fmt.Printf("  ├─ %s v%s (%s)\n", p.DisplayName, p.Version, p.Url)
+		for _, svc := range p.Services {
+			fmt.Printf("  │  service: %s\n", svc)
+		}
+	}
+	fmt.Println()
+
+	// Active executor streams.
+	if len(d.Executors) > 0 {
+		fmt.Printf("═══ Active executor streams (%d)\n", len(d.Executors))
+		for _, e := range d.Executors {
+			fmt.Printf("  ├─ %s → %s\n", e.ClientId, e.PluginName)
+		}
+		fmt.Println()
+	}
+
+	// Background tasks.
+	if len(d.BackgroundTasks) > 0 {
+		fmt.Printf("═══ Background tasks (%d)\n", len(d.BackgroundTasks))
+		for _, t := range d.BackgroundTasks {
+			fmt.Printf("  ├─ [%s] %s\n", t.Id, t.Command)
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
