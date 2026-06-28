@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"connectrpc.com/grpcreflect"
+	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -28,12 +30,17 @@ type MethodInfo struct {
 	ServiceName string                      // e.g. "weather.WeatherService"
 	MethodName  string                      // e.g. "Forecast"
 	InputMsg    protoreflect.MessageDescriptor
+	OutputMsg   protoreflect.MessageDescriptor
 }
 
 // ServiceInfo describes a discovered service and its methods.
 type ServiceInfo struct {
 	FullName string       // e.g. "weather.WeatherService"
 	Methods  []MethodInfo
+	// RawFdProtos holds serialized google.protobuf.FileDescriptorProto messages
+	// for this service and its dependencies. Clients can reconstruct
+	// protoreflect descriptors without direct grpcreflect access.
+	RawFdProtos [][]byte
 }
 
 // Client discovers services and invokes methods on a Connect RPC server
@@ -91,9 +98,22 @@ func (c *Client) DiscoverServices(ctx context.Context) ([]ServiceInfo, error) {
 				ServiceName: s,
 				MethodName:  string(md.Name()),
 				InputMsg:    md.Input(),
+				OutputMsg:   md.Output(),
 			})
 		}
-		svcInfos = append(svcInfos, ServiceInfo{FullName: s, Methods: methods})
+
+		// Serialize the raw FileDescriptorProtos for downstream caching.
+		var rawFds [][]byte
+		for _, fdp := range fdProtos {
+			b, err := proto.Marshal(fdp)
+			if err != nil {
+				slog.Debug("marshal FileDescriptorProto failed", "service", s, "error", err)
+				continue
+			}
+			rawFds = append(rawFds, b)
+		}
+
+		svcInfos = append(svcInfos, ServiceInfo{FullName: s, Methods: methods, RawFdProtos: rawFds})
 	}
 	return svcInfos, nil
 }
@@ -186,4 +206,235 @@ func findServiceDescriptor(fdProtos []*descriptorpb.FileDescriptorProto, svcFull
 		return nil, fmt.Errorf("symbol %q is not a service", svcFullName)
 	}
 	return svcDesc, nil
+}
+
+// BuildServiceInfoFromProtos reconstructs a ServiceInfo from serialized
+// FileDescriptorProto blobs. It deserializes the protos, finds the service
+// descriptor by name, extracts its methods, and returns a ServiceInfo with
+// live protoreflect.MessageDescriptor handles.
+//
+// This is the inverse of DiscoverServices — it lets clients reconstruct the
+// same ServiceInfo without making a live grpcreflect call.
+func BuildServiceInfoFromProtos(svcFullName string, rawFds [][]byte) (ServiceInfo, error) {
+	fdProtos := make([]*descriptorpb.FileDescriptorProto, 0, len(rawFds))
+	for _, raw := range rawFds {
+		var fdp descriptorpb.FileDescriptorProto
+		if err := proto.Unmarshal(raw, &fdp); err != nil {
+			return ServiceInfo{}, fmt.Errorf("unmarshal FileDescriptorProto: %w", err)
+		}
+		fdProtos = append(fdProtos, &fdp)
+	}
+
+	svcDesc, err := findServiceDescriptor(fdProtos, svcFullName)
+	if err != nil {
+		return ServiceInfo{}, fmt.Errorf("find service %q: %w", svcFullName, err)
+	}
+
+	var methods []MethodInfo
+	for i := 0; i < svcDesc.Methods().Len(); i++ {
+		md := svcDesc.Methods().Get(i)
+		methods = append(methods, MethodInfo{
+			ServiceName: svcFullName,
+			MethodName:  string(md.Name()),
+			InputMsg:    md.Input(),
+			OutputMsg:   md.Output(),
+		})
+	}
+
+	return ServiceInfo{
+		FullName:    svcFullName,
+		Methods:     methods,
+		RawFdProtos: rawFds,
+	}, nil
+}
+
+// BuildServiceInfosFromProtos reconstructs multiple ServiceInfos from a
+// flat set of serialized FileDescriptorProto blobs and a list of service
+// names. Use this when you have a plugin's full file_descriptor_set from
+// the registry and want to rebuild all service descriptors.
+func BuildServiceInfosFromProtos(svcNames []string, rawFds [][]byte) []ServiceInfo {
+	var infos []ServiceInfo
+	for _, svcName := range svcNames {
+		info, err := BuildServiceInfoFromProtos(svcName, rawFds)
+		if err != nil {
+			slog.Debug("BuildServiceInfoFromProtos failed", "service", svcName, "error", err)
+			continue
+		}
+		infos = append(infos, info)
+	}
+	return infos
+}
+
+// ─────────────────────────────────────────────
+// ServiceSchema builders (ServiceInfo → proto)
+// ─────────────────────────────────────────────
+
+// BuildServiceSchema converts a ServiceInfo (backed by live protoreflect
+// descriptors) into a *dotfilesdv1.ServiceSchema proto message. The schema
+// contains full recursive type metadata (messages, fields, enums) suitable
+// for CLI flag generation and MCP tool schema construction without further
+// grpcreflect calls.
+func BuildServiceSchema(svc *ServiceInfo) *dotfilesdv1.ServiceSchema {
+	schema := &dotfilesdv1.ServiceSchema{
+		Name:    svc.FullName,
+		Methods: make([]*dotfilesdv1.MethodSchema, 0, len(svc.Methods)),
+	}
+	visited := make(map[string]bool)
+	for _, m := range svc.Methods {
+		ms := &dotfilesdv1.MethodSchema{
+			Name:     m.MethodName,
+			Request:  buildMessageSchema(m.InputMsg, visited),
+			Response: buildMessageSchema(m.OutputMsg, visited),
+		}
+		schema.Methods = append(schema.Methods, ms)
+	}
+	return schema
+}
+
+// BuildServiceSchemas converts a slice of ServiceInfo into a slice of
+// *dotfilesdv1.ServiceSchema.
+func BuildServiceSchemas(svcs []ServiceInfo) []*dotfilesdv1.ServiceSchema {
+	out := make([]*dotfilesdv1.ServiceSchema, 0, len(svcs))
+	for i := range svcs {
+		out = append(out, BuildServiceSchema(&svcs[i]))
+	}
+	return out
+}
+
+// buildMessageSchema recursively converts a protoreflect.MessageDescriptor
+// into a *dotfilesdv1.MessageSchema, inlining nested messages and enums.
+// The visited map prevents infinite recursion on circular message references.
+func buildMessageSchema(md protoreflect.MessageDescriptor, visited map[string]bool) *dotfilesdv1.MessageSchema {
+	name := string(md.FullName())
+	if visited[name] {
+		return &dotfilesdv1.MessageSchema{Name: name}
+	}
+	visited[name] = true
+
+	schema := &dotfilesdv1.MessageSchema{
+		Name:     name,
+		Fields:   make([]*dotfilesdv1.FieldSchema, 0, md.Fields().Len()),
+		Enums:    make([]*dotfilesdv1.EnumSchema, 0),
+		Messages: make([]*dotfilesdv1.MessageSchema, 0),
+	}
+
+	// Nested enums.
+	for i := 0; i < md.Enums().Len(); i++ {
+		ed := md.Enums().Get(i)
+		vals := make([]*dotfilesdv1.EnumValue, ed.Values().Len())
+		for j := 0; j < ed.Values().Len(); j++ {
+			v := ed.Values().Get(j)
+			vals[j] = &dotfilesdv1.EnumValue{
+				Name:   string(v.Name()),
+				Number: int32(v.Number()),
+			}
+		}
+		schema.Enums = append(schema.Enums, &dotfilesdv1.EnumSchema{
+			Name:   string(ed.FullName()),
+			Values: vals,
+		})
+	}
+
+	// Nested messages (recursive).
+	for i := 0; i < md.Messages().Len(); i++ {
+		nested := md.Messages().Get(i)
+		schema.Messages = append(schema.Messages, buildMessageSchema(nested, visited))
+	}
+
+	// Fields.
+	fields := md.Fields()
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		fs := &dotfilesdv1.FieldSchema{
+			Name:        string(fd.Name()),
+			Kind:        kindToProto(fd.Kind()),
+			Label:       labelToProto(fd),
+			TypeName:    typeNameString(fd),
+		}
+		// Inline enum schema so clients have choices without cross-referencing.
+		if fd.Kind() == protoreflect.EnumKind {
+			ed := fd.Enum()
+			vals := make([]*dotfilesdv1.EnumValue, ed.Values().Len())
+			for j := 0; j < ed.Values().Len(); j++ {
+				v := ed.Values().Get(j)
+				vals[j] = &dotfilesdv1.EnumValue{
+					Name:   string(v.Name()),
+					Number: int32(v.Number()),
+				}
+			}
+			fs.EnumSchema = &dotfilesdv1.EnumSchema{
+				Name:   string(ed.FullName()),
+				Values: vals,
+			}
+		}
+		schema.Fields = append(schema.Fields, fs)
+	}
+
+	return schema
+}
+
+// kindToProto maps protoreflect.Kind → dotfilesdv1.FieldKind.
+func kindToProto(k protoreflect.Kind) dotfilesdv1.FieldKind {
+	switch k {
+	case protoreflect.DoubleKind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE
+	case protoreflect.FloatKind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_FLOAT
+	case protoreflect.Int64Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_INT64
+	case protoreflect.Uint64Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_UINT64
+	case protoreflect.Int32Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_INT32
+	case protoreflect.Fixed64Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_FIXED64
+	case protoreflect.Fixed32Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_FIXED32
+	case protoreflect.BoolKind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_BOOL
+	case protoreflect.StringKind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_STRING
+	case protoreflect.BytesKind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_BYTES
+	case protoreflect.Uint32Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_UINT32
+	case protoreflect.Sfixed32Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32
+	case protoreflect.Sfixed64Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64
+	case protoreflect.Sint32Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_SINT32
+	case protoreflect.Sint64Kind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_SINT64
+	case protoreflect.EnumKind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_ENUM
+	case protoreflect.MessageKind, protoreflect.GroupKind:
+		return dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE
+	default:
+		return dotfilesdv1.FieldKind_FIELD_KIND_UNKNOWN
+	}
+}
+
+// labelToProto maps a field descriptor's cardinality to FieldLabel.
+func labelToProto(fd protoreflect.FieldDescriptor) dotfilesdv1.FieldLabel {
+	if fd.IsList() || fd.IsMap() {
+		return dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED
+	}
+	if fd.HasOptionalKeyword() {
+		return dotfilesdv1.FieldLabel_FIELD_LABEL_OPTIONAL
+	}
+	return dotfilesdv1.FieldLabel_FIELD_LABEL_OPTIONAL
+}
+
+// typeNameString returns the fully-qualified type name for message/enum
+// fields, or empty string for scalar types.
+func typeNameString(fd protoreflect.FieldDescriptor) string {
+	switch fd.Kind() {
+	case protoreflect.MessageKind, protoreflect.GroupKind:
+		return string(fd.Message().FullName())
+	case protoreflect.EnumKind:
+		return string(fd.Enum().FullName())
+	default:
+		return ""
+	}
 }

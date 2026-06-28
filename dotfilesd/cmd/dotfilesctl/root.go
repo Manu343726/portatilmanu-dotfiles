@@ -46,6 +46,7 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 				Description: p.Description,
 				URL:         p.Url,
 				Services:    p.Services,
+				Schemas:     p.Schemas,
 			}
 			pluginCmd := cli.BuildPluginCommand(info)
 			pluginCmd.GroupID = "plugins"

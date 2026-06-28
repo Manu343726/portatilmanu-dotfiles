@@ -20,7 +20,6 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // sudoPromptHTML is the MCP Apps webview for sudo password entry.
@@ -168,92 +167,6 @@ var mcpTools = []toolDef{
 	},
 }
 
-// messageToToolSchema converts a protobuf message descriptor to a JSON Schema
-// (toolSchema). This mirrors the type mapping in protoflags.go's addFlagsFromMessageDesc
-// but outputs JSON Schema instead of cobra flags.
-func messageToToolSchema(md protoreflect.MessageDescriptor) toolSchema {
-	props := make(map[string]propSchema)
-	fields := md.Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		name := string(fd.Name())
-		desc := string(fd.FullName())
-		props[name] = fieldToPropSchema(fd, desc)
-	}
-	return toolSchema{Type: "object", Properties: props}
-}
-
-// fieldToPropSchema converts a single protobuf field to a JSON Schema property.
-func fieldToPropSchema(fd protoreflect.FieldDescriptor, desc string) propSchema {
-	switch {
-	case fd.IsMap():
-		mapValKind := fd.MapValue().Kind()
-		valSchema := scalarKindSchema(mapValKind, "map value")
-		return propSchema{
-			Type:        "object",
-			Description: desc + " (map)",
-			Properties:  nil, // maps are dynamic objects, no fixed properties
-			Items:       &valSchema,
-		}
-
-	case fd.IsList():
-		items := fieldToPropSchema(fd, desc+"[]")
-		return propSchema{
-			Type:        "array",
-			Description: desc + " (repeated)",
-			Items:       &items,
-		}
-
-	case fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind:
-		nested := fd.Message()
-		if nested != nil {
-			inner := messageToToolSchema(nested)
-			return propSchema{
-				Type:        "object",
-				Description: desc,
-				Properties:  inner.Properties,
-			}
-		}
-		return propSchema{Type: "string", Description: desc + " (unknown message)"}
-
-	default:
-		ps := scalarKindSchema(fd.Kind(), desc)
-		if fd.Kind() == protoreflect.EnumKind {
-			enumDesc := fd.Enum()
-			choices := make([]string, enumDesc.Values().Len())
-			for j := 0; j < enumDesc.Values().Len(); j++ {
-				choices[j] = string(enumDesc.Values().Get(j).Name())
-			}
-			ps.Enum = choices
-		}
-		return ps
-	}
-}
-
-// scalarKindSchema returns a propSchema for a scalar/primitive protobuf kind.
-func scalarKindSchema(kind protoreflect.Kind, desc string) propSchema {
-	ps := propSchema{Description: desc}
-	switch kind {
-	case protoreflect.StringKind:
-		ps.Type = "string"
-	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
-		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind,
-		protoreflect.Uint32Kind, protoreflect.Fixed32Kind,
-		protoreflect.Uint64Kind, protoreflect.Fixed64Kind,
-		protoreflect.FloatKind, protoreflect.DoubleKind:
-		ps.Type = "number"
-	case protoreflect.BoolKind:
-		ps.Type = "boolean"
-	case protoreflect.EnumKind:
-		ps.Type = "string"
-	case protoreflect.BytesKind:
-		ps.Type = "string"
-	default:
-		ps.Type = "string"
-	}
-	return ps
-}
-
 // pluginToolInfo stores metadata for dispatching a plugin RPC tool call.
 type pluginToolInfo struct {
 	PluginURL   string
@@ -279,7 +192,8 @@ func getPluginTools(clients *Clients) []toolDef {
 	if err := clients.Connect(context.Background()); err != nil {
 		return nil
 	}
-	// List plugins from registry.
+	// List plugins from registry — schemas are pre-populated by the daemon
+	// at plugin load time via grpcreflect.
 	req := connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{})
 	resp, err := clients.Registry.ListPlugins(context.Background(), req)
 	if err != nil {
@@ -296,14 +210,8 @@ func getPluginTools(clients *Clients) []toolDef {
 			pluginDesc = fmt.Sprintf("Plugin %q", p.Name)
 		}
 
-		// Discover services and methods via gRPC reflection.
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		svcInfos, err := rpcreflection.NewClient(p.Url).DiscoverServices(ctx)
-		cancel()
-
-		if err != nil {
-			slog.Debug("reflection failed for plugin, one tool fallback", "plugin", p.Name, "error", err)
-			// Fallback: single tool per plugin.
+		if len(p.Schemas) == 0 {
+			slog.Debug("no schemas for plugin, one tool fallback", "plugin", p.Name)
 			tool := toolDef{
 				Name:        p.Name,
 				Description: pluginDesc,
@@ -314,24 +222,20 @@ func getPluginTools(clients *Clients) []toolDef {
 			}
 			tools = append(tools, tool)
 			byName[p.Name] = pluginToolInfo{
-				PluginURL:   p.Url,
-				ToolDef:     tool,
+				PluginURL: p.Url,
+				ToolDef:   tool,
 			}
 			continue
 		}
 
-		for _, svc := range svcInfos {
-			if rpcreflection.IsSystemService(svc.FullName) || svc.FullName == "dotfilesd.v1.DocumentationService" {
+		for _, svcSchema := range p.Schemas {
+			if rpcreflection.IsSystemService(svcSchema.Name) || svcSchema.Name == "dotfilesd.v1.DocumentationService" {
 				continue
 			}
-			for _, m := range svc.Methods {
-				// Build the tool name: plugin_<plugin>_<method>.
-				toolName := fmt.Sprintf("%s_%s", p.Name, m.MethodName)
+			for _, methodSchema := range svcSchema.Methods {
+				toolName := fmt.Sprintf("%s_%s", p.Name, methodSchema.Name)
 
-				// Build JSON Schema from the input message descriptor.
-				schema := messageToToolSchema(m.InputMsg)
-				// Add MCP bridge meta-fields (consumed by dispatchPluginTool,
-				// not sent to the plugin).
+				schema := protoSchemaToToolSchema(methodSchema.Request)
 				if schema.Properties == nil {
 					schema.Properties = make(map[string]propSchema)
 				}
@@ -340,15 +244,15 @@ func getPluginTools(clients *Clients) []toolDef {
 
 				tool := toolDef{
 					Name:        toolName,
-					Description: fmt.Sprintf("[%s] %s.%s — %s", p.Name, shortSvcName(svc.FullName), m.MethodName, pluginDesc),
+					Description: fmt.Sprintf("[%s] %s.%s — %s", p.Name, shortSvcName(svcSchema.Name), methodSchema.Name, pluginDesc),
 					InputSchema: schema,
-					Meta:        mustMarshalMeta(map[string]string{"plugin": p.Name, "service": svc.FullName, "method": m.MethodName}),
+					Meta:        mustMarshalMeta(map[string]string{"plugin": p.Name, "service": svcSchema.Name, "method": methodSchema.Name}),
 				}
 				tools = append(tools, tool)
 				byName[toolName] = pluginToolInfo{
 					PluginURL:   p.Url,
-					ServiceName: svc.FullName,
-					MethodName:  m.MethodName,
+					ServiceName: svcSchema.Name,
+					MethodName:  methodSchema.Name,
 					ToolDef:     tool,
 				}
 			}
@@ -358,6 +262,112 @@ func getPluginTools(clients *Clients) []toolDef {
 	pluginTools = tools
 	pluginToolsByName = byName
 	return pluginTools
+}
+
+// protoSchemaToToolSchema converts a protobuf MessageSchema (from the registry)
+// to a JSON Schema tool schema for MCP tool definitions.
+func protoSchemaToToolSchema(msg *dotfilesdv1.MessageSchema) toolSchema {
+	props := make(map[string]propSchema)
+	for _, fs := range msg.Fields {
+		props[fs.Name] = protoFieldToPropSchema(fs, msg)
+	}
+	return toolSchema{Type: "object", Properties: props}
+}
+
+// protoFieldToPropSchema converts a single registry FieldSchema to a JSON Schema property.
+func protoFieldToPropSchema(fs *dotfilesdv1.FieldSchema, parentMsg *dotfilesdv1.MessageSchema) propSchema {
+	desc := fs.Name
+
+	// Handle repeated fields first.
+	if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED {
+		if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
+			nested := findNestedMessage(parentMsg, fs.TypeName)
+			if nested != nil {
+				inner := protoSchemaToToolSchema(nested)
+				return propSchema{
+					Type:        "array",
+					Description: desc + " (repeated)",
+					Items: &propSchema{
+						Type:        "object",
+						Description: fs.TypeName,
+						Properties:  inner.Properties,
+					},
+				}
+			}
+		}
+		items := protoKindToPropSchema(fs)
+		return propSchema{
+			Type:        "array",
+			Description: desc + " (repeated)",
+			Items:       &items,
+		}
+	}
+
+	// Handle message (object) fields.
+	if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
+		nested := findNestedMessage(parentMsg, fs.TypeName)
+		if nested != nil {
+			inner := protoSchemaToToolSchema(nested)
+			return propSchema{
+				Type:        "object",
+				Description: desc,
+				Properties:  inner.Properties,
+			}
+		}
+		return propSchema{Type: "string", Description: desc + " (unknown message)"}
+	}
+
+	// Handle scalar fields.
+	ps := protoKindToPropSchema(fs)
+	if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM && fs.EnumSchema != nil {
+		choices := make([]string, len(fs.EnumSchema.Values))
+		for i, ev := range fs.EnumSchema.Values {
+			choices[i] = ev.Name
+		}
+		ps.Enum = choices
+	}
+	return ps
+}
+
+// protoKindToPropSchema returns a propSchema for a scalar FieldKind.
+func protoKindToPropSchema(fs *dotfilesdv1.FieldSchema) propSchema {
+	ps := propSchema{Description: fs.Name}
+	switch fs.Kind {
+	case dotfilesdv1.FieldKind_FIELD_KIND_STRING, dotfilesdv1.FieldKind_FIELD_KIND_BYTES:
+		ps.Type = "string"
+	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT,
+		dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT32,
+		dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32, dotfilesdv1.FieldKind_FIELD_KIND_INT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_SINT64, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64,
+		dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED32,
+		dotfilesdv1.FieldKind_FIELD_KIND_UINT64, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64:
+		ps.Type = "number"
+	case dotfilesdv1.FieldKind_FIELD_KIND_BOOL:
+		ps.Type = "boolean"
+	case dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
+		ps.Type = "string"
+	default:
+		ps.Type = "string"
+	}
+	return ps
+}
+
+// findNestedMessage finds a nested MessageSchema by fully-qualified type name
+// within a parent MessageSchema's nested messages (recursive).
+func findNestedMessage(parent *dotfilesdv1.MessageSchema, typeName string) *dotfilesdv1.MessageSchema {
+	for _, nested := range parent.Messages {
+		if nested.Name == typeName {
+			return nested
+		}
+		if found := findNestedMessage(nested, typeName); found != nil {
+			return found
+		}
+	}
+	// Also check the parent itself (self-referential messages).
+	if parent.Name == typeName {
+		return parent
+	}
+	return nil
 }
 
 // mustMarshalMeta marshals m to JSON RawMessage, panicking on error (which

@@ -9,12 +9,12 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 // PluginRegistryService is exposed by the daemon so plugins can discover
 // and connect to each other's custom RPC services.
 //
-// This is a READ-ONLY service. Plugins use it to:
-// 1. Get the URL of another plugin by name
-// 2. Discover what services that plugin exposes
-// 3. Build type-safe Connect clients to call those services directly
-//
-// Administrative operations (reload, rebuild, kill) are NOT exposed here.
+// This is a READ-ONLY service. It serves as the single source of truth for
+// plugin metadata. The daemon populates the registry at plugin load time via
+// grpcreflect, extracting full type introspection data (service names,
+// methods, request/response message schemas with all fields, types, enums).
+// Clients (CLI, MCP bridge, plugins) read from the registry exclusively —
+// they never need to perform their own grpcreflect against plugin processes.
 service PluginRegistryService {
   // GetPlugin returns connection info for a named plugin.
   rpc GetPlugin(RegistryGetPluginRequest) returns (RegistryGetPluginResponse);
@@ -37,6 +37,9 @@ message RegistryGetPluginResponse {
   string url = 5;
   // Names of custom RPC services exposed by this plugin.
   repeated string services = 6;
+  // Full type introspection data for every service exposed by this plugin.
+  // Populated by the daemon at load time via grpcreflect.
+  repeated ServiceSchema schemas = 7;
 }
 
 message RegistryListPluginsRequest {
@@ -45,4 +48,98 @@ message RegistryListPluginsRequest {
 
 message RegistryListPluginsResponse {
   repeated RegistryGetPluginResponse plugins = 1;
+}
+
+// ─────────────────────────────────────────────
+// Type introspection messages
+// ─────────────────────────────────────────────
+
+// FieldKind mirrors protobuf field types.
+enum FieldKind {
+  FIELD_KIND_UNKNOWN = 0;
+  FIELD_KIND_DOUBLE = 1;
+  FIELD_KIND_FLOAT = 2;
+  FIELD_KIND_INT64 = 3;
+  FIELD_KIND_UINT64 = 4;
+  FIELD_KIND_INT32 = 5;
+  FIELD_KIND_FIXED64 = 6;
+  FIELD_KIND_FIXED32 = 7;
+  FIELD_KIND_BOOL = 8;
+  FIELD_KIND_STRING = 9;
+  FIELD_KIND_BYTES = 10;
+  FIELD_KIND_UINT32 = 11;
+  FIELD_KIND_SFIXED32 = 15;
+  FIELD_KIND_SFIXED64 = 16;
+  FIELD_KIND_SINT32 = 17;
+  FIELD_KIND_SINT64 = 18;
+  FIELD_KIND_ENUM = 13;
+  FIELD_KIND_MESSAGE = 14;
+}
+
+// FieldLabel indicates whether a field is optional, required, or repeated.
+enum FieldLabel {
+  FIELD_LABEL_OPTIONAL = 0;
+  FIELD_LABEL_REQUIRED = 1;
+  FIELD_LABEL_REPEATED = 2;
+}
+
+// FieldSchema describes a single field in a protobuf message.
+message FieldSchema {
+  string name = 1;               // field name (e.g. "location")
+  string description = 2;
+  FieldKind kind = 3;
+  FieldLabel label = 4;
+
+  // For message/enum kinds, the fully-qualified type name.
+  // e.g. "weather.Unit" or "weather.ForecastRequest".
+  // Clients can look up the full schema by correlating with MessageSchema/enum
+  // names in the enclosing ServiceSchema tree.
+  string type_name = 5;
+
+  // Inline enum schema when this field is of enum kind.
+  // This saves clients from having to cross-reference a separate type registry.
+  EnumSchema enum_schema = 6;
+}
+
+// EnumValue describes a single enum value.
+message EnumValue {
+  string name = 1;
+  int32 number = 2;
+}
+
+// EnumSchema describes a protobuf enum type.
+message EnumSchema {
+  string name = 1;       // fully-qualified enum name (e.g. "weather.Unit")
+  string description = 2;
+  repeated EnumValue values = 3;
+}
+
+// MessageSchema describes a protobuf message type, with full recursive
+// field metadata. Nested messages and enums are inlined so clients have
+// everything they need without additional lookups.
+message MessageSchema {
+  string name = 1;               // fully-qualified message name (e.g. "weather.ForecastRequest")
+  string description = 2;
+  repeated FieldSchema fields = 3;
+  repeated EnumSchema enums = 4;     // nested enums defined inside this message
+  repeated MessageSchema messages = 5; // nested messages defined inside this message
+}
+
+// MethodSchema describes an RPC method with full request/response schemas.
+message MethodSchema {
+  string name = 1;           // method name (e.g. "Forecast")
+  string description = 2;
+  // Full schema of the request message.
+  MessageSchema request = 3;
+  // Full schema of the response message.
+  MessageSchema response = 4;
+}
+
+// ServiceSchema describes a service — the full introspection result for one
+// service exposed by a plugin.
+message ServiceSchema {
+  // Fully-qualified service name (e.g. "weather.WeatherService").
+  string name = 1;
+  string description = 2;
+  repeated MethodSchema methods = 3;
 }

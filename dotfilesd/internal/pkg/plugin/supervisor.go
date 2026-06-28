@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"net/http"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
 
-	"connectrpc.com/grpcreflect"
+	"dotfilesd/internal/pkg/rpcreflection"
 )
 
 // supervisor manages a single plugin process with crash detection and
@@ -101,25 +100,25 @@ func (s *supervisor) launch(ctx context.Context) (*PluginInfo, error) {
 	}
 	slog.Info("plugin handshake complete", "name", s.name, "url", hs.URL)
 
-	// Step e: grpcreflect discovery — ListServices.
-	httpClient := &http.Client{}
-	refClient := grpcreflect.NewClient(httpClient, hs.URL)
-	stream := refClient.NewStream(ctx)
-	svcNames, listErr := stream.ListServices()
-	stream.Close()
-	if listErr != nil {
+	// Step e: grpcreflect discovery via rpcreflection.
+	refClient := rpcreflection.NewClient(hs.URL)
+	svcInfos, discErr := refClient.DiscoverServices(ctx)
+	if discErr != nil {
 		procCmd.Process.Kill()
-		return nil, fmt.Errorf("grpcreflect ListServices: %w", listErr)
+		return nil, fmt.Errorf("grpcreflect discovery: %w", discErr)
 	}
 
 	var services []string
-	for _, svc := range svcNames {
-		s := string(svc)
-		if s == "grpc.reflection.v1.ServerReflection" || s == "grpc.reflection.v1alpha.ServerReflection" {
+	var nonSystemInfos []rpcreflection.ServiceInfo
+	for _, si := range svcInfos {
+		if rpcreflection.IsSystemService(si.FullName) {
 			continue
 		}
-		services = append(services, s)
+		services = append(services, si.FullName)
+		nonSystemInfos = append(nonSystemInfos, si)
 	}
+
+	schemas := rpcreflection.BuildServiceSchemas(nonSystemInfos)
 
 	// Build PluginInfo without Process field (set in start()).
 	displayName := hs.DisplayName
@@ -136,6 +135,7 @@ func (s *supervisor) launch(ctx context.Context) (*PluginInfo, error) {
 		Description: hs.Description,
 		URL:         hs.URL,
 		Services:    services,
+		Schemas:     schemas,
 		Process:     procCmd.Process,
 		SourceDir:   s.sourceDir,
 		CacheDir:    s.cacheDir,

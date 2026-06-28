@@ -5,20 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
-	"dotfilesd/internal/pkg/rpcreflection"
+	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // BuildPluginCommand creates a cobra command for a plugin, generating
-// subcommands and typed flags dynamically from the plugin's proto schema
-// via grpcreflect over HTTP. If the plugin is unreachable, falls back
-// to a static info-only command.
+// subcommands and typed flags dynamically from the plugin's proto schemas
+// (pre-populated by the daemon in PluginRegistryService). If no schemas
+// are available, falls back to a static info-only command.
 func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 	name := p.Name
 	disp := p.DisplayName
@@ -34,83 +35,73 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 		RunE:    func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 	}
 
-	// Add persistent --json flag for all plugin commands. When set, the
-	// plugin receives X-Dotfiles-Render-Output: false so it returns raw
-	// structured data instead of human-readable formatted output.
+	// Add persistent --json flag for all plugin commands.
 	pluginCmd.PersistentFlags().Bool("json", false, "output raw JSON instead of human-readable formatted output")
 
-	// Try to discover services via HTTP-based grpcreflect.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	refClient := rpcreflection.NewClient(p.URL)
-	svcInfos, err := refClient.DiscoverServices(ctx)
-	if err != nil {
-		slog.Debug("reflection failed for plugin, using static info", "plugin", name, "error", err)
-		return buildStaticPluginCommand(p)
-	}
-
-	if len(svcInfos) == 0 {
+	// Use schemas from the registry — already populated by the daemon at
+	// plugin load time via grpcreflect. No direct reflection needed.
+	if len(p.Schemas) == 0 {
+		slog.Debug("no schemas for plugin, using static info", "plugin", name)
 		return buildStaticPluginCommand(p)
 	}
 
 	// Count non-system services for elision decisions.
 	var nonSystemCount int
-	for _, svc := range svcInfos {
-		if !rpcreflection.IsSystemService(svc.FullName) && svc.FullName != "dotfilesd.v1.DocumentationService" {
+	for _, svc := range p.Schemas {
+		if !isSystemService(svc.Name) && svc.Name != "dotfilesd.v1.DocumentationService" {
 			nonSystemCount++
 		}
 	}
 	elideSvc := nonSystemCount == 1
 
-	for _, svc := range svcInfos {
-		if rpcreflection.IsSystemService(svc.FullName) || svc.FullName == "dotfilesd.v1.DocumentationService" {
+	for _, svc := range p.Schemas {
+		if isSystemService(svc.Name) || svc.Name == "dotfilesd.v1.DocumentationService" {
 			continue
 		}
 
-		// Elide the RPC subcommand when the service has exactly one method
-		// (single-RPC promotion per spec §5a: Cobra Flag Generation Rules).
 		elideRPC := len(svc.Methods) == 1
 
 		svcCmd := pluginCmd
 		if !elideSvc {
-			shortName := shortSvcName(svc.FullName)
+			shortName := shortSvcName(svc.Name)
 			svcCmd = &cobra.Command{
 				Use:   shortName,
-				Short: svc.FullName,
+				Short: svc.Name,
 				RunE:  func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 			}
 			pluginCmd.AddCommand(svcCmd)
 		}
 
 		for _, m := range svc.Methods {
-			runE := makeRunEProto(p.URL, m)
-			shortDesc := fmt.Sprintf("%s.%s", shortSvcName(svc.FullName), m.MethodName)
+			runE := makeRunEProtoFromSchema(p.URL, svc.Name, m)
+			shortDesc := fmt.Sprintf("%s.%s", shortSvcName(svc.Name), m.Name)
 
 			if elideRPC {
-				// Promote single method: add flags directly to the parent command
-				// and set its RunE to invoke the RPC.
-				addFlagsFromMessageDesc(svcCmd, m.InputMsg, "")
+				addFlagsFromSchema(svcCmd, m.Request, "")
 				svcCmd.RunE = runE
 				if !elideSvc {
-					// Only update the service command's metadata when it's a
-					// dedicated service subcommand (not the plugin root).
 					svcCmd.Use = fmt.Sprintf("%s [flags]", svcCmd.Use)
 					svcCmd.Short = shortDesc
 				}
 			} else {
 				rpcCmd := &cobra.Command{
-					Use:   camelToKebab(m.MethodName),
+					Use:   camelToKebab(m.Name),
 					Short: shortDesc,
 					RunE:  runE,
 				}
-				addFlagsFromMessageDesc(rpcCmd, m.InputMsg, "")
+				addFlagsFromSchema(rpcCmd, m.Request, "")
 				svcCmd.AddCommand(rpcCmd)
 			}
 		}
 	}
 
 	return pluginCmd
+}
+
+// isSystemService returns true if the name is a gRPC reflection service.
+func isSystemService(name string) bool {
+	return name == "grpc.reflection.v1.ServerReflection" ||
+		name == "grpc.reflection.v1alpha.ServerReflection"
 }
 
 // PluginRegistryInfo holds plugin info from the registry response.
@@ -121,6 +112,10 @@ type PluginRegistryInfo struct {
 	Description string
 	URL         string
 	Services    []string
+	// Schemas holds full introspection data (methods, fields, types, enums)
+	// pre-populated by the daemon at plugin load time. Clients use these
+	// instead of performing their own grpcreflect.
+	Schemas []*dotfilesdv1.ServiceSchema
 }
 
 // buildStaticPluginCommand creates a simple info-only command (fallback).
@@ -146,112 +141,154 @@ func buildStaticPluginCommand(p PluginRegistryInfo) *cobra.Command {
 	return cmd
 }
 
-// addFlagsFromMessageDesc recursively adds cobra flags from a
-// protoreflect.MessageDescriptor.
-func addFlagsFromMessageDesc(cmd *cobra.Command, msg protoreflect.MessageDescriptor, prefix string) {
-	fields := msg.Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		flagName := camelToKebab(prefix + string(fd.Name()))
-		fullDesc := string(fd.FullName())
+// ─────────────────────────────────────────────
+// Schema-based cobra flag generation
+// ─────────────────────────────────────────────
 
-		switch {
-		case fd.IsMap():
-			mapValKind := fd.MapValue().Kind()
-			cmd.Flags().StringSlice(flagName, nil,
-				fmt.Sprintf("Map (string → %s). Use --%s.<key>=<value>", mapValKind, flagName))
+// addFlagsFromSchema recursively adds cobra flags from a registry MessageSchema.
+func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, prefix string) {
+	for _, fs := range msg.Fields {
+		flagName := camelToKebab(prefix + fs.Name)
+		desc := fs.Name
 
-		case fd.IsList():
-			switch fd.Kind() {
-			case protoreflect.StringKind:
-				cmd.Flags().StringSlice(flagName, nil, fullDesc+" (repeated)")
-			case protoreflect.Int32Kind, protoreflect.Int64Kind,
-				protoreflect.Sint32Kind, protoreflect.Sint64Kind,
-				protoreflect.Uint32Kind, protoreflect.Uint64Kind,
-				protoreflect.Fixed32Kind, protoreflect.Fixed64Kind,
-				protoreflect.Sfixed32Kind, protoreflect.Sfixed64Kind:
-				cmd.Flags().Int64Slice(flagName, nil, fullDesc+" (repeated ints)")
-			case protoreflect.FloatKind, protoreflect.DoubleKind:
-				cmd.Flags().Float64Slice(flagName, nil, fullDesc+" (repeated floats)")
-			default:
-				cmd.Flags().StringSlice(flagName, nil, fullDesc+" (repeated)")
-			}
+		switch fs.Label {
+		case dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED:
+			addRepeatedFlag(cmd, flagName, fs, desc)
 
 		default:
-			switch fd.Kind() {
-			case protoreflect.StringKind:
-				cmd.Flags().String(flagName, "", fullDesc)
-			case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-				cmd.Flags().Int32(flagName, 0, fullDesc)
-			case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-				cmd.Flags().Int64(flagName, 0, fullDesc)
-			case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-				cmd.Flags().Uint32(flagName, 0, fullDesc)
-			case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-				cmd.Flags().Uint64(flagName, 0, fullDesc)
-			case protoreflect.FloatKind, protoreflect.DoubleKind:
-				cmd.Flags().Float64(flagName, 0, fullDesc)
-			case protoreflect.BoolKind:
-				cmd.Flags().Bool(flagName, false, fullDesc)
-			case protoreflect.EnumKind:
-				enumDesc := fd.Enum()
-				choices := make([]string, enumDesc.Values().Len())
-				for j := 0; j < enumDesc.Values().Len(); j++ {
-					choices[j] = string(enumDesc.Values().Get(j).Name())
-				}
-				defVal := ""
-				if len(choices) > 0 {
-					defVal = choices[0]
-				}
-				cmd.Flags().String(flagName, defVal, fullDesc)
-				name := flagName
-				cmd.RegisterFlagCompletionFunc(name, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-					return choices, cobra.ShellCompDirectiveDefault
-				})
-			case protoreflect.MessageKind, protoreflect.GroupKind:
-				nested := fd.Message()
-				if nested != nil {
-					addFlagsFromMessageDesc(cmd, nested, flagName+".")
-				}
-			default:
-				cmd.Flags().String(flagName, "", fullDesc+" (unknown type)")
-			}
+			addScalarFlag(cmd, flagName, fs, desc, msg)
 		}
 	}
 }
 
-// makeRunEProto returns the RunE function that builds a JSON body from
-// cobra flags and invokes the RPC via the rpcreflection client.
-func makeRunEProto(pluginURL string, m rpcreflection.MethodInfo) func(*cobra.Command, []string) error {
-	refClient := rpcreflection.NewClient(pluginURL)
+// addScalarFlag registers a single cobra flag from a FieldSchema.
+func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string, parentMsg *dotfilesdv1.MessageSchema) {
+	fullDesc := desc
+	if fs.TypeName != "" {
+		fullDesc = desc + " (" + fs.TypeName + ")"
+	}
+
+	switch fs.Kind {
+	case dotfilesdv1.FieldKind_FIELD_KIND_STRING, dotfilesdv1.FieldKind_FIELD_KIND_BYTES:
+		cmd.Flags().String(flagName, "", fullDesc)
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT32, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32:
+		cmd.Flags().Int32(flagName, 0, fullDesc)
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT64, dotfilesdv1.FieldKind_FIELD_KIND_SINT64, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64:
+		cmd.Flags().Int64(flagName, 0, fullDesc)
+	case dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED32:
+		cmd.Flags().Uint32(flagName, 0, fullDesc)
+	case dotfilesdv1.FieldKind_FIELD_KIND_UINT64, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64:
+		cmd.Flags().Uint64(flagName, 0, fullDesc)
+	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT:
+		cmd.Flags().Float64(flagName, 0, fullDesc)
+	case dotfilesdv1.FieldKind_FIELD_KIND_BOOL:
+		cmd.Flags().Bool(flagName, false, fullDesc)
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
+		if fs.EnumSchema != nil {
+			choices := make([]string, len(fs.EnumSchema.Values))
+			for i, ev := range fs.EnumSchema.Values {
+				choices[i] = ev.Name
+			}
+			defVal := ""
+			if len(choices) > 0 {
+				defVal = choices[0]
+			}
+			cmd.Flags().String(flagName, defVal, fullDesc)
+			name := flagName
+			cmd.RegisterFlagCompletionFunc(name, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+				return choices, cobra.ShellCompDirectiveDefault
+			})
+		} else {
+			cmd.Flags().String(flagName, "", fullDesc)
+		}
+
+	case dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE:
+		nested := findNestedMessageInSchema(parentMsg, fs.TypeName)
+		if nested != nil {
+			addFlagsFromSchema(cmd, nested, flagName+".")
+		} else {
+			cmd.Flags().String(flagName, "", fullDesc+" (unknown message)")
+		}
+
+	default:
+		cmd.Flags().String(flagName, "", fullDesc+" (unknown type)")
+	}
+}
+
+// addRepeatedFlag registers a repeated cobra flag from a FieldSchema.
+func addRepeatedFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string) {
+	switch fs.Kind {
+	case dotfilesdv1.FieldKind_FIELD_KIND_STRING:
+		cmd.Flags().StringSlice(flagName, nil, desc+" (repeated)")
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_INT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_SINT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_UINT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_FIXED32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64,
+		dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64:
+		cmd.Flags().Int64Slice(flagName, nil, desc+" (repeated ints)")
+	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT:
+		cmd.Flags().Float64Slice(flagName, nil, desc+" (repeated floats)")
+	default:
+		cmd.Flags().StringSlice(flagName, nil, desc+" (repeated)")
+	}
+}
+
+// ─────────────────────────────────────────────
+// Schema-based JSON body builder (RunE)
+// ─────────────────────────────────────────────
+
+// makeRunEProtoFromSchema returns the RunE function that builds a JSON body
+// from cobra flags using registry MethodSchema and invokes the RPC.
+func makeRunEProtoFromSchema(pluginURL, svcName string, m *dotfilesdv1.MethodSchema) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		body := buildJSONFromMessage(cmd, m.InputMsg, "")
+		body := buildJSONFromSchema(cmd, m.Request, "")
 		jsonBytes, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("marshal request: %w", err)
 		}
 
 		// Build headers: CLI defaults to RenderOutput=true (human-readable).
-		// User can pass --json to request raw JSON data.
 		headers := map[string]string{
 			"X-Dotfiles-Render-Output": "true",
 		}
 		if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
 			headers["X-Dotfiles-Render-Output"] = "false"
 		}
-		// Also detect --format=json in the request body (per spec §3).
 		if format, ok := body["format"]; ok {
 			if s, ok := format.(string); ok && s == "json" {
 				headers["X-Dotfiles-Render-Output"] = "false"
 			}
 		}
 
+		// Build the RPC URL: {baseURL}/{svcName}/{methodName}
+		rpcURL := fmt.Sprintf("%s/%s/%s", pluginURL, svcName, m.Name)
+
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		respBody, err := refClient.CallJSONWithHeaders(ctx, m, jsonBytes, headers)
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", rpcURL, bytes.NewReader(jsonBytes))
 		if err != nil {
-			return err
+			return fmt.Errorf("create request: %w", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		for k, v := range headers {
+			httpReq.Header.Set(k, v)
+		}
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			return fmt.Errorf("rpc call: %w", err)
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read response: %w", err)
+		}
+		if resp.StatusCode >= 400 {
+			return fmt.Errorf("RPC failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 		}
 
 		var pretty bytes.Buffer
@@ -264,74 +301,65 @@ func makeRunEProto(pluginURL string, m rpcreflection.MethodInfo) func(*cobra.Com
 	}
 }
 
-// buildJSONFromMessage recursively builds a JSON-compatible map from
-// cobra flags, driven by a protoreflect.MessageDescriptor.
-func buildJSONFromMessage(cmd *cobra.Command, msg protoreflect.MessageDescriptor, prefix string) map[string]any {
+// buildJSONFromSchema recursively builds a JSON-compatible map from cobra flags,
+// driven by a registry MessageSchema.
+func buildJSONFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, prefix string) map[string]any {
 	result := make(map[string]any)
-	fields := msg.Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		flagName := camelToKebab(prefix + string(fd.Name()))
+	for _, fs := range msg.Fields {
+		flagName := camelToKebab(prefix + fs.Name)
 		if !cmd.Flags().Changed(flagName) {
 			continue
 		}
 
-		protoName := string(fd.Name())
+		fieldName := fs.Name
 
-		if fd.IsMap() {
-			vals, _ := cmd.Flags().GetStringSlice(flagName)
-			m := make(map[string]any)
-			for _, entry := range vals {
-				if eq := strings.Index(entry, "="); eq >= 0 {
-					m[entry[:eq]] = parseMapValueKind(entry[eq+1:], fd.MapValue().Kind())
-				}
-			}
-			result[protoName] = m
+		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
+			// Repeated message: not directly supported via flags — skip.
 			continue
 		}
 
-		if fd.IsList() {
-			result[protoName] = buildRepeatedValueKind(cmd, flagName, fd)
+		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED {
+			result[fieldName] = buildRepeatedFromSchema(cmd, flagName, fs)
 			continue
 		}
 
-		result[protoName] = buildScalarValueKind(cmd, flagName, fd)
+		result[fieldName] = buildScalarFromSchema(cmd, flagName, fs, msg)
 	}
 	return result
 }
 
-// buildScalarValueKind extracts a single flag value from cobra flags,
-// typed according to the field's protoreflect.Kind.
-func buildScalarValueKind(cmd *cobra.Command, flagName string, fd protoreflect.FieldDescriptor) any {
-	switch fd.Kind() {
-	case protoreflect.StringKind:
+// buildScalarFromSchema extracts a single flag value from cobra flags,
+// typed according to the field's FieldKind.
+func buildScalarFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, parentMsg *dotfilesdv1.MessageSchema) any {
+	switch fs.Kind {
+	case dotfilesdv1.FieldKind_FIELD_KIND_STRING, dotfilesdv1.FieldKind_FIELD_KIND_BYTES:
 		v, _ := cmd.Flags().GetString(flagName)
 		return v
-	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT32, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32:
 		v, _ := cmd.Flags().GetInt32(flagName)
 		return v
-	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT64, dotfilesdv1.FieldKind_FIELD_KIND_SINT64, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64:
 		v, _ := cmd.Flags().GetInt64(flagName)
 		return v
-	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED32:
 		v, _ := cmd.Flags().GetUint32(flagName)
 		return v
-	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_UINT64, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64:
 		v, _ := cmd.Flags().GetUint64(flagName)
 		return v
-	case protoreflect.FloatKind, protoreflect.DoubleKind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT:
 		v, _ := cmd.Flags().GetFloat64(flagName)
 		return v
-	case protoreflect.BoolKind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_BOOL:
 		v, _ := cmd.Flags().GetBool(flagName)
 		return v
-	case protoreflect.EnumKind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
 		v, _ := cmd.Flags().GetString(flagName)
 		return v
-	case protoreflect.MessageKind, protoreflect.GroupKind:
-		nested := fd.Message()
+	case dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE:
+		nested := findNestedMessageInSchema(parentMsg, fs.TypeName)
 		if nested != nil {
-			return buildJSONFromMessage(cmd, nested, flagName+".")
+			return buildJSONFromSchema(cmd, nested, flagName+".")
 		}
 		return nil
 	default:
@@ -339,20 +367,20 @@ func buildScalarValueKind(cmd *cobra.Command, flagName string, fd protoreflect.F
 	}
 }
 
-// buildRepeatedValueKind extracts a repeated flag value from cobra flags.
-func buildRepeatedValueKind(cmd *cobra.Command, flagName string, fd protoreflect.FieldDescriptor) any {
-	switch fd.Kind() {
-	case protoreflect.StringKind:
+// buildRepeatedFromSchema extracts a repeated flag value from cobra flags.
+func buildRepeatedFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema) any {
+	switch fs.Kind {
+	case dotfilesdv1.FieldKind_FIELD_KIND_STRING:
 		v, _ := cmd.Flags().GetStringSlice(flagName)
 		return v
-	case protoreflect.Int32Kind, protoreflect.Int64Kind,
-		protoreflect.Sint32Kind, protoreflect.Sint64Kind,
-		protoreflect.Uint32Kind, protoreflect.Uint64Kind,
-		protoreflect.Fixed32Kind, protoreflect.Fixed64Kind,
-		protoreflect.Sfixed32Kind, protoreflect.Sfixed64Kind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_INT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_SINT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_UINT64,
+		dotfilesdv1.FieldKind_FIELD_KIND_FIXED32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64,
+		dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64:
 		v, _ := cmd.Flags().GetInt64Slice(flagName)
 		return v
-	case protoreflect.FloatKind, protoreflect.DoubleKind:
+	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT:
 		v, _ := cmd.Flags().GetFloat64Slice(flagName)
 		return v
 	default:
@@ -361,24 +389,30 @@ func buildRepeatedValueKind(cmd *cobra.Command, flagName string, fd protoreflect
 	}
 }
 
-// parseMapValueKind parses a map value string according to the protoreflect.Kind.
-func parseMapValueKind(val string, kind protoreflect.Kind) any {
-	switch kind {
-	case protoreflect.Int32Kind, protoreflect.Int64Kind,
-		protoreflect.Uint32Kind, protoreflect.Uint64Kind:
-		var v int64
-		fmt.Sscanf(val, "%d", &v)
-		return v
-	case protoreflect.FloatKind, protoreflect.DoubleKind:
-		var v float64
-		fmt.Sscanf(val, "%f", &v)
-		return v
-	case protoreflect.BoolKind:
-		return val == "true" || val == "1"
-	default:
-		return val
+// ─────────────────────────────────────────────
+// Schema navigation helpers
+// ─────────────────────────────────────────────
+
+// findNestedMessageInSchema finds a nested MessageSchema by fully-qualified
+// type name, searching recursively through nested messages.
+func findNestedMessageInSchema(parent *dotfilesdv1.MessageSchema, typeName string) *dotfilesdv1.MessageSchema {
+	if parent.Name == typeName {
+		return parent
 	}
+	for _, nested := range parent.Messages {
+		if nested.Name == typeName {
+			return nested
+		}
+		if found := findNestedMessageInSchema(nested, typeName); found != nil {
+			return found
+		}
+	}
+	return nil
 }
+
+// ─────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────
 
 // shortSvcName returns a short name from a fully-qualified service name.
 func shortSvcName(fullName string) string {

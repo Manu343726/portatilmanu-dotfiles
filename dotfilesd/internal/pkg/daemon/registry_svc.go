@@ -42,6 +42,7 @@ func (s *registryServer) GetPlugin(
 		Description: info.Description,
 		Url:         info.URL,
 		Services:    info.Services,
+		Schemas:     info.Schemas,
 	})
 	slog.Log(ctx, levelTrace, "Registry.GetPlugin done", "plugin", req.Msg.PluginName, "url", info.URL)
 	return resp, nil
@@ -68,6 +69,7 @@ func (s *registryServer) ListPlugins(
 			Description: info.Description,
 			Url:         info.URL,
 			Services:    info.Services,
+			Schemas:     info.Schemas,
 		})
 	}
 

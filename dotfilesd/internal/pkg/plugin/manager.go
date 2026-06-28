@@ -15,9 +15,10 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
-	"connectrpc.com/grpcreflect"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+
+	"dotfilesd/internal/pkg/rpcreflection"
 )
 
 // PluginInfo holds metadata for a loaded plugin.
@@ -36,6 +37,11 @@ type PluginInfo struct {
 	// DocumentationService. Key is the service name ("" for plugin-level docs),
 	// value is the markdown content. Populated best-effort at load time.
 	DocsCache map[string]string
+
+	// Schemas holds full introspection data (methods, fields, types, enums)
+	// extracted via grpcreflect at load time. Clients (CLI, MCP, plugins)
+	// read this from the registry — they never need direct grpcreflect.
+	Schemas []*dotfilesdv1.ServiceSchema
 }
 
 // Manager orchestrates plugin lifecycle with dependency-aware builds
@@ -170,29 +176,31 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 		}
 		slog.Info("plugin launched", "name", name, "url", hs.URL, "pid", procCmd.Process.Pid)
 
-		// Step e: grpcreflect discovery — ListServices.
-		httpClient := &http.Client{}
-		refClient := grpcreflect.NewClient(httpClient, hs.URL)
-		stream := refClient.NewStream(ctx)
-		svcNames, listErr := stream.ListServices()
-		stream.Close()
-		if listErr != nil {
+		// Step e: grpcreflect discovery via rpcreflection — get full method/type metadata.
+		refClient := rpcreflection.NewClient(hs.URL)
+		svcInfos, discErr := refClient.DiscoverServices(ctx)
+		if discErr != nil {
 			procCmd.Process.Kill()
-			slog.Error("grpcreflect ListServices failed", "name", name, "error", listErr)
+			slog.Error("grpcreflect discovery failed", "name", name, "error", discErr)
 			continue
 		}
 
-		// Convert []protoreflect.FullName to []string and filter out reflection services.
+		// Extract service names (filtering out reflection services).
 		var services []string
-		for _, s := range svcNames {
-			s := string(s)
-			if s == "grpc.reflection.v1.ServerReflection" || s == "grpc.reflection.v1alpha.ServerReflection" {
+		var nonSystemInfos []rpcreflection.ServiceInfo
+		for _, si := range svcInfos {
+			if rpcreflection.IsSystemService(si.FullName) {
 				continue
 			}
-			services = append(services, s)
+			services = append(services, si.FullName)
+			nonSystemInfos = append(nonSystemInfos, si)
 		}
 
+		// Build full type introspection schemas for CLI/MCP clients.
+		schemas := rpcreflection.BuildServiceSchemas(nonSystemInfos)
+
 		// Step f: If DocumentationService is exposed, call it (best-effort).
+		httpClient := &http.Client{}
 		docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
 
 		// Step g: Store PluginInfo + start supervisor.
@@ -211,6 +219,7 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 			URL:         hs.URL,
 			Services:    services,
 			DocsCache:   docsCache,
+			Schemas:     schemas,
 			Process:     procCmd.Process,
 			SourceDir:   sourceDir,
 			CacheDir:    cacheDir,
