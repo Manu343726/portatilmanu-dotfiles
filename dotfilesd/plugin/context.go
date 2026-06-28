@@ -41,6 +41,19 @@ type Context interface {
 	// preference to downstream plugin calls.
 	WithRenderOutput(bool) Context
 
+	// Colored output helpers for plugin stdout. They honour NO_COLOR and
+	// terminal detection automatically.
+	ColorStdout() io.Writer                      // stdout with bold, green, red etc.
+	Greenf(format string, a ...any) string       // green formatted text
+	Redf(format string, a ...any) string         // red formatted text
+	Bluef(format string, a ...any) string        // blue formatted text
+	Orangef(format string, a ...any) string      // orange formatted text
+	Yellowf(format string, a ...any) string      // yellow formatted text
+	Dimf(format string, a ...any) string         // dim/grey formatted text
+	Boldf(format string, a ...any) string        // bold formatted text
+	Styled(s, style string) string               // wrap text in arbitrary ANSI style
+	ColorReset() string                          // ANSI reset sequence
+
 	// Shell execution
 	Exec(cmd string) (ExecResult, error)
 	SudoExec(cmd string) (ExecResult, error)
@@ -169,6 +182,76 @@ func (c *contextClient) pushDiagEvent(eventType, resource, parent, message strin
 	})
 	c.setTokenHeader(req)
 	_, _ = c.diagPostClient.PostEvent(context.Background(), req)
+}
+
+// ── Coloured output helpers ──────────────────────────────────────────────
+
+// ANSI escape sequences (standard 16-color codes).
+const (
+	clrGreen  = "\033[32m"
+	clrRed    = "\033[31m"
+	clrBlue   = "\033[34m"
+	clrOrange = "\033[33m"
+	clrYellow = "\033[93m"
+	clrDim    = "\033[2m"
+	clrBold   = "\033[1m"
+	clrReset  = "\033[0m"
+)
+
+// noColourCheck is a cached check; re-evaluated on first call.
+var noColourCheck = func() bool {
+	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+		return true
+	}
+	if fi, _ := os.Stdout.Stat(); fi != nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+		return true
+	}
+	return false
+}
+
+func (c *contextClient) isNoColor() bool { return noColourCheck() }
+
+func (c *contextClient) apply(s, style string) string {
+	if c.isNoColor() || style == "" {
+		return s
+	}
+	return style + s + clrReset
+}
+
+func (c *contextClient) ColorStdout() io.Writer { return c.Stdout() }
+
+func (c *contextClient) ColorReset() string { return c.apply("", "") }
+
+func (c *contextClient) Greenf(format string, a ...any) string {
+	return c.apply(fmt.Sprintf(format, a...), clrGreen)
+}
+
+func (c *contextClient) Redf(format string, a ...any) string {
+	return c.apply(fmt.Sprintf(format, a...), clrRed)
+}
+
+func (c *contextClient) Bluef(format string, a ...any) string {
+	return c.apply(fmt.Sprintf(format, a...), clrBlue)
+}
+
+func (c *contextClient) Orangef(format string, a ...any) string {
+	return c.apply(fmt.Sprintf(format, a...), clrOrange)
+}
+
+func (c *contextClient) Yellowf(format string, a ...any) string {
+	return c.apply(fmt.Sprintf(format, a...), clrYellow)
+}
+
+func (c *contextClient) Dimf(format string, a ...any) string {
+	return c.apply(fmt.Sprintf(format, a...), clrDim)
+}
+
+func (c *contextClient) Boldf(format string, a ...any) string {
+	return c.apply(fmt.Sprintf(format, a...), clrBold)
+}
+
+func (c *contextClient) Styled(s, style string) string {
+	return c.apply(s, style)
 }
 
 func (c *contextClient) Log() logging.Logger { return c.log }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"dotfilesd/internal/pkg/cli/color"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
@@ -23,7 +24,11 @@ func RunPing(clients *Clients, sessionID string) error {
 	}
 	s := resp.Msg
 	slog.Debug("ping response", "version", s.Version, "pid", s.Pid, "uptime_secs", s.UptimeSecs)
-	fmt.Printf("dotfilesd v%s (pid %d, up %ds)\n", s.Version, s.Pid, s.UptimeSecs)
+	fmt.Printf("%s v%s %s%s\n",
+		color.Greenf("dotfilesd"),
+		color.Styled(s.Version, color.Bold),
+		color.Dimf("(pid %d, up %ds)", s.Pid, s.UptimeSecs),
+		color.Reset())
 	return nil
 }
 
@@ -37,13 +42,13 @@ func RunInfo(clients *Clients, sessionID string) error {
 	}
 	s := resp.Msg
 	slog.Debug("runtime info response", "os", s.Os, "kernel", s.Kernel)
-	fmt.Printf("OS:      %s\n", s.Os)
-	fmt.Printf("Kernel:  %s\n", s.Kernel)
-	fmt.Printf("Shell:   %s\n", s.Shell)
-	fmt.Printf("Desktop: %s\n", s.Desktop)
-	fmt.Printf("Host:    %s\n", s.Hostname)
-	fmt.Printf("Uptime:  %s\n", s.Uptime)
-	fmt.Printf("Tools:   %s\n", strings.Join(s.AvailableTools, ", "))
+	fmt.Printf("%s %s\n", color.Bluef("OS:"), s.Os)
+	fmt.Printf("%s %s\n", color.Bluef("Kernel:"), s.Kernel)
+	fmt.Printf("%s %s\n", color.Bluef("Shell:"), s.Shell)
+	fmt.Printf("%s %s\n", color.Bluef("Desktop:"), s.Desktop)
+	fmt.Printf("%s %s\n", color.Bluef("Host:"), s.Hostname)
+	fmt.Printf("%s %s\n", color.Bluef("Uptime:"), s.Uptime)
+	fmt.Printf("%s %s\n", color.Bluef("Tools:"), strings.Join(s.AvailableTools, ", "))
 	return nil
 }
 
@@ -56,9 +61,9 @@ func RunSudoMethods(clients *Clients, sessionID string) error {
 		return fmt.Errorf("sudo methods failed: %w", err)
 	}
 	slog.Debug("sudo methods", "current", resp.Msg.CurrentMethod, "has_elevation", resp.Msg.HasElevation)
-	fmt.Printf("current:  %s\n", resp.Msg.CurrentMethod)
-	fmt.Printf("has sudo: %v\n", resp.Msg.HasElevation)
-	fmt.Printf("available: %s\n", strings.Join(resp.Msg.AvailableMethods, ", "))
+	fmt.Printf("%s %s\n", color.Yellowf("current:"), resp.Msg.CurrentMethod)
+	fmt.Printf("%s %v\n", color.Yellowf("has sudo:"), resp.Msg.HasElevation)
+	fmt.Printf("%s %s\n", color.Yellowf("available:"), strings.Join(resp.Msg.AvailableMethods, ", "))
 	return nil
 }
 
@@ -121,10 +126,24 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []str
 
 	// Node header line: [type] label (status)
 	label := n.Label
+	statusLabel := ""
 	if n.Status != "" {
-		label = fmt.Sprintf("%s (%s)", label, n.Status)
+		statusLabel = n.Status
 	}
-	header := fmt.Sprintf("%s%s [%s] %s", prefix, branch, typeTag, label)
+
+	// Colour the branch lines dim.
+	coloredBranch := color.Styled(branch, color.Dim)
+
+	// Colour the type tag.
+	coloredType := color.Styled("["+typeTag+"]", color.TypeColor(typeTag))
+
+	// Colour the status label.
+	coloredStatus := ""
+	if statusLabel != "" {
+		coloredStatus = color.Styled("("+statusLabel+")", color.StatusColor(statusLabel))
+	}
+
+	header := fmt.Sprintf("%s%s %s %s %s", color.Styled(prefix, color.Dim), coloredBranch, coloredType, label, coloredStatus)
 
 	// Build per-node summary when no --fields are given.
 	if len(fields) == 0 {
@@ -144,7 +163,7 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []str
 		// Show only requested fields, in order given.
 		for _, f := range fields {
 			if v, ok := n.Attrs[f]; ok {
-				fmt.Printf("%s%s: %s\n", childPrefix, f, v)
+				fmt.Printf("%s%s%s: %s\n", color.Styled(childPrefix, color.Dim), color.Styled("│  ", color.Dim), f, v)
 			}
 		}
 	}
@@ -166,24 +185,22 @@ func conciseSummary(n *dotfilesdv1.DiagNode, typeTag string) string {
 	a := n.Attrs
 	switch n.Type {
 	case "daemon", "plugin":
-		// Version/pid/port are already in the label, nothing extra needed.
 		return ""
 
 	case "client":
 		ct := nullget(a, "client_type", "?")
 		switch ct {
 		case "mcp":
-			return fmt.Sprintf("mcp:%s", nullget(a, "agent_id", "?"))
+			return color.Dimf("mcp:%s", nullget(a, "agent_id", "?"))
 		default:
 			cmd := nullget(a, "command", "")
 			if cmd != "" {
-				return fmt.Sprintf("`%s`", cmd)
+				return color.Yellowf("`%s`", cmd)
 			}
-			// Fallback: show age instead of a long unreadable ID.
 			if age := nullget(a, "started_ago", ""); age != "" {
-				return fmt.Sprintf("(up %s)", age)
+				return color.Dimf("(up %s)", age)
 			}
-			return "(no command)"
+			return color.Dimf("(no command)")
 		}
 
 	case "session":
@@ -196,9 +213,12 @@ func conciseSummary(n *dotfilesdv1.DiagNode, typeTag string) string {
 			if dur != "" {
 				s += " dur:" + dur
 			}
-			return "[" + s + "]"
+			if nullget(a, "exit_code", "0") == "0" {
+				return color.Dimf("[%s]", s)
+			}
+			return color.Redf("[%s]", s)
 		}
-		return "(running)"
+		return color.Yellowf("(running)")
 
 	case "executor":
 		return ""
