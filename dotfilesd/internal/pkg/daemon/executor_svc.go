@@ -204,6 +204,8 @@ func (s *executorServer) CallPlugin(
 		execParent = "session:" + sessionID
 	}
 
+	pluginSessionID := "session:plugin-" + pluginName
+
 	if s.daemon.diag != nil {
 		s.daemon.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventExecutorOpen,
@@ -217,10 +219,10 @@ func (s *executorServer) CallPlugin(
 				"method": svcName + "." + methodName,
 			},
 		})
-		// Reparent the plugin's background session to hang from this call.
-		if execParent == "plugin:"+pluginName {
-			s.daemon.diag.UpdateParent("session:plugin-"+pluginName, executorID)
-		}
+		// Reparent the plugin's session to hang from this executor call so
+		// any exec calls the plugin makes during this RPC show up under
+		// the correct node in the tree (client -> session -> plugin -> exec).
+		s.daemon.diag.UpdateParent(pluginSessionID, executorID)
 	}
 	defer func() {
 		if s.daemon.diag != nil {

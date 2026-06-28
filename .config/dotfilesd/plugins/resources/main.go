@@ -165,6 +165,13 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 			"ram_pct", ram.Percent,
 			"cpu_pct", cpu.TotalPercent,
 		)
+
+		// Run a quick exec to demonstrate the client → plugin → exec chain
+		// in the diagnostics tree. This shows up as:
+		//   [client] → [session] → [plugin] resources.Current → [exec] uname -a
+		if result, err := pc.Exec("uname -a"); err == nil {
+			pc.Log().Info("Current exec check", "stdout", strings.TrimSpace(result.Stdout))
+		}
 	}
 	if pc != nil && pc.RenderOutput() {
 		fmt.Fprintf(pc.Stdout(), "📊 Resources — RAM: %.0f/%.0f MB (%.0f%%) | CPU: %.0f%% (%.0f%% user, %.0f%% sys, %.0f%% iowait) | Disk: %.1f/%.1f GB (%.0f%%) on %s | Disk I/O: %.0f r/s %.0f w/s on %s\n",
