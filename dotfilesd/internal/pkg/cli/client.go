@@ -91,14 +91,14 @@ type Clients struct {
 func NewClients(port string) *Clients {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%s", port)
 	return &Clients{
-		Sys:      dotfilesdv1connect.NewSystemServiceClient(http.DefaultClient, baseURL),
-		Dot:      dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, baseURL),
-		Exec:     dotfilesdv1connect.NewExecServiceClient(http.DefaultClient, baseURL),
-		Cfg:      dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL),
-		Session:  dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
-		Script:   dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
-		Registry: dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, baseURL),
-		Executor: dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, baseURL),
+		Sys:       dotfilesdv1connect.NewSystemServiceClient(http.DefaultClient, baseURL),
+		Dot:       dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, baseURL),
+		Exec:      dotfilesdv1connect.NewExecServiceClient(http.DefaultClient, baseURL),
+		Cfg:       dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL),
+		Session:   dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
+		Script:    dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
+		Registry:  dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, baseURL),
+		Executor:  dotfilesdv1connect.NewPluginExecutorServiceClient(http.DefaultClient, baseURL),
 		DiagQuery: dotfilesdv1connect.NewDiagnosticsQueryServiceClient(http.DefaultClient, baseURL),
 		DiagPost:  dotfilesdv1connect.NewDiagnosticsPostServiceClient(http.DefaultClient, baseURL),
 	}

@@ -95,6 +95,10 @@ func (s *weatherServer) Forecast(
 
 	result, err := pc.Exec(cmd)
 	if err != nil {
+		pc.Log().Error("weather: exec failed", "error", err, "cmd", cmd)
+		if renderOutput {
+			fmt.Fprintf(pc.Stderr(), "weather: exec failed: %v\n", err)
+		}
 		return connect.NewResponse(&pb.ForecastResponse{
 			ErrorMessage: err.Error(),
 			ExitCode:     -1,
@@ -105,19 +109,35 @@ func (s *weatherServer) Forecast(
 		if errMsg == "" {
 			errMsg = fmt.Sprintf("curl exited with code %d", result.ExitCode)
 		}
+		pc.Log().Error("weather: curl error", "exit_code", result.ExitCode, "stderr", result.Stderr)
+		if renderOutput {
+			fmt.Fprintf(pc.Stderr(), "weather: %s\n", errMsg)
+		}
 		return connect.NewResponse(&pb.ForecastResponse{
 			ExitCode:     int32(result.ExitCode),
 			ErrorMessage: errMsg,
 		}), nil
 	}
 
-	// When RenderOutput=true and format is JSON, parse the structured data
-	// and reformat it as a nice human-readable report.
+	// Always keep the raw structured output in the RPC response so
+	// programmatic callers (plugin-to-plugin) get the data regardless
+	// of the render flag.
 	raw := strings.TrimSpace(result.Stdout)
-	if renderOutput && format == "json" {
-		if formatted := formatWeatherJSON(raw); formatted != "" {
-			raw = formatted
+
+	// When RenderOutput is true, write human-readable output to stdout
+	// for the interactive user. The RPC response always contains the
+	// original structured data so downstream callers can parse it.
+	if renderOutput {
+		var display string
+		if format == "json" {
+			if formatted := formatWeatherJSON(raw); formatted != "" {
+				display = formatted
+			}
 		}
+		if display == "" {
+			display = raw
+		}
+		fmt.Fprintln(pc.Stdout(), display)
 	}
 
 	return connect.NewResponse(&pb.ForecastResponse{

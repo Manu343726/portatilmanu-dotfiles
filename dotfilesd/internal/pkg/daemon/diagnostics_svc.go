@@ -170,11 +170,11 @@ func (s *diagnosticsQueryServer) QueryResources(
 	protoResources := make([]*dotfilesdv1.ResourceState, 0, len(resources))
 	for _, rs := range resources {
 		pr := &dotfilesdv1.ResourceState{
-			Id:        rs.ID,
-			Type:      rs.Type,
-			Label:     rs.Label,
-			ParentId:  rs.ParentID,
-			Status:    string(rs.Status),
+			Id:          rs.ID,
+			Type:        rs.Type,
+			Label:       rs.Label,
+			ParentId:    rs.ParentID,
+			Status:      string(rs.Status),
 			CreatedAtNs: rs.CreatedAt.UnixNano(),
 			StartedAtNs: rs.StartedAt.UnixNano(),
 		}

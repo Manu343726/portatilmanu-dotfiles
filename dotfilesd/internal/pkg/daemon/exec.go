@@ -173,11 +173,11 @@ func (s *execServer) ExecStream(
 		}
 		execDur := time.Since(execStart)
 		s.diag.PushEvent(diagnostics.Event{
-			Type:     diagnostics.EventExecStop,
-			Resource: execID,
-			Parent:   execParent,
+			Type:      diagnostics.EventExecStop,
+			Resource:  execID,
+			Parent:    execParent,
 			Timestamp: time.Now(),
-			Message:  req.Msg.Command,
+			Message:   req.Msg.Command,
 			Attrs: map[string]string{
 				"exit_code":   fmt.Sprintf("%d", exitCode),
 				"duration_ns": fmt.Sprintf("%d", execDur.Nanoseconds()),

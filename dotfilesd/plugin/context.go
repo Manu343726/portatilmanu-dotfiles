@@ -43,16 +43,16 @@ type Context interface {
 
 	// Colored output helpers for plugin stdout. They honour NO_COLOR and
 	// terminal detection automatically.
-	ColorStdout() io.Writer                      // stdout with bold, green, red etc.
-	Greenf(format string, a ...any) string       // green formatted text
-	Redf(format string, a ...any) string         // red formatted text
-	Bluef(format string, a ...any) string        // blue formatted text
-	Orangef(format string, a ...any) string      // orange formatted text
-	Yellowf(format string, a ...any) string      // yellow formatted text
-	Dimf(format string, a ...any) string         // dim/grey formatted text
-	Boldf(format string, a ...any) string        // bold formatted text
-	Styled(s, style string) string               // wrap text in arbitrary ANSI style
-	ColorReset() string                          // ANSI reset sequence
+	ColorStdout() io.Writer                 // stdout with bold, green, red etc.
+	Greenf(format string, a ...any) string  // green formatted text
+	Redf(format string, a ...any) string    // red formatted text
+	Bluef(format string, a ...any) string   // blue formatted text
+	Orangef(format string, a ...any) string // orange formatted text
+	Yellowf(format string, a ...any) string // yellow formatted text
+	Dimf(format string, a ...any) string    // dim/grey formatted text
+	Boldf(format string, a ...any) string   // bold formatted text
+	Styled(s, style string) string          // wrap text in arbitrary ANSI style
+	ColorReset() string                     // ANSI reset sequence
 
 	// Shell execution
 	Exec(cmd string) (ExecResult, error)

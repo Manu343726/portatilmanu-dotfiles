@@ -347,7 +347,8 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			if len(msg.StderrChunk) > 0 {
 				fmt.Fprint(os.Stderr, string(msg.StderrChunk))
 			}
-			// Print JSON response body only when --json is set.
+			// With --json, the plugin skips rendering and the CLI prints the
+			// raw response body as prettified JSON instead.
 			if len(msg.ResponseBody) > 0 && jsonOutput {
 				var buf bytes.Buffer
 				if err := json.Indent(&buf, msg.ResponseBody, "", "  "); err != nil {
@@ -356,6 +357,9 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 					fmt.Println(buf.String())
 				}
 			}
+			// Without --json, the plugin is responsible for writing output to
+			// pc.Stdout() which arrives as StdoutChunks above. ResponseBody
+			// is not printed — it's only used for JSON/programmatic access.
 		}
 		return nil
 	}

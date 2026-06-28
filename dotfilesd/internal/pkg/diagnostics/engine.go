@@ -21,25 +21,25 @@ import (
 type EventType string
 
 const (
-	EventDaemonStart   EventType = "daemon_start"
-	EventDaemonStop    EventType = "daemon_stop"
-	EventPluginSpawn   EventType = "plugin_spawn"
-	EventPluginCrash   EventType = "plugin_crash"
-	EventPluginStop    EventType = "plugin_stop"
-	EventClientConnect EventType = "client_connect"
-	EventClientDisconn EventType = "client_disconnect"
-	EventExecStart     EventType = "exec_start"
-	EventExecStop      EventType = "exec_stop"
-	EventExecutorOpen  EventType = "executor_open"
-	EventExecutorClose EventType = "executor_close"
-	EventSessionCreate EventType = "session_create"
-	EventSessionEnd    EventType = "session_end"
-	EventBgTaskStart   EventType = "bg_task_start"
-	EventBgTaskStop    EventType = "bg_task_stop"
-	EventScriptStart      EventType = "script_start"
-	EventScriptStop       EventType = "script_stop"
-	EventPluginRpcOpen    EventType = "plugin_rpc_open"
-	EventPluginRpcClose   EventType = "plugin_rpc_close"
+	EventDaemonStart    EventType = "daemon_start"
+	EventDaemonStop     EventType = "daemon_stop"
+	EventPluginSpawn    EventType = "plugin_spawn"
+	EventPluginCrash    EventType = "plugin_crash"
+	EventPluginStop     EventType = "plugin_stop"
+	EventClientConnect  EventType = "client_connect"
+	EventClientDisconn  EventType = "client_disconnect"
+	EventExecStart      EventType = "exec_start"
+	EventExecStop       EventType = "exec_stop"
+	EventExecutorOpen   EventType = "executor_open"
+	EventExecutorClose  EventType = "executor_close"
+	EventSessionCreate  EventType = "session_create"
+	EventSessionEnd     EventType = "session_end"
+	EventBgTaskStart    EventType = "bg_task_start"
+	EventBgTaskStop     EventType = "bg_task_stop"
+	EventScriptStart    EventType = "script_start"
+	EventScriptStop     EventType = "script_stop"
+	EventPluginRpcOpen  EventType = "plugin_rpc_open"
+	EventPluginRpcClose EventType = "plugin_rpc_close"
 )
 
 // Event is a timestamped diagnostic event with structured payload.
@@ -106,25 +106,25 @@ func New() *Engine {
 	}
 	// Default retention policies.
 	defaults := map[EventType]RetentionPolicy{
-		EventDaemonStart:   {MaxCount: 100, MaxAge: 24 * time.Hour},
-		EventDaemonStop:    {MaxCount: 100, MaxAge: 24 * time.Hour},
-		EventPluginSpawn:   {MaxCount: 500, MaxAge: time.Hour},
-		EventPluginCrash:   {MaxCount: 500, MaxAge: 24 * time.Hour},
-		EventPluginStop:    {MaxCount: 500, MaxAge: time.Hour},
-		EventClientConnect: {MaxCount: 1000, MaxAge: time.Hour},
-		EventClientDisconn: {MaxCount: 1000, MaxAge: time.Hour},
-		EventExecStart:     {MaxCount: 200, MaxAge: 5 * time.Minute},
-		EventExecStop:      {MaxCount: 200, MaxAge: 5 * time.Minute},
-		EventExecutorOpen:  {MaxCount: 200, MaxAge: 5 * time.Minute},
-		EventExecutorClose: {MaxCount: 200, MaxAge: 5 * time.Minute},
-		EventSessionCreate: {MaxCount: 500, MaxAge: time.Hour},
-		EventSessionEnd:    {MaxCount: 500, MaxAge: time.Hour},
-		EventBgTaskStart:   {MaxCount: 200, MaxAge: 5 * time.Minute},
-		EventBgTaskStop:    {MaxCount: 200, MaxAge: 5 * time.Minute},
-		EventScriptStart:      {MaxCount: 200, MaxAge: time.Hour},
-		EventScriptStop:       {MaxCount: 200, MaxAge: time.Hour},
-		EventPluginRpcOpen:    {MaxCount: 500, MaxAge: time.Hour},
-		EventPluginRpcClose:   {MaxCount: 500, MaxAge: time.Hour},
+		EventDaemonStart:    {MaxCount: 100, MaxAge: 24 * time.Hour},
+		EventDaemonStop:     {MaxCount: 100, MaxAge: 24 * time.Hour},
+		EventPluginSpawn:    {MaxCount: 500, MaxAge: time.Hour},
+		EventPluginCrash:    {MaxCount: 500, MaxAge: 24 * time.Hour},
+		EventPluginStop:     {MaxCount: 500, MaxAge: time.Hour},
+		EventClientConnect:  {MaxCount: 1000, MaxAge: time.Hour},
+		EventClientDisconn:  {MaxCount: 1000, MaxAge: time.Hour},
+		EventExecStart:      {MaxCount: 200, MaxAge: 5 * time.Minute},
+		EventExecStop:       {MaxCount: 200, MaxAge: 5 * time.Minute},
+		EventExecutorOpen:   {MaxCount: 200, MaxAge: 5 * time.Minute},
+		EventExecutorClose:  {MaxCount: 200, MaxAge: 5 * time.Minute},
+		EventSessionCreate:  {MaxCount: 500, MaxAge: time.Hour},
+		EventSessionEnd:     {MaxCount: 500, MaxAge: time.Hour},
+		EventBgTaskStart:    {MaxCount: 200, MaxAge: 5 * time.Minute},
+		EventBgTaskStop:     {MaxCount: 200, MaxAge: 5 * time.Minute},
+		EventScriptStart:    {MaxCount: 200, MaxAge: time.Hour},
+		EventScriptStop:     {MaxCount: 200, MaxAge: time.Hour},
+		EventPluginRpcOpen:  {MaxCount: 500, MaxAge: time.Hour},
+		EventPluginRpcClose: {MaxCount: 500, MaxAge: time.Hour},
 	}
 	for typ, p := range defaults {
 		e.retention[typ] = p

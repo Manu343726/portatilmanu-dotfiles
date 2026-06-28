@@ -14,14 +14,14 @@ import (
 // True colour codes didn't render in all terminals, so we use the closest
 // standard ANSI equivalents that work everywhere.
 const (
-	Green  = "\033[32m"  // #A6E22E (bright green)
-	Red    = "\033[31m"  // #F92672 (red)
-	Blue   = "\033[34m"  // #66D9EF (blue)
-	Orange = "\033[33m"  // #FD971F (yellow/orange)
-	Yellow = "\033[93m"  // #E6DB74 (bright yellow)
-	Dim    = "\033[2m"   // #75715E (dim/bold off)
-	Pink   = "\033[35m"  // #F92672 (magenta)
-	Cyan   = "\033[36m"  // #AE81FF (cyan)
+	Green  = "\033[32m" // #A6E22E (bright green)
+	Red    = "\033[31m" // #F92672 (red)
+	Blue   = "\033[34m" // #66D9EF (blue)
+	Orange = "\033[33m" // #FD971F (yellow/orange)
+	Yellow = "\033[93m" // #E6DB74 (bright yellow)
+	Dim    = "\033[2m"  // #75715E (dim/bold off)
+	Pink   = "\033[35m" // #F92672 (magenta)
+	Cyan   = "\033[36m" // #AE81FF (cyan)
 
 	Bold     = "\033[1m"
 	DimStyle = "\033[2m"

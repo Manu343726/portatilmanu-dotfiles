@@ -180,11 +180,11 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 			if r.diag != nil {
 				execDur := time.Since(execStart)
 				r.diag.PushEvent(diagnostics.Event{
-					Type:     diagnostics.EventExecStop,
-					Resource: execID,
-					Parent:   scriptID,
+					Type:      diagnostics.EventExecStop,
+					Resource:  execID,
+					Parent:    scriptID,
 					Timestamp: time.Now(),
-					Message:  step.command,
+					Message:   step.command,
 					Attrs: map[string]string{
 						"exit_code":   fmt.Sprintf("%d", exitCode),
 						"duration_ns": fmt.Sprintf("%d", execDur.Nanoseconds()),
