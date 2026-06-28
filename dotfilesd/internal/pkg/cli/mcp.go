@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	_ "embed"
@@ -15,9 +16,11 @@ import (
 	"sync"
 	"time"
 
+	"dotfilesd/internal/pkg/rpcreflection"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // sudoPromptHTML is the MCP Apps webview for sudo password entry.
@@ -58,9 +61,11 @@ type toolSchema struct {
 }
 
 type propSchema struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description"`
-	Enum        []string `json:"enum,omitempty"`
+	Type        string                `json:"type"`
+	Description string                `json:"description"`
+	Enum        []string              `json:"enum,omitempty"`
+	Properties  map[string]propSchema `json:"properties,omitempty"`
+	Items       *propSchema           `json:"items,omitempty"`
 }
 
 var mcpTools = []toolDef{
@@ -163,10 +168,105 @@ var mcpTools = []toolDef{
 	},
 }
 
+// messageToToolSchema converts a protobuf message descriptor to a JSON Schema
+// (toolSchema). This mirrors the type mapping in protoflags.go's addFlagsFromMessageDesc
+// but outputs JSON Schema instead of cobra flags.
+func messageToToolSchema(md protoreflect.MessageDescriptor) toolSchema {
+	props := make(map[string]propSchema)
+	fields := md.Fields()
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		name := string(fd.Name())
+		desc := string(fd.FullName())
+		props[name] = fieldToPropSchema(fd, desc)
+	}
+	return toolSchema{Type: "object", Properties: props}
+}
+
+// fieldToPropSchema converts a single protobuf field to a JSON Schema property.
+func fieldToPropSchema(fd protoreflect.FieldDescriptor, desc string) propSchema {
+	switch {
+	case fd.IsMap():
+		mapValKind := fd.MapValue().Kind()
+		valSchema := scalarKindSchema(mapValKind, "map value")
+		return propSchema{
+			Type:        "object",
+			Description: desc + " (map)",
+			Properties:  nil, // maps are dynamic objects, no fixed properties
+			Items:       &valSchema,
+		}
+
+	case fd.IsList():
+		items := fieldToPropSchema(fd, desc+"[]")
+		return propSchema{
+			Type:        "array",
+			Description: desc + " (repeated)",
+			Items:       &items,
+		}
+
+	case fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind:
+		nested := fd.Message()
+		if nested != nil {
+			inner := messageToToolSchema(nested)
+			return propSchema{
+				Type:        "object",
+				Description: desc,
+				Properties:  inner.Properties,
+			}
+		}
+		return propSchema{Type: "string", Description: desc + " (unknown message)"}
+
+	default:
+		ps := scalarKindSchema(fd.Kind(), desc)
+		if fd.Kind() == protoreflect.EnumKind {
+			enumDesc := fd.Enum()
+			choices := make([]string, enumDesc.Values().Len())
+			for j := 0; j < enumDesc.Values().Len(); j++ {
+				choices[j] = string(enumDesc.Values().Get(j).Name())
+			}
+			ps.Enum = choices
+		}
+		return ps
+	}
+}
+
+// scalarKindSchema returns a propSchema for a scalar/primitive protobuf kind.
+func scalarKindSchema(kind protoreflect.Kind, desc string) propSchema {
+	ps := propSchema{Description: desc}
+	switch kind {
+	case protoreflect.StringKind:
+		ps.Type = "string"
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
+		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind,
+		protoreflect.Uint32Kind, protoreflect.Fixed32Kind,
+		protoreflect.Uint64Kind, protoreflect.Fixed64Kind,
+		protoreflect.FloatKind, protoreflect.DoubleKind:
+		ps.Type = "number"
+	case protoreflect.BoolKind:
+		ps.Type = "boolean"
+	case protoreflect.EnumKind:
+		ps.Type = "string"
+	case protoreflect.BytesKind:
+		ps.Type = "string"
+	default:
+		ps.Type = "string"
+	}
+	return ps
+}
+
+// pluginToolInfo stores metadata for dispatching a plugin RPC tool call.
+type pluginToolInfo struct {
+	PluginURL   string
+	ServiceName string
+	MethodName  string
+	ToolDef     toolDef
+}
+
 // Plugin tool cache for MCP dynamic registration.
 var (
-	pluginTools   []toolDef
-	pluginToolsMu sync.Mutex
+	pluginTools       []toolDef
+	pluginToolsByName map[string]pluginToolInfo
+	pluginToolsMu     sync.Mutex
 )
 
 // getPluginTools returns cached plugin tool definitions, fetching from daemon if needed.
@@ -179,29 +279,87 @@ func getPluginTools(clients *Clients) []toolDef {
 	if err := clients.Connect(context.Background()); err != nil {
 		return nil
 	}
-	// List plugins from registry and create a tool per plugin.
+	// List plugins from registry.
 	req := connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{})
 	resp, err := clients.Registry.ListPlugins(context.Background(), req)
 	if err != nil {
 		slog.Debug("failed to fetch plugins", "error", err)
 		return nil
 	}
+
 	var tools []toolDef
+	byName := make(map[string]pluginToolInfo)
+
 	for _, p := range resp.Msg.Plugins {
-		desc := p.Description
-		if desc == "" {
-			desc = fmt.Sprintf("Plugin %q", p.Name)
+		pluginDesc := p.Description
+		if pluginDesc == "" {
+			pluginDesc = fmt.Sprintf("Plugin %q", p.Name)
 		}
-		tools = append(tools, toolDef{
-			Name:        p.Name,
-			Description: desc,
-			InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-				"session_id": {Type: "string", Description: "optional session ID for grouping"},
-			}},
-		})
+
+		// Discover services and methods via gRPC reflection.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		svcInfos, err := rpcreflection.NewClient(p.Url).DiscoverServices(ctx)
+		cancel()
+
+		if err != nil {
+			slog.Debug("reflection failed for plugin, one tool fallback", "plugin", p.Name, "error", err)
+			// Fallback: single tool per plugin.
+			tool := toolDef{
+				Name:        p.Name,
+				Description: pluginDesc,
+				InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
+					"session_id": {Type: "string", Description: "optional session ID for grouping"},
+				}},
+			}
+			tools = append(tools, tool)
+			byName[p.Name] = pluginToolInfo{
+				PluginURL:   p.Url,
+				ToolDef:     tool,
+			}
+			continue
+		}
+
+		for _, svc := range svcInfos {
+			if rpcreflection.IsSystemService(svc.FullName) || svc.FullName == "dotfilesd.v1.DocumentationService" {
+				continue
+			}
+			for _, m := range svc.Methods {
+				// Build the tool name: plugin_<plugin>_<method>.
+				toolName := fmt.Sprintf("%s_%s", p.Name, m.MethodName)
+
+				// Build JSON Schema from the input message descriptor.
+				schema := messageToToolSchema(m.InputMsg)
+
+				tool := toolDef{
+					Name:        toolName,
+					Description: fmt.Sprintf("[%s] %s.%s — %s", p.Name, shortSvcName(svc.FullName), m.MethodName, pluginDesc),
+					InputSchema: schema,
+					Meta:        mustMarshalMeta(map[string]string{"plugin": p.Name, "service": svc.FullName, "method": m.MethodName}),
+				}
+				tools = append(tools, tool)
+				byName[toolName] = pluginToolInfo{
+					PluginURL:   p.Url,
+					ServiceName: svc.FullName,
+					MethodName:  m.MethodName,
+					ToolDef:     tool,
+				}
+			}
+		}
 	}
+
 	pluginTools = tools
+	pluginToolsByName = byName
 	return pluginTools
+}
+
+// mustMarshalMeta marshals m to JSON RawMessage, panicking on error (which
+// should never happen with map[string]string).
+func mustMarshalMeta(m map[string]string) json.RawMessage {
+	b, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // pendingSudoRequest represents a sudo execution waiting for the user to
@@ -798,7 +956,8 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		}
 
 	default:
-		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
+		// Check if this is a plugin tool.
+		return dispatchPluginTool(id, clients, name, args)
 	}
 }
 
@@ -840,6 +999,73 @@ func runMCPToolViaScript(id json.RawMessage, clients *Clients, scriptName string
 		})
 	}
 	return mcpToolResult(id, text)
+}
+
+// dispatchPluginTool handles a tool call for a plugin RPC method.
+// It looks up the tool in pluginToolsByName, builds a JSON payload from the
+// tool arguments, calls the plugin's RPC directly via rpcreflection, and
+// returns the result as MCP tool content.
+func dispatchPluginTool(id json.RawMessage, clients *Clients, name string, args json.RawMessage) *mcpResponse {
+	pluginToolsMu.Lock()
+	info, ok := pluginToolsByName[name]
+	pluginToolsMu.Unlock()
+
+	if !ok {
+		return mcpErr(id, -32601, fmt.Sprintf("unknown tool: %s", name))
+	}
+
+	// Build the JSON payload. The MCP arguments come as a flat JSON object
+	// matching the input schema. We pass them through directly since the
+	// plugin's Connect JSON endpoint accepts the same field names.
+	//
+	// If the tool hasn't been cached yet (getPluginTools was never called),
+	// we fall back to sending the raw arguments.
+	payload := args
+	if payload == nil {
+		payload = json.RawMessage("{}")
+	}
+
+	// Connect lazily if not already connected (needed for session tracking).
+	if err := clients.Connect(context.Background()); err != nil {
+		return mcpErr(id, -32000, fmt.Sprintf("daemon connection failed: %v", err))
+	}
+
+	// Inject session_id into the payload if present in args.
+	var argMap map[string]any
+	if err := json.Unmarshal(payload, &argMap); err == nil {
+		if sid, ok := argMap["session_id"]; ok {
+			if s, ok := sid.(string); ok && s != "" {
+				// Wrap the payload with session info the plugin expects.
+				argMap["session"] = map[string]any{
+					"id": s,
+				}
+			}
+			// Strip session_id from the payload — it's not a plugin field.
+			delete(argMap, "session_id")
+		}
+		payload, _ = json.Marshal(argMap)
+	}
+
+	// Invoke the plugin method via rpcreflection.
+	methodInfo := rpcreflection.MethodInfo{
+		ServiceName: info.ServiceName,
+		MethodName:  info.MethodName,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	refClient := rpcreflection.NewClient(info.PluginURL)
+	respBody, err := refClient.CallJSON(ctx, methodInfo, payload)
+	if err != nil {
+		return mcpErr(id, -32603, fmt.Sprintf("plugin call failed: %v", err))
+	}
+
+	// Pretty-print the JSON response.
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, respBody, "", "  "); err != nil {
+		return mcpToolResult(id, string(respBody))
+	}
+	return mcpToolResult(id, pretty.String())
 }
 
 func generateRequestID() string {

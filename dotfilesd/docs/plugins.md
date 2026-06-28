@@ -1,6 +1,13 @@
 # Plugin System
 
-Plugins are standalone Go programs that register **tools** — commands auto-exposed as `dotfilesctl` CLI subcommands and MCP tools for AI agents.
+> **⚠️ OUTDATED — SUPERSEDED BY `plugin-rpc-architecture.md`**
+>
+> This document describes the old Tool-based plugin API which has been
+> replaced by the Connect RPC service architecture. See
+> [`plugin-rpc-architecture.md`](plugin-rpc-architecture.md) for the current
+> design. This page is kept for historical reference only.
+
+Plugins are standalone Go programs that serve **Connect RPC services** — methods auto-exposed as `dotfilesctl` CLI subcommands and per-method MCP tools for AI agents.
 
 ## Architecture
 
@@ -42,47 +49,53 @@ require dotfilesd v0.0.0
 replace dotfilesd => /home/manu343726/dotfilesd
 ```
 
-## Writing a plugin
+## Writing a plugin (new RPC SDK)
+
+Plugins now serve **Connect RPC services** discovered via HTTP-based gRPC reflection.
+See [`plugin-rpc-architecture.md`](plugin-rpc-architecture.md) §6–§10 for the full SDK guide.
 
 ```go
 package main
 
 import (
+    "context"
     "fmt"
+    "net/http"
+
     "dotfilesd/plugin"
-    dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+    "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+    "dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 )
+
+type weatherService struct {
+    dotfilesdv1connect.UnimplementedWeatherServiceHandler
+}
+
+func (s *weatherService) Forecast(ctx context.Context, req *dotfilesdv1.ForecastRequest) (*dotfilesdv1.ForecastResponse, error) {
+    // Use the daemon context for shell commands, logging, user I/O, etc.
+    pctx := plugin.ExtractContext(ctx)
+    result, _ := pctx.Exec("curl -s 'wttr.in/" + req.Location + "?format=%c+%t'")
+    return &dotfilesdv1.ForecastResponse{
+        Content: result.Stdout,
+    }, nil
+}
 
 func main() {
     plugin.Serve("weather", "Weather Plugin", "1.0.0",
         "Fetches weather data from wttr.in",
-        plugin.NewTool("forecast", "Get weather forecast for a location",
-            &dotfilesdv1.ToolInputSchema{
-                Properties: map[string]*dotfilesdv1.PropertySchema{
-                    "location": {
-                        Type:        dotfilesdv1.PropertyType_PROPERTY_TYPE_STRING,
-                        Description: "City name, ZIP code, or IP address",
-                    },
-                },
-                Required: []string{"location"},
-            },
-            &dotfilesdv1.CLIHints{
-                CommandPath: "weather forecast",
-            },
-            func(ctx plugin.Context, args map[string]string) error {
-                result, err := ctx.Exec("curl -s 'wttr.in/" + args["location"] + "?format=%c+%t'")
-                if err != nil {
-                    return err
-                }
-                fmt.Fprintln(ctx.Stdout(), result.Stdout)
-                return nil
-            },
-        ),
+        plugin.Service{
+            Name:    "WeatherService",
+            Handler: &weatherService{},
+        },
     )
 }
 ```
 
-## SDK Reference
+## SDK Reference (OLD — Tool-based API, no longer accurate)
+
+> ⚠️ The API described below is the **old Tool-based system**. The current SDK
+> uses Connect RPC services with `plugin.Service`, `plugin.Serve()`, and
+> `plugin.ExtractContext()`. See `plugin-rpc-architecture.md` §6–§10.
 
 ### `plugin.Context` — the plugin's interface to the host
 

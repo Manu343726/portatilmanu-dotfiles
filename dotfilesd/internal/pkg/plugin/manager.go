@@ -14,7 +14,10 @@ import (
 	"strings"
 	"sync"
 
+	"connectrpc.com/connect"
 	"connectrpc.com/grpcreflect"
+	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 )
 
 // PluginInfo holds metadata for a loaded plugin.
@@ -28,6 +31,11 @@ type PluginInfo struct {
 	Process     *os.Process
 	SourceDir   string
 	CacheDir    string
+
+	// DocsCache holds documentation fetched from the plugin's
+	// DocumentationService. Key is the service name ("" for plugin-level docs),
+	// value is the markdown content. Populated best-effort at load time.
+	DocsCache map[string]string
 }
 
 // Manager orchestrates plugin lifecycle with dependency-aware builds
@@ -184,7 +192,7 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 		}
 
 		// Step f: If DocumentationService is exposed, call it (best-effort).
-		_ = services // documentation caching will be added later
+		docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
 
 		// Step g: Store PluginInfo + start supervisor.
 		displayName := hs.Name
@@ -198,6 +206,7 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 			Description: hs.Description,
 			URL:         hs.URL,
 			Services:    services,
+			DocsCache:   docsCache,
 			Process:     procCmd.Process,
 			SourceDir:   sourceDir,
 			CacheDir:    cacheDir,
@@ -385,4 +394,52 @@ func readJSONLine(r io.Reader, v interface{}) error {
 		return err
 	}
 	return json.Unmarshal(buf[:n], v)
+}
+
+// fetchDocumentation calls the plugin's DocumentationService (if exposed)
+// and returns a map of service name → markdown content. The empty-string key
+// holds plugin-level docs. Returns nil if the plugin doesn't expose the
+// DocumentationService or if all calls fail.
+func fetchDocumentation(ctx context.Context, httpClient *http.Client, pluginURL string, services []string) map[string]string {
+	hasDocs := false
+	for _, s := range services {
+		if s == "dotfilesd.v1.DocumentationService" {
+			hasDocs = true
+			break
+		}
+	}
+	if !hasDocs {
+		return nil
+	}
+
+	docsClient := dotfilesdv1connect.NewDocumentationServiceClient(httpClient, pluginURL)
+	cache := make(map[string]string)
+
+	// Fetch plugin-level docs (empty service_name).
+	if resp, err := docsClient.GetDocumentation(ctx, connect.NewRequest(&dotfilesdv1.DocumentationRequest{})); err == nil {
+		if resp.Msg.Content != "" {
+			cache[""] = resp.Msg.Content
+		}
+	} else {
+		slog.Debug("GetDocumentation(plugin-level) failed", "url", pluginURL, "error", err)
+	}
+
+	// Fetch per-service docs.
+	for _, svc := range services {
+		if svc == "grpc.reflection.v1.ServerReflection" || svc == "grpc.reflection.v1alpha.ServerReflection" || svc == "dotfilesd.v1.DocumentationService" {
+			continue
+		}
+		if resp, err := docsClient.GetDocumentation(ctx, connect.NewRequest(&dotfilesdv1.DocumentationRequest{ServiceName: svc})); err == nil {
+			if resp.Msg.Content != "" {
+				cache[svc] = resp.Msg.Content
+			}
+		} else {
+			slog.Debug("GetDocumentation failed", "service", svc, "error", err)
+		}
+	}
+
+	if len(cache) == 0 {
+		return nil
+	}
+	return cache
 }

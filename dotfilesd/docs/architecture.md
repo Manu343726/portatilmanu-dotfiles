@@ -1,5 +1,11 @@
 # Architecture
 
+> **⚠️ This document is partially outdated.** See
+> [`plugin-rpc-architecture.md`](plugin-rpc-architecture.md) for the current
+> plugin system design. The old Tool-based API (`CallPluginTool`,
+> `extension.proto`, `plugin.proto`) has been replaced by Connect RPC
+> services discovered via gRPC reflection.
+
 dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, exposed to AI agents via MCP.
 
 ```
@@ -20,7 +26,7 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 │                    script_run, script_list                           │
 │                    config_reload (→ scripts/reload/<target>)         │
 │                    dotfiles_git (→ scripts/git/<action>)             │
-│  Plugin tools:     <plugin>_<tool> (auto-discovered)                │
+│  Plugin tools:     <plugin>_<method> (auto-discovered, per-method)  │
 │  App tool:         _sudo_submit_password (MCP Apps only)            │
 │  Resources:        ui://dotfilesd/sudo-prompt (MCP Apps HTML)       │
 └──────────────────────────┬───────────────────────────────────────────┘
@@ -57,7 +63,8 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 │  │  PluginService    │  │  ScriptService    │                         │
 │  │  · ListPlugins    │  │  · RunScript      │                         │
 │  │  · ListPluginTree │  │  · ListScripts    │                         │
-│  │  · CallPluginTool │  │                   │                         │
+│  │  · (removed —     │  │                   │                         │
+│  │    now direct RPC)│  │                   │                         │
 │  └──────────────────┘  └──────────────────┘                         │
 │                                                                      │
 │  CALLBACK services (daemon → client):                                │
@@ -164,7 +171,7 @@ This separation prevents plugins from accessing admin-only features (reconfigure
 
 **PluginService** — Plugin discovery and invocation.
 - `ListPlugins` / `ListPluginTree` — discover loaded plugins
-- `CallPluginTool` — invoke a plugin tool, streaming output
+- ~~`CallPluginTool` — invoke a plugin tool, streaming output~~ *(removed — replaced by direct Connect RPC via grpcreflect)*
 
 ### Callback services
 
@@ -180,7 +187,7 @@ This separation prevents plugins from accessing admin-only features (reconfigure
 
 4. **Auto-discovery** — Plugins in `~/.config/dotfilesd/plugins/` are scanned, built, launched, and registered automatically. Tools appear as CLI subcommands and MCP tools without manual wiring.
 
-5. **Streaming by default** — `ExecStream` and `CallPluginTool` stream output in real time. Plugins can use `BackgroundExec` for interactive commands with stdin control and `BackgroundTask.Tee()` for dual output/processing.
+5. **Streaming** — The daemon supports `ExecStream` for real-time output streaming. (Note: The old `CallPluginTool` streaming was removed; plugins now serve Connect RPC services directly.)
 
 ## Proto files
 
@@ -196,8 +203,8 @@ Service definitions are in `proto/dotfilesd/v1/dotfilesdv1/`:
 | `script.proto` | `ScriptService` (RunScript, ListScripts) |
 | `feedback.proto` | `FeedbackService` + `InputService` + `ConfirmService` + `ChooseService` |
 | `log.proto` | `LogService` |
-| `plugin.proto` | `PluginService` (ListPlugins, ListPluginTree, CallPluginTool) |
-| `extension.proto` | `ExtensionService` (daemon→plugin: GetDescriptor, CallTool) + `SchemaType`/`PropertyType` enums |
+| ~~`plugin.proto`~~ | ~~Old tool-dispatch protocol — removed~~ |
+| ~~`extension.proto`~~ | ~~Old ExtensionService — removed~~ |
 
 Generated `.pb.go` and `.connect.go` files are gitignored. Run `make proto` to regenerate them.
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"dotfilesd/internal/pkg/rpcreflection"
+
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -48,12 +49,23 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 		return buildStaticPluginCommand(p)
 	}
 
-	elideSvc := len(svcInfos) == 1
+	// Count non-system services for elision decisions.
+	var nonSystemCount int
+	for _, svc := range svcInfos {
+		if !rpcreflection.IsSystemService(svc.FullName) && svc.FullName != "dotfilesd.v1.DocumentationService" {
+			nonSystemCount++
+		}
+	}
+	elideSvc := nonSystemCount == 1
 
 	for _, svc := range svcInfos {
 		if rpcreflection.IsSystemService(svc.FullName) || svc.FullName == "dotfilesd.v1.DocumentationService" {
 			continue
 		}
+
+		// Elide the RPC subcommand when the service has exactly one method
+		// (single-RPC promotion per spec §5a: Cobra Flag Generation Rules).
+		elideRPC := len(svc.Methods) == 1
 
 		svcCmd := pluginCmd
 		if !elideSvc {
@@ -67,14 +79,29 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 		}
 
 		for _, m := range svc.Methods {
-			rpcCmd := &cobra.Command{
-				Use:   camelToKebab(m.MethodName),
-				Short: fmt.Sprintf("%s.%s", shortSvcName(svc.FullName), m.MethodName),
-				RunE:  makeRunEProto(p.URL, m),
-			}
+			runE := makeRunEProto(p.URL, m)
+			shortDesc := fmt.Sprintf("%s.%s", shortSvcName(svc.FullName), m.MethodName)
 
-			addFlagsFromMessageDesc(rpcCmd, m.InputMsg, "")
-			svcCmd.AddCommand(rpcCmd)
+			if elideRPC {
+				// Promote single method: add flags directly to the parent command
+				// and set its RunE to invoke the RPC.
+				addFlagsFromMessageDesc(svcCmd, m.InputMsg, "")
+				svcCmd.RunE = runE
+				if !elideSvc {
+					// Only update the service command's metadata when it's a
+					// dedicated service subcommand (not the plugin root).
+					svcCmd.Use = fmt.Sprintf("%s [flags]", svcCmd.Use)
+					svcCmd.Short = shortDesc
+				}
+			} else {
+				rpcCmd := &cobra.Command{
+					Use:   camelToKebab(m.MethodName),
+					Short: shortDesc,
+					RunE:  runE,
+				}
+				addFlagsFromMessageDesc(rpcCmd, m.InputMsg, "")
+				svcCmd.AddCommand(rpcCmd)
+			}
 		}
 	}
 
@@ -90,10 +117,6 @@ type PluginRegistryInfo struct {
 	URL         string
 	Services    []string
 }
-
-
-
-
 
 // buildStaticPluginCommand creates a simple info-only command (fallback).
 func buildStaticPluginCommand(p PluginRegistryInfo) *cobra.Command {

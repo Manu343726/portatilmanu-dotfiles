@@ -55,8 +55,8 @@ Proto files are in `proto/dotfilesd/v1/dotfilesdv1/`:
 | `script.proto` | `ScriptService` (RunScript, ListScripts) |
 | `feedback.proto` | `FeedbackService` + `InputService`/`ConfirmService`/`ChooseService` |
 | `log.proto` | `LogService` |
-| `plugin.proto` | `PluginService` (ListPlugins, ListPluginTree, CallPluginTool) |
-| `extension.proto` | `ExtensionService` + `SchemaType`/`PropertyType` enums |
+| `plugin_registry.proto` | `PluginRegistryService` (GetPlugin, ListPlugins) — replaces old PluginService |
+| ~~`plugin.proto` / `extension.proto`~~ | ~~Old tool-dispatch protocol — removed~~ |
 
 ## Running tests
 

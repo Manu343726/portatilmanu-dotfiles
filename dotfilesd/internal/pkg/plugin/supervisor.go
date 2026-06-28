@@ -224,8 +224,17 @@ func (s *supervisor) monitor(ctx context.Context) {
 	}
 }
 
-// rebuild runs 'go build' on the plugin's source directory.
+// rebuild runs proto compilation (if needed) then 'go build' on the plugin's
+// source directory. This ensures plugin proto changes are picked up before
+// the build step, matching the same two-phase build used in LoadPlugins.
 func (s *supervisor) rebuild() error {
+	// Step 1: Recompile protos (best-effort — skip if no proto dir).
+	if err := stepProto(s.sourceDir, s.name); err != nil {
+		slog.Debug("proto recompilation failed during rebuild", "plugin", s.name, "error", err)
+		// Non-fatal: the plugin may not have protos.
+	}
+
+	// Step 2: Build the plugin binary.
 	cmd := exec.Command("go", "build", "-o", s.binaryPath, ".")
 	cmd.Dir = s.sourceDir
 	if out, err := cmd.CombinedOutput(); err != nil {
