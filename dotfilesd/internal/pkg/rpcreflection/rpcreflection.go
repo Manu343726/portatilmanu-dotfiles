@@ -102,6 +102,13 @@ func (c *Client) DiscoverServices(ctx context.Context) ([]ServiceInfo, error) {
 // raw JSON response bytes. It POSTs to the Connect JSON endpoint at
 // {baseURL}/{service}/{method} with Content-Type: application/json.
 func (c *Client) CallJSON(ctx context.Context, method MethodInfo, payload json.RawMessage) (json.RawMessage, error) {
+	return c.CallJSONWithHeaders(ctx, method, payload, nil)
+}
+
+// CallJSONWithHeaders is like CallJSON but allows setting additional HTTP
+// headers on the request. Headers are merged into the request; they cannot
+// override Content-Type.
+func (c *Client) CallJSONWithHeaders(ctx context.Context, method MethodInfo, payload json.RawMessage, headers map[string]string) (json.RawMessage, error) {
 	rpcURL := fmt.Sprintf("%s/%s/%s", c.baseURL, method.ServiceName, method.MethodName)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", rpcURL, bytes.NewReader(payload))
@@ -109,6 +116,10 @@ func (c *Client) CallJSON(ctx context.Context, method MethodInfo, payload json.R
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

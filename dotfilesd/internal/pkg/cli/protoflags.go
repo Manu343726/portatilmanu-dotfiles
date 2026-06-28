@@ -34,6 +34,11 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 		RunE:    func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 	}
 
+	// Add persistent --json flag for all plugin commands. When set, the
+	// plugin receives X-Dotfiles-Render-Output: false so it returns raw
+	// structured data instead of human-readable formatted output.
+	pluginCmd.PersistentFlags().Bool("json", false, "output raw JSON instead of human-readable formatted output")
+
 	// Try to discover services via HTTP-based grpcreflect.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -226,10 +231,25 @@ func makeRunEProto(pluginURL string, m rpcreflection.MethodInfo) func(*cobra.Com
 			return fmt.Errorf("marshal request: %w", err)
 		}
 
+		// Build headers: CLI defaults to RenderOutput=true (human-readable).
+		// User can pass --json to request raw JSON data.
+		headers := map[string]string{
+			"X-Dotfiles-Render-Output": "true",
+		}
+		if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
+			headers["X-Dotfiles-Render-Output"] = "false"
+		}
+		// Also detect --format=json in the request body (per spec §3).
+		if format, ok := body["format"]; ok {
+			if s, ok := format.(string); ok && s == "json" {
+				headers["X-Dotfiles-Render-Output"] = "false"
+			}
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		respBody, err := refClient.CallJSON(ctx, m, jsonBytes)
+		respBody, err := refClient.CallJSONWithHeaders(ctx, m, jsonBytes, headers)
 		if err != nil {
 			return err
 		}

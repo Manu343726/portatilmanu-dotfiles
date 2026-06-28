@@ -1,5 +1,39 @@
 # Changelog — Plugin RPC Architecture Rewrite
 
+## [Post-CLI] — Implement RenderOutput Feature (MCP + CLI + rpcreflection)
+
+**Commit:** (pending)
+**Date:** 2026-06-28
+
+### Changes
+- `dotfilesd/internal/pkg/rpcreflection/rpcreflection.go`: Added `CallJSONWithHeaders()`
+  method to allow passing custom HTTP headers (e.g. `X-Dotfiles-Render-Output`) alongside
+  the JSON payload. Refactored `CallJSON()` to delegate to it for backward compatibility.
+- `dotfilesd/internal/pkg/cli/mcp.go`: MCP `dispatchPluginTool()` now reads `_render_output`
+  meta-field from tool args. When `true`, it strips the field from the payload and forwards
+  `X-Dotfiles-Render-Output: true` header to the plugin. Added `_render_output` (boolean,
+  optional) and `session_id` (string, optional) to all plugin tool input schemas (both
+  per-method tools and reflection-fallback single-tool mode).
+- `dotfilesd/internal/pkg/cli/protoflags.go`: CLI now defaults to sending
+  `X-Dotfiles-Render-Output: true` (human-readable formatted output). Added persistent
+  `--json` flag to all plugin commands; when set, sends `X-Dotfiles-Render-Output: false`
+  so the plugin returns raw structured data. Also auto-detects `--format=json` in the
+  request body and sets the header to `false` accordingly.
+
+### State
+- [x] Full build passes
+- [x] `go vet` clean
+- [x] All tests pass
+
+### Notes
+Three gaps identified during RenderOutput audit: (1) rpcreflection had no way to pass
+custom headers, (2) MCP bridge didn't support `_render_output`, (3) CLI didn't set
+the RenderOutput header at all. All three now closed. Plugin handlers can check
+`ExtractContext(ctx).RenderOutput()` to conditionally format output — the
+infrastructure is complete even though existing sample plugins don't yet use it.
+
+---
+
 ## [Step 0.0] — Document: Development Workflow Rules
 
 **Commit:** `37786d6`

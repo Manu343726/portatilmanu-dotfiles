@@ -308,7 +308,8 @@ func getPluginTools(clients *Clients) []toolDef {
 				Name:        p.Name,
 				Description: pluginDesc,
 				InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-					"session_id": {Type: "string", Description: "optional session ID for grouping"},
+					"session_id":     {Type: "string", Description: "optional session ID for grouping"},
+					"_render_output": {Type: "boolean", Description: "set true to request human-readable formatted output"},
 				}},
 			}
 			tools = append(tools, tool)
@@ -329,6 +330,13 @@ func getPluginTools(clients *Clients) []toolDef {
 
 				// Build JSON Schema from the input message descriptor.
 				schema := messageToToolSchema(m.InputMsg)
+				// Add MCP bridge meta-fields (consumed by dispatchPluginTool,
+				// not sent to the plugin).
+				if schema.Properties == nil {
+					schema.Properties = make(map[string]propSchema)
+				}
+				schema.Properties["session_id"] = propSchema{Type: "string", Description: "optional session ID for grouping"}
+				schema.Properties["_render_output"] = propSchema{Type: "boolean", Description: "set true to request human-readable formatted output"}
 
 				tool := toolDef{
 					Name:        toolName,
@@ -1030,9 +1038,20 @@ func dispatchPluginTool(id json.RawMessage, clients *Clients, name string, args 
 		return mcpErr(id, -32000, fmt.Sprintf("daemon connection failed: %v", err))
 	}
 
-	// Inject session_id into the payload if present in args.
+	// Parse args for meta-fields (_render_output, session_id) that are
+	// consumed by the MCP bridge, not sent to the plugin.
+	renderOutput := false
 	var argMap map[string]any
 	if err := json.Unmarshal(payload, &argMap); err == nil {
+		// Handle _render_output meta-field.
+		if ro, ok := argMap["_render_output"]; ok {
+			if b, ok := ro.(bool); ok && b {
+				renderOutput = true
+			}
+			delete(argMap, "_render_output")
+		}
+
+		// Handle session_id meta-field.
 		if sid, ok := argMap["session_id"]; ok {
 			if s, ok := sid.(string); ok && s != "" {
 				// Wrap the payload with session info the plugin expects.
@@ -1046,6 +1065,12 @@ func dispatchPluginTool(id json.RawMessage, clients *Clients, name string, args 
 		payload, _ = json.Marshal(argMap)
 	}
 
+	// Build headers for the plugin HTTP request.
+	headers := map[string]string{}
+	if renderOutput {
+		headers["X-Dotfiles-Render-Output"] = "true"
+	}
+
 	// Invoke the plugin method via rpcreflection.
 	methodInfo := rpcreflection.MethodInfo{
 		ServiceName: info.ServiceName,
@@ -1055,7 +1080,7 @@ func dispatchPluginTool(id json.RawMessage, clients *Clients, name string, args 
 	defer cancel()
 
 	refClient := rpcreflection.NewClient(info.PluginURL)
-	respBody, err := refClient.CallJSON(ctx, methodInfo, payload)
+	respBody, err := refClient.CallJSONWithHeaders(ctx, methodInfo, payload, headers)
 	if err != nil {
 		return mcpErr(id, -32603, fmt.Sprintf("plugin call failed: %v", err))
 	}
