@@ -156,9 +156,9 @@ func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pref
 
 		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
 			// Repeated message fields use StringToString with the pattern
-			// --field <index>.<subfield-path>=<value>, e.g. --a 0.b.c=1 --a 1.b.c=2
+			// --field [<index>].<subfield-path>=<value>, e.g. --a [0].b.c=1 --a [1].b.c=2
 			cmd.Flags().StringToString(flagName, nil,
-				"Repeated "+fs.TypeName+". Usage: --"+flagName+" <idx>.<field>=<value>")
+				"Repeated "+fs.TypeName+". Usage: --"+flagName+" [<idx>].<field>=<value>")
 			continue
 		}
 
@@ -353,7 +353,7 @@ func buildJSONFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pre
 // buildRepeatedMessageFromSchema builds a JSON array from a StringToString flag
 // where each key is "<index>.<field-path>" and value is the typed field value.
 //
-// Example: --a 0.b.c=1 --a 1.b.c=2 produces [{"b":{"c":1}},{"b":{"c":2}}]
+// Example: --a [0].b.c=1 --a [1].b.c=2 produces [{"b":{"c":1}},{"b":{"c":2}}]
 //
 // Indices must be consecutive from 0 to N-1 with no gaps.
 func buildRepeatedMessageFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, parentMsg *dotfilesdv1.MessageSchema) ([]any, error) {
@@ -372,7 +372,8 @@ func buildRepeatedMessageFromSchema(cmd *cobra.Command, flagName string, fs *dot
 	}
 
 	// Parse entries: group by array index.
-	// Key format: "<idx>.<rest>" where <rest> may contain multiple dots.
+	// Key format: "[<idx>].<rest>" where <rest> may contain multiple dots.
+	// Example: [0].b.c=1, [1].b.c=2
 	type entry struct {
 		idx   int
 		path  string // field path after the index, e.g. "b.c"
@@ -382,12 +383,18 @@ func buildRepeatedMessageFromSchema(cmd *cobra.Command, flagName string, fs *dot
 	seenIndices := make(map[int]bool)
 	maxIdx := -1
 	for key, val := range rawMap {
-		dotPos := strings.Index(key, ".")
-		if dotPos < 0 {
-			return nil, fmt.Errorf("invalid key %q: expected <index>.<field-path>, got no dot", key)
+		if len(key) == 0 || key[0] != '[' {
+			return nil, fmt.Errorf("invalid key %q: expected [<index>].<field-path>, got no opening bracket", key)
 		}
-		idxStr := key[:dotPos]
-		rest := key[dotPos+1:]
+		closeBracket := strings.IndexByte(key, ']')
+		if closeBracket < 0 {
+			return nil, fmt.Errorf("invalid key %q: expected [<index>].<field-path>, got no closing bracket", key)
+		}
+		if closeBracket+1 >= len(key) || key[closeBracket+1] != '.' {
+			return nil, fmt.Errorf("invalid key %q: expected [<index>].<field-path>, got no dot after bracket", key)
+		}
+		idxStr := key[1:closeBracket]
+		rest := key[closeBracket+2:] // skip "]."
 
 		var parsedIdx int
 		if n, _ := fmt.Sscanf(idxStr, "%d", &parsedIdx); n == 0 || parsedIdx < 0 {
