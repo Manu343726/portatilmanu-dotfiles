@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -153,6 +154,17 @@ type resourcesServer struct {
 
 func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.CurrentRequest]) (*connect.Response[pb.CurrentResponse], error) {
 	ram, cpu, disk, diskIO := s.state.get()
+
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil && pc.RenderOutput() {
+		fmt.Fprintf(pc.Stdout(), "📊 Resources — RAM: %.0f/%.0f MB (%.0f%%) | CPU: %.0f%% (%.0f%% user, %.0f%% sys, %.0f%% iowait) | Disk: %.1f/%.1f GB (%.0f%%) on %s | Disk I/O: %.0f r/s %.0f w/s on %s\n",
+			ram.UsedMB, ram.TotalMB, ram.Percent,
+			cpu.TotalPercent, cpu.UserPercent, cpu.SystemPercent, cpu.IOwaitPercent,
+			disk.UsedGB, disk.TotalGB, disk.Percent, disk.MountPoint,
+			diskIO.ReadsPerSec, diskIO.WritesPerSec, diskIO.Device,
+		)
+	}
+
 	return connect.NewResponse(&pb.CurrentResponse{
 		Ram: &pb.RAMSnapshot{
 			TotalMb:     ram.TotalMB,

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,34 @@ import (
 // weatherServer implements the type-safe WeatherService.
 type weatherServer struct{}
 
+// wttrInCurrent holds the relevant portion of wttr.in's JSON response.
+type wttrInCurrent struct {
+	TempC       string `json:"temp_C"`
+	FeelsLikeC  string `json:"FeelsLikeC"`
+	Humidity    string `json:"humidity"`
+	WeatherDesc []struct {
+		Value string `json:"value"`
+	} `json:"weatherDesc"`
+	Winddir16Point string `json:"winddir16Point"`
+	WindspeedKmph  string `json:"windspeedKmph"`
+	Visibility     string `json:"visibility"`
+	Pressure       string `json:"pressure"`
+	Cloudcover     string `json:"cloudcover"`
+	PrecipMM       string `json:"precipMM"`
+}
+
+type wttrInRoot struct {
+	CurrentCondition []wttrInCurrent `json:"current_condition"`
+	NearestArea      []struct {
+		AreaName []struct {
+			Value string `json:"value"`
+		} `json:"areaName"`
+		Country []struct {
+			Value string `json:"value"`
+		} `json:"country"`
+	} `json:"nearest_area"`
+}
+
 func (s *weatherServer) Forecast(
 	ctx context.Context,
 	req *connect.Request[pb.ForecastRequest],
@@ -23,51 +52,143 @@ func (s *weatherServer) Forecast(
 	format := req.Msg.Format
 
 	pc := plugin.ExtractContext(ctx)
+	renderOutput := pc != nil && pc.RenderOutput()
 
+	// Determine URL based on explicit format or RenderOutput flag.
+	// When RenderOutput=false, default to JSON (structured data).
+	// When RenderOutput=true, default to brief (human-readable).
 	var url string
-	switch format {
-	case "json":
+	switch {
+	case format == "json":
 		url = fmt.Sprintf("wttr.in/%s?format=j1", location)
-	case "full":
+	case format == "full":
 		url = fmt.Sprintf("wttr.in/%s", location)
+	case format != "":
+		// Explicit format was given (e.g. "brief").
+		url = fmt.Sprintf("wttr.in/%s?0", location)
+	case !renderOutput:
+		// No explicit format and caller wants raw data.
+		url = fmt.Sprintf("wttr.in/%s?format=j1", location)
+		format = "json"
 	default:
+		// No explicit format, default to brief human-readable.
 		url = fmt.Sprintf("wttr.in/%s?0", location)
 	}
 
 	if pc != nil {
-		pc.Log().Info("forecasting weather via custom RPC", "location", location, "format", format, "url", url)
+		pc.Log().Info("forecasting weather",
+			"location", location,
+			"format", format,
+			"render_output", renderOutput,
+			"url", url,
+		)
 	}
 
 	cmd := fmt.Sprintf("curl -s --max-time 10 '%s'", url)
 
-	if pc != nil {
-		result, err := pc.Exec(cmd)
-		if err != nil {
-			return connect.NewResponse(&pb.ForecastResponse{
-				ErrorMessage: err.Error(),
-				ExitCode:     -1,
-			}), nil
-		}
-		if result.ExitCode != 0 {
-			errMsg := strings.TrimSpace(result.Stderr)
-			if errMsg == "" {
-				errMsg = fmt.Sprintf("curl exited with code %d", result.ExitCode)
-			}
-			return connect.NewResponse(&pb.ForecastResponse{
-				ExitCode:     int32(result.ExitCode),
-				ErrorMessage: errMsg,
-			}), nil
-		}
+	if pc == nil {
 		return connect.NewResponse(&pb.ForecastResponse{
-			Report:   strings.TrimSpace(result.Stdout),
-			ExitCode: 0,
+			ErrorMessage: "no daemon context available",
+			ExitCode:     -1,
 		}), nil
 	}
 
+	result, err := pc.Exec(cmd)
+	if err != nil {
+		return connect.NewResponse(&pb.ForecastResponse{
+			ErrorMessage: err.Error(),
+			ExitCode:     -1,
+		}), nil
+	}
+	if result.ExitCode != 0 {
+		errMsg := strings.TrimSpace(result.Stderr)
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("curl exited with code %d", result.ExitCode)
+		}
+		return connect.NewResponse(&pb.ForecastResponse{
+			ExitCode:     int32(result.ExitCode),
+			ErrorMessage: errMsg,
+		}), nil
+	}
+
+	// When RenderOutput=true and format is JSON, parse the structured data
+	// and reformat it as a nice human-readable report.
+	raw := strings.TrimSpace(result.Stdout)
+	if renderOutput && format == "json" {
+		if formatted := formatWeatherJSON(raw); formatted != "" {
+			raw = formatted
+		}
+	}
+
 	return connect.NewResponse(&pb.ForecastResponse{
-		ErrorMessage: "no daemon context available",
-		ExitCode:     -1,
+		Report:   raw,
+		ExitCode: 0,
 	}), nil
+}
+
+// formatWeatherJSON parses wttr.in's JSON response (format=j1) and returns
+// a human-readable formatted weather report. Returns empty string on error.
+func formatWeatherJSON(raw string) string {
+	var root wttrInRoot
+	if err := json.Unmarshal([]byte(raw), &root); err != nil {
+		return ""
+	}
+	if len(root.CurrentCondition) == 0 {
+		return ""
+	}
+	cc := root.CurrentCondition[0]
+
+	// Build the report.
+	var area, country string
+	if len(root.NearestArea) > 0 {
+		if len(root.NearestArea[0].AreaName) > 0 {
+			area = root.NearestArea[0].AreaName[0].Value
+		}
+		if len(root.NearestArea[0].Country) > 0 {
+			country = root.NearestArea[0].Country[0].Value
+		}
+	}
+
+	var desc string
+	if len(cc.WeatherDesc) > 0 {
+		desc = cc.WeatherDesc[0].Value
+	}
+
+	var b strings.Builder
+	if area != "" {
+		fmt.Fprintf(&b, "📍 %s", area)
+		if country != "" {
+			fmt.Fprintf(&b, ", %s", country)
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "🌡  %s°C", cc.TempC)
+	if cc.FeelsLikeC != "" && cc.FeelsLikeC != cc.TempC {
+		fmt.Fprintf(&b, " (feels like %s°C)", cc.FeelsLikeC)
+	}
+	b.WriteString("\n")
+	if desc != "" {
+		fmt.Fprintf(&b, "☁️  %s\n", desc)
+	}
+	if cc.Humidity != "" {
+		fmt.Fprintf(&b, "💧 Humidity: %s%%\n", cc.Humidity)
+	}
+	if cc.WindspeedKmph != "" {
+		fmt.Fprintf(&b, "💨 Wind: %s km/h %s\n", cc.WindspeedKmph, cc.Winddir16Point)
+	}
+	if cc.Pressure != "" {
+		fmt.Fprintf(&b, "🔽 Pressure: %s mb\n", cc.Pressure)
+	}
+	if cc.Visibility != "" {
+		fmt.Fprintf(&b, "👁  Visibility: %s km\n", cc.Visibility)
+	}
+	if cc.Cloudcover != "" {
+		fmt.Fprintf(&b, "☁️  Cloud cover: %s%%\n", cc.Cloudcover)
+	}
+	if cc.PrecipMM != "" && cc.PrecipMM != "0.0" {
+		fmt.Fprintf(&b, "🌧  Precipitation: %s mm\n", cc.PrecipMM)
+	}
+	return b.String()
 }
 
 func main() {

@@ -469,3 +469,33 @@ Token auth middleware secures daemon-facing plugin RPCs.
 ### Notes
 These four gaps were identified by a systematic audit of the entire implementation
 against the spec document (§1–§17). All gaps are now closed.
+
+---
+
+## [Post-CLI] — Make Weather + Resources Plugins Respect RenderOutput Flag
+
+**Commit:** (pending)
+**Date:** 2026-06-28
+
+### Changes
+- `plugins/weather/main.go`: `Forecast` handler now checks `RenderOutput()` from the
+  plugin Context. When `RenderOutput=true` and format is `"json"`, the raw wttr.in JSON
+  response is parsed and reformatted into a human-readable report with emoji, temperature,
+  conditions, humidity, wind, pressure, visibility, cloud cover, and precipitation.
+  When no explicit format is given, `RenderOutput=false` defaults to `format=j1` (raw
+  structured data), while `RenderOutput=true` defaults to brief format.
+- `plugins/resources/main.go`: `Current` handler now writes a human-readable one-liner
+  to `Stdout()` (daemon log) when `RenderOutput=true`, with RAM, CPU, disk, and disk I/O
+  summary. The structured RPC response is returned unchanged in both modes.
+
+### State
+- [x] Daemon builds
+- [x] CLI builds
+- [x] Weather plugin builds
+- [x] Resources plugin builds
+- [x] All tests pass
+
+### Notes
+The weather handler also parses wttr.in's JSON format (j1) to extract structured fields
+(temp, humidity, wind, etc.) and presents them with emoji prefixes for readability.
+When `RenderOutput=false`, the raw JSON from wttr.in is returned as-is."
