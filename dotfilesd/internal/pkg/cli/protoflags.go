@@ -5,32 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
-	"connectrpc.com/grpcreflect"
+	"dotfilesd/internal/pkg/rpcreflection"
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 )
-
-// methodSchema holds resolved RPC method information for a single method.
-type methodSchema struct {
-	svcFullName string // e.g. "weather.WeatherService"
-	methodName  string // e.g. "Forecast"
-	method      protoreflect.MethodDescriptor
-	inputMsg    protoreflect.MessageDescriptor
-}
-
-// serviceSchema holds resolved service information.
-type serviceSchema struct {
-	fullName string // e.g. "weather.WeatherService"
-	methods  []methodSchema
-}
 
 // BuildPluginCommand creates a cobra command for a plugin, generating
 // subcommands and typed flags dynamically from the plugin's proto schema
@@ -52,38 +34,46 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 	}
 
 	// Try to discover services via HTTP-based grpcreflect.
-	schemas, err := discoverPluginSchema(p.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	refClient := rpcreflection.NewClient(p.URL)
+	svcInfos, err := refClient.DiscoverServices(ctx)
 	if err != nil {
 		slog.Debug("reflection failed for plugin, using static info", "plugin", name, "error", err)
 		return buildStaticPluginCommand(p)
 	}
 
-	if len(schemas) == 0 {
+	if len(svcInfos) == 0 {
 		return buildStaticPluginCommand(p)
 	}
 
-	elideSvc := len(schemas) == 1
+	elideSvc := len(svcInfos) == 1
 
-	for _, svc := range schemas {
+	for _, svc := range svcInfos {
+		if rpcreflection.IsSystemService(svc.FullName) || svc.FullName == "dotfilesd.v1.DocumentationService" {
+			continue
+		}
+
 		svcCmd := pluginCmd
 		if !elideSvc {
-			shortName := shortSvcName(svc.fullName)
+			shortName := shortSvcName(svc.FullName)
 			svcCmd = &cobra.Command{
 				Use:   shortName,
-				Short: svc.fullName,
+				Short: svc.FullName,
 				RunE:  func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 			}
 			pluginCmd.AddCommand(svcCmd)
 		}
 
-		for _, m := range svc.methods {
+		for _, m := range svc.Methods {
 			rpcCmd := &cobra.Command{
-				Use:   camelToKebab(m.methodName),
-				Short: fmt.Sprintf("%s.%s", shortSvcName(svc.fullName), m.methodName),
+				Use:   camelToKebab(m.MethodName),
+				Short: fmt.Sprintf("%s.%s", shortSvcName(svc.FullName), m.MethodName),
 				RunE:  makeRunEProto(p.URL, m),
 			}
 
-			addFlagsFromMessageDesc(rpcCmd, m.inputMsg, "")
+			addFlagsFromMessageDesc(rpcCmd, m.InputMsg, "")
 			svcCmd.AddCommand(rpcCmd)
 		}
 	}
@@ -101,86 +91,9 @@ type PluginRegistryInfo struct {
 	Services    []string
 }
 
-// discoverPluginSchema uses connectrpc grpcreflect over HTTP to get the
-// plugin's service schema (services, methods, and input message descriptors).
-func discoverPluginSchema(pluginURL string) ([]serviceSchema, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
-	httpClient := &http.Client{Timeout: 5 * time.Second}
-	refClient := grpcreflect.NewClient(httpClient, pluginURL)
-	stream := refClient.NewStream(ctx)
-	defer stream.Close()
 
-	svcNames, err := stream.ListServices()
-	if err != nil {
-		return nil, fmt.Errorf("list services: %w", err)
-	}
 
-	var schemas []serviceSchema
-	for _, fullName := range svcNames {
-		s := string(fullName)
-		if isSystemService(s) {
-			continue
-		}
-
-		// Get file descriptor(s) containing this service.
-		// The server returns the file plus its transitive dependencies.
-		fdProtos, err := stream.FileContainingSymbol(fullName)
-		if err != nil {
-			slog.Debug("FileContainingSymbol failed", "service", s, "error", err)
-			continue
-		}
-
-		// Build a *protoregistry.Files from all returned descriptors.
-		svcDesc, err := findServiceDescriptor(fdProtos, s)
-		if err != nil {
-			slog.Debug("findServiceDescriptor failed", "service", s, "error", err)
-			continue
-		}
-
-		var methods []methodSchema
-		for i := 0; i < svcDesc.Methods().Len(); i++ {
-			md := svcDesc.Methods().Get(i)
-			methods = append(methods, methodSchema{
-				svcFullName: s,
-				methodName:  string(md.Name()),
-				method:      md,
-				inputMsg:    md.Input(),
-			})
-		}
-		schemas = append(schemas, serviceSchema{fullName: s, methods: methods})
-	}
-	return schemas, nil
-}
-
-// findServiceDescriptor builds a *protoregistry.Files from one or more
-// FileDescriptorProtos and looks up the service by its fully-qualified name.
-func findServiceDescriptor(fdProtos []*descriptorpb.FileDescriptorProto, svcFullName string) (protoreflect.ServiceDescriptor, error) {
-	files, err := protodesc.NewFiles(&descriptorpb.FileDescriptorSet{File: fdProtos})
-	if err != nil {
-		return nil, fmt.Errorf("build file descriptors: %w", err)
-	}
-
-	d, err := files.FindDescriptorByName(protoreflect.FullName(svcFullName))
-	if err != nil {
-		return nil, fmt.Errorf("find service %q: %w", svcFullName, err)
-	}
-
-	svcDesc, ok := d.(protoreflect.ServiceDescriptor)
-	if !ok {
-		return nil, fmt.Errorf("symbol %q is not a service", svcFullName)
-	}
-	return svcDesc, nil
-}
-
-// isSystemService returns true for built-in services that should not be
-// exposed as CLI commands.
-func isSystemService(name string) bool {
-	return name == "grpc.reflection.v1.ServerReflection" ||
-		name == "grpc.reflection.v1alpha.ServerReflection" ||
-		name == "dotfilesd.v1.DocumentationService"
-}
 
 // buildStaticPluginCommand creates a simple info-only command (fallback).
 func buildStaticPluginCommand(p PluginRegistryInfo) *cobra.Command {
@@ -280,37 +193,22 @@ func addFlagsFromMessageDesc(cmd *cobra.Command, msg protoreflect.MessageDescrip
 }
 
 // makeRunEProto returns the RunE function that builds a JSON body from
-// cobra flags and invokes the RPC via HTTP POST to the Connect endpoint.
-func makeRunEProto(pluginURL string, m methodSchema) func(*cobra.Command, []string) error {
+// cobra flags and invokes the RPC via the rpcreflection client.
+func makeRunEProto(pluginURL string, m rpcreflection.MethodInfo) func(*cobra.Command, []string) error {
+	refClient := rpcreflection.NewClient(pluginURL)
 	return func(cmd *cobra.Command, args []string) error {
-		// Build a JSON map from cobra flags.
-		body := buildJSONFromMessage(cmd, m.inputMsg, "")
+		body := buildJSONFromMessage(cmd, m.InputMsg, "")
 		jsonBytes, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("marshal request: %w", err)
 		}
 
-		rpcURL := fmt.Sprintf("%s/%s/%s", pluginURL, m.svcFullName, m.methodName)
-		req, err := http.NewRequest("POST", rpcURL, bytes.NewReader(jsonBytes))
-		if err != nil {
-			return fmt.Errorf("create request: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-		httpClient := &http.Client{Timeout: 10 * time.Second}
-		resp, err := httpClient.Do(req)
+		respBody, err := refClient.CallJSON(ctx, m, jsonBytes)
 		if err != nil {
-			return fmt.Errorf("rpc call: %w", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("read response: %w", err)
-		}
-
-		if resp.StatusCode >= 400 {
-			return fmt.Errorf("RPC failed (HTTP %d): %s", resp.StatusCode, string(respBody))
+			return err
 		}
 
 		var pretty bytes.Buffer
