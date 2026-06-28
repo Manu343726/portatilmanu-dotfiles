@@ -540,6 +540,11 @@ func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 			if initParams.ClientInfo != nil {
 				clientCaps.clientName = initParams.ClientInfo.Name
 				clientCaps.clientVersion = initParams.ClientInfo.Version
+				// Propagate to clients struct for diagnostics enrichment.
+				// This is read by Connect() when it pushes client_connect.
+				if clients != nil {
+					clients.AgentID = initParams.ClientInfo.Name
+				}
 				slog.Debug("MCP client", "name", clientCaps.clientName, "version", clientCaps.clientVersion)
 			}
 			clientCaps.hasElicitation = initParams.Capabilities != nil && initParams.Capabilities.Elicitation != nil

@@ -186,12 +186,29 @@ func newRootCmd() *cobra.Command {
 			clients = cli.NewClients(port)
 			clients.SessionID = sessionID
 
+			// Capture client context for diagnostics enrichment.
+			clients.ClientType = "cli"
+			clients.CommandPath = cmd.CommandPath()
+			if pwd, err := os.Getwd(); err == nil {
+				clients.PWD = pwd
+			}
+
 			// Skip daemon connect in MCP mode — tools connect lazily on first use.
 			if cmd.Name() != "mcp" {
 				if err := clients.Connect(context.Background()); err != nil {
 					return err
 				}
 				sessionID = clients.SessionID
+			} else {
+				clients.ClientType = "mcp"
+			}
+			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			// Close client connection to flush client_disconnect and session_end
+			// diagnostic events so the tree doesn't accumulate stale "active" nodes.
+			if clients != nil {
+				clients.Close()
 			}
 			return nil
 		},

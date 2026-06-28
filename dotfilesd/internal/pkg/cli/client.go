@@ -72,6 +72,13 @@ type Clients struct {
 	Feedback  *FeedbackServer
 	SessionID string
 	ClientID  string
+
+	// Client context for diagnostics enrichment.
+	ClientType  string // "cli" or "mcp"
+	CommandPath string // full command path being executed (e.g. "system diag")
+	PWD         string // working directory where CLI was invoked
+	AgentID     string // MCP agent identity (client name from initialize)
+
 	mu        sync.Mutex
 	connected bool
 }
@@ -257,12 +264,38 @@ func (c *Clients) Connect(ctx context.Context) error {
 	session.Variables = caps
 	slog.Debug("client capabilities", "caps", caps)
 
+	// Detect client type from execution context if not already set.
+	if c.ClientType == "" {
+		if mcpBridge != nil {
+			c.ClientType = "mcp"
+		} else {
+			c.ClientType = "cli"
+		}
+	}
+
+	// Build rich diagnostic attrs for the client node.
+	attrs := map[string]string{
+		"client_type": c.ClientType,
+	}
+	if c.CommandPath != "" {
+		attrs["command"] = c.CommandPath
+	}
+	if c.PWD != "" {
+		attrs["pwd"] = c.PWD
+	}
+	if c.AgentID != "" {
+		attrs["agent_id"] = c.AgentID
+	} else if clientCaps.clientName != "" {
+		attrs["agent_id"] = clientCaps.clientName
+	}
+
 	// Push client_connect diagnostic event.
 	if _, err := c.DiagPost.PostEvent(ctx, connect.NewRequest(&dotfilesdv1.DiagEvent{
 		Type:        "client_connect",
 		Resource:    "client:" + c.ClientID,
 		Message:     c.ClientID,
 		TimestampNs: time.Now().UnixNano(),
+		Attrs:       attrs,
 	})); err != nil {
 		slog.Debug("diag post client_connect failed", "error", err)
 	}
@@ -297,6 +330,17 @@ func (c *Clients) Close() {
 		}))
 		if err != nil {
 			slog.Debug("diag post client_disconnect failed", "error", err)
+		}
+
+		// Finalize the session so it doesn't accumulate as "active" in the
+		// diagnostics tree after the CLI command completes.
+		if c.SessionID != "" {
+			if _, err := c.Session.FinalizeSession(context.Background(), connect.NewRequest(&dotfilesdv1.FinalizeSessionRequest{
+				Session: &dotfilesdv1.Session{Id: c.SessionID},
+			})); err != nil {
+				slog.Debug("session finalize failed", "error", err)
+			}
+			slog.Debug("client session finalized", "session_id", c.SessionID)
 		}
 	}
 	if c.Feedback != nil {
