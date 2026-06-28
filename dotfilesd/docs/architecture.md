@@ -52,7 +52,7 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 │                                                                      │
 │  USAGE services (CLI + plugins, token-authenticated):                │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│  │  ExecService      │  │  FeedbackService  │  │  LogService       │  │
+│  │  ExecService      │  │  FeedbackService  │  │  IOService        │  │
 │  │  · Exec           │  │  · RequestInput   │  │  · Log            │  │
 │  │  · ExecStream     │  │  · RequestConfirm │  │                   │  │
 │  │  · BackgroundExec │  │  · RequestChoose  │  │                   │  │
@@ -129,7 +129,7 @@ Services are split into three categories:
 | Category | Access | Services |
 |----------|--------|----------|
 | **Admin** | CLI only (via session) | `SystemService`, `ConfigService`, `SessionService`, `DotfilesService` |
-| **Usage** | CLI + plugins (token or session) | `ExecService`, `ScriptService`, `FeedbackService`, `LogService`, `PluginService` |
+| **Usage** | CLI + plugins (token or session) | `ExecService`, `ScriptService`, `FeedbackService`, `IOService`, `PluginService` |
 | **Callback** | Daemon → client | `InputService`, `ConfirmService`, `ChooseService` |
 
 This separation prevents plugins from accessing admin-only features (reconfigure, restart, session listing).
@@ -167,7 +167,7 @@ This separation prevents plugins from accessing admin-only features (reconfigure
 
 **FeedbackService** — User interaction prompts (input, confirm, choose).
 
-**LogService** — Plugin logging routed through the daemon's logging system.
+**IOService** — Plugin I/O (logging + stdout/stderr) routed through the daemon.
 
 **PluginService** — Plugin discovery and invocation.
 - `ListPlugins` / `ListPluginTree` — discover loaded plugins
@@ -202,7 +202,7 @@ Service definitions are in `proto/dotfilesd/v1/dotfilesdv1/`:
 | `dotfiles.proto` | `DotfilesService` (Status) |
 | `script.proto` | `ScriptService` (RunScript, ListScripts) |
 | `feedback.proto` | `FeedbackService` + `InputService` + `ConfirmService` + `ChooseService` |
-| `log.proto` | `LogService` |
+| `io.proto` | `IOService` |
 | ~~`plugin.proto`~~ | ~~Old tool-dispatch protocol — removed~~ |
 | ~~`extension.proto`~~ | ~~Old ExtensionService — removed~~ |
 
@@ -221,7 +221,7 @@ internal/pkg/daemon/
 ├── script.go              # Script parser + runner
 ├── scripts_registry.go    # Script discovery from filesystem
 ├── feedback.go            # FeedbackService handler
-├── log.go                 # LogService handler
+├── io.go                   # IOService handler
 ├── plugin.go              # InitPlugins, token generation, session creation
 ├── plugin_svc.go          # PluginService handler
 ├── background_task.go     # Background task manager

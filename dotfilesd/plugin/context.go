@@ -78,7 +78,7 @@ type ScriptStepResult struct {
 type contextClient struct {
 	execClient     dotfilesdv1connect.ExecServiceClient
 	feedbackClient dotfilesdv1connect.FeedbackServiceClient
-	logClient      dotfilesdv1connect.LogServiceClient
+	ioClient       dotfilesdv1connect.IOServiceClient
 	scriptClient   dotfilesdv1connect.ScriptServiceClient
 	sessionClient  dotfilesdv1connect.SessionServiceClient
 
@@ -93,7 +93,7 @@ func newContextClient(url, token, sessionID, pluginName, clientID string) *conte
 	c := &contextClient{
 		execClient:     dotfilesdv1connect.NewExecServiceClient(httpClient, url),
 		feedbackClient: dotfilesdv1connect.NewFeedbackServiceClient(httpClient, url),
-		logClient:      dotfilesdv1connect.NewLogServiceClient(httpClient, url),
+		ioClient:       dotfilesdv1connect.NewIOServiceClient(httpClient, url),
 		scriptClient:   dotfilesdv1connect.NewScriptServiceClient(httpClient, url),
 		sessionClient:  dotfilesdv1connect.NewSessionServiceClient(httpClient, url),
 		token:          token,
@@ -126,7 +126,7 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 	return &contextClient{
 		execClient:     c.execClient,
 		feedbackClient: c.feedbackClient,
-		logClient:      c.logClient,
+		ioClient:       c.ioClient,
 		scriptClient:   c.scriptClient,
 		sessionClient:  c.sessionClient,
 		token:          c.token,
@@ -335,7 +335,7 @@ func (c *contextClient) Stderr() io.Writer {
 }
 
 // daemonLogWriter is an io.Writer that sends data as log entries to the
-// daemon's LogService. Writes are buffered and flushed on newline or at
+// daemon's IOService. Writes are buffered and flushed on newline or at
 // a max buffer size to avoid excessive RPC calls.
 type daemonLogWriter struct {
 	client   *contextClient
@@ -389,7 +389,7 @@ func (w *daemonLogWriter) flushLine(line string) {
 	})
 	w.client.setTokenHeader(req)
 	// Best-effort; use background context so we don't block on log delivery.
-	_, _ = w.client.logClient.Log(context.Background(), req)
+	_, _ = w.client.ioClient.Log(context.Background(), req)
 }
 
 // pluginLogger implements logging.Logger by calling the daemon's Log RPC.
@@ -422,7 +422,7 @@ func (l *pluginLogger) log(level dotfilesdv1.LogLevel, msg string, attrs ...any)
 		},
 	})
 	l.client.setTokenHeader(req)
-	_, _ = l.client.logClient.Log(context.Background(), req)
+	_, _ = l.client.ioClient.Log(context.Background(), req)
 }
 
 func (l *pluginLogger) Trace(msg string, attrs ...any) {

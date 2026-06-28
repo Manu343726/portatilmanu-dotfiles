@@ -54,7 +54,7 @@ Proto files are in `proto/dotfilesd/v1/dotfilesdv1/`:
 | `session.proto` | `SessionService` (Create, Connect, Finalize, Get, List) |
 | `script.proto` | `ScriptService` (RunScript, ListScripts) |
 | `feedback.proto` | `FeedbackService` + `InputService`/`ConfirmService`/`ChooseService` |
-| `log.proto` | `LogService` |
+| `io.proto` | `IOService` |
 | `plugin_registry.proto` | `PluginRegistryService` (GetPlugin, ListPlugins) — replaces old PluginService |
 | ~~`plugin.proto` / `extension.proto`~~ | ~~Old tool-dispatch protocol — removed~~ |
 

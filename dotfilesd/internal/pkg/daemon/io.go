@@ -11,22 +11,22 @@ import (
 	"connectrpc.com/connect"
 )
 
-// logServer implements the LogService usage-level RPC.
+// ioServer implements the IOService RPC.
 // Both CLI tools and plugins use this service to submit structured log
 // entries to the daemon's logging system.
-type logServer struct {
+type ioServer struct {
 	daemon *Daemon
 }
 
-func newLogServer(daemon *Daemon) *logServer {
-	return &logServer{daemon: daemon}
+func newIOServer(daemon *Daemon) *ioServer {
+	return &ioServer{daemon: daemon}
 }
 
-func (s *logServer) Log(
+func (s *ioServer) Log(
 	ctx context.Context,
 	req *connect.Request[dotfilesdv1.LogRequest],
 ) (*connect.Response[dotfilesdv1.LogResponse], error) {
-	slog.Log(ctx, levelTrace, "LogService.Log", "source", req.Msg.Source)
+	slog.Log(ctx, levelTrace, "IOService.Log", "source", req.Msg.Source)
 
 	entry := req.Msg.Entry
 	if entry == nil {

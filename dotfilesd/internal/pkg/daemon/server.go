@@ -119,7 +119,7 @@ func (d *Daemon) Start() error {
 		mux.Handle(p, auth(h))
 	}
 	{
-		p, h := dotfilesdv1connect.NewLogServiceHandler(newLogServer(d))
+		p, h := dotfilesdv1connect.NewIOServiceHandler(newIOServer(d))
 		mux.Handle(p, auth(h))
 	}
 

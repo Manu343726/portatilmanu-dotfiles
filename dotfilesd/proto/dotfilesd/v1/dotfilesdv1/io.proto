@@ -7,10 +7,10 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 import "proto/dotfilesd/v1/dotfilesdv1/config.proto";
 
-// LogService — plugins submit structured log entries to the daemon's logging
-// system. This is the usage-level service (both CLI tools and plugins can log
-// through their daemon connection).
-service LogService {
+// IOService — plugins submit structured log entries to the daemon's logging
+// system. The daemon also uses this to forward stdout/stderr from plugins
+// back to the active CallPlugin bidi stream for real-time output relay.
+service IOService {
   // Log submits a log entry. The daemon routes it through its logging system
   // with the caller's identity as the logger module.
   rpc Log(LogRequest) returns (LogResponse);

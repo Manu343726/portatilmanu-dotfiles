@@ -1209,7 +1209,7 @@ func Serve(cfg Config) {
 
 ### `plugin/context.go`
 
-`contextClient` calls daemon's `ExecService`, `FeedbackService`, `LogService`, `ScriptService`
+`contextClient` calls daemon's `ExecService`, `FeedbackService`, `IOService`, `ScriptService`
 with `X-Dotfiles-Context-Token` header. These are the ONLY daemon-facing APIs.
 
 No `CallPlugin`, `CallPluginStream`, `pluginClient` — those are gone.

@@ -16,7 +16,7 @@ import (
 )
 
 // activePluginCall tracks a bidi streaming plugin execution call.
-// The daemon matches LogService output from plugins to the correct
+// The daemon matches IOService output from plugins to the correct
 // client stream using client_id.
 type activePluginCall struct {
 	clientID   string
@@ -52,7 +52,7 @@ func unregisterCall(clientID, pluginName string) {
 	activeCallsMu.Unlock()
 }
 
-// PushPluginOutput is called by LogService handler when a plugin writes
+// PushPluginOutput is called by IOService handler when a plugin writes
 // stdout/stderr. It forwards the output to the client's bidi stream.
 func PushPluginOutput(pluginName, source, line, clientID string) {
 	activeCallsMu.RLock()
