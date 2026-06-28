@@ -30,25 +30,28 @@ type PluginInfo struct {
 	CacheDir    string
 }
 
-// Manager orchestrates plugin lifecycle with dependency-aware builds.
+// Manager orchestrates plugin lifecycle with dependency-aware builds
+// and crash supervision (exponential backoff restart).
 type Manager struct {
 	PluginsDir string
 	CacheDir   string
 	CtxURL     string
 	CtxToken   string
 
-	mu      sync.RWMutex
-	plugins map[string]*PluginInfo
+	mu          sync.RWMutex
+	plugins     map[string]*PluginInfo
+	supervisors map[string]*supervisor
 }
 
 // NewManager creates a new plugin manager.
 func NewManager(pluginsDir, cacheDir, ctxURL, ctxToken string) *Manager {
 	return &Manager{
-		PluginsDir: pluginsDir,
-		CacheDir:   cacheDir,
-		CtxURL:     ctxURL,
-		CtxToken:   ctxToken,
-		plugins:    make(map[string]*PluginInfo),
+		PluginsDir:  pluginsDir,
+		CacheDir:    cacheDir,
+		CtxURL:      ctxURL,
+		CtxToken:    ctxToken,
+		plugins:     make(map[string]*PluginInfo),
+		supervisors: make(map[string]*supervisor),
 	}
 }
 
@@ -183,7 +186,7 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 		// Step f: If DocumentationService is exposed, call it (best-effort).
 		_ = services // documentation caching will be added later
 
-		// Step g: Store PluginInfo.
+		// Step g: Store PluginInfo + start supervisor.
 		displayName := hs.Name
 		if displayName == "" {
 			displayName = name
@@ -200,7 +203,17 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 			CacheDir:    cacheDir,
 		}
 		m.plugins[name] = info
-		slog.Info("plugin registered", "name", name, "services", services)
+
+		// Start crash supervisor with exponential backoff (adopts existing process).
+		sup := newSupervisor(name, binaryPath, sourceDir, cacheDir, m.CtxURL, m.CtxToken, sessionID)
+		if err := sup.startAdopt(ctx, info); err != nil {
+			procCmd.Process.Kill()
+			slog.Error("supervisor start failed", "name", name, "error", err)
+			delete(m.plugins, name)
+			continue
+		}
+		m.supervisors[name] = sup
+		slog.Info("plugin registered with supervisor", "name", name, "services", services)
 	}
 
 	slog.Info("plugins loaded", "count", len(m.plugins))
@@ -332,6 +345,19 @@ func (m *Manager) ListPlugins() []*PluginInfo {
 		result = append(result, info)
 	}
 	return result
+}
+
+// Shutdown stops all plugin supervisors and kills all plugin processes.
+func (m *Manager) Shutdown() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for name, sup := range m.supervisors {
+		slog.Debug("shutting down plugin supervisor", "name", name)
+		sup.stop()
+	}
+	m.supervisors = make(map[string]*supervisor)
+	m.plugins = make(map[string]*PluginInfo)
 }
 
 func isGoPlugin(dir string) bool {

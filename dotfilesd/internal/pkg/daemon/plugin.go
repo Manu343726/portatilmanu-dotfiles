@@ -57,14 +57,9 @@ func generatePluginToken() string {
 	return hex.EncodeToString(b)
 }
 
-// Shutdown shuts down the plugin manager.
+// ShutdownPlugins shuts down the plugin manager and all supervisors.
 func (d *Daemon) ShutdownPlugins() {
 	if d.pluginMgr != nil {
-		// Kill all plugin processes.
-		for _, info := range d.pluginMgr.ListPlugins() {
-			if info.Process != nil {
-				info.Process.Kill()
-			}
-		}
+		d.pluginMgr.Shutdown()
 	}
 }
