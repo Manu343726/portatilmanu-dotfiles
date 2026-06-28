@@ -26,15 +26,12 @@ func newBackgroundTaskManager() *backgroundTaskManager {
 }
 
 // ListTasks returns a snapshot of all active background tasks.
-func (m *backgroundTaskManager) ListTasks() []*dotfilesdv1.BackgroundTaskNode {
+func (m *backgroundTaskManager) ListTasks() []*backgroundTask {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	nodes := make([]*dotfilesdv1.BackgroundTaskNode, 0, len(m.tasks))
+	nodes := make([]*backgroundTask, 0, len(m.tasks))
 	for _, t := range m.tasks {
-		nodes = append(nodes, &dotfilesdv1.BackgroundTaskNode{
-			Id:      t.id,
-			Command: t.cmd.String(),
-		})
+		nodes = append(nodes, t)
 	}
 	return nodes
 }

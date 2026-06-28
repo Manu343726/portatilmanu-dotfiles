@@ -18,6 +18,8 @@ import (
 type activePluginCall struct {
 	clientID   string
 	pluginName string
+	service    string
+	method     string
 	stdoutChan chan []byte
 	stderrChan chan []byte
 	stdinBuf   bytes.Buffer
@@ -32,10 +34,12 @@ var (
 	activeCallsByPlugin = make(map[string]*activePluginCall)
 )
 
-func registerCall(clientID, pluginName string) *activePluginCall {
+func registerCall(clientID, pluginName, service, method string) *activePluginCall {
 	call := &activePluginCall{
 		clientID:   clientID,
 		pluginName: pluginName,
+		service:    service,
+		method:     method,
 		stdoutChan: make(chan []byte, 256),
 		stderrChan: make(chan []byte, 256),
 		done:       make(chan struct{}),
@@ -155,23 +159,19 @@ func newExecutorServer(d *Daemon) *executorServer {
 }
 
 // ListActiveCalls returns a snapshot of all active executor bidi streams.
-func ListActiveCalls() []*dotfilesdv1.ExecutorNode {
+func ListActiveCalls() []*activePluginCall {
 	activeCallsMu.RLock()
 	defer activeCallsMu.RUnlock()
-	
-	seen := make(map[string]bool) // dedup by clientID
-	var nodes []*dotfilesdv1.ExecutorNode
+	seen := make(map[string]bool)
+	var out []*activePluginCall
 	for _, call := range activeCallsByClient {
 		if seen[call.clientID] {
 			continue
 		}
 		seen[call.clientID] = true
-		nodes = append(nodes, &dotfilesdv1.ExecutorNode{
-			ClientId:   call.clientID,
-			PluginName: call.pluginName,
-		})
+		out = append(out, call)
 	}
-	return nodes
+	return out
 }
 
 func (s *executorServer) CallPlugin(
@@ -206,7 +206,7 @@ func (s *executorServer) CallPlugin(
 		})
 	}
 
-	call := registerCall(clientID, pluginName)
+	call := registerCall(clientID, pluginName, svcName, methodName)
 	defer unregisterCall(clientID, pluginName)
 
 	// Stream stdin chunks from client in background — buffer for ReadStdin RPC.

@@ -69,53 +69,41 @@ func RunDiagnostics(clients *Clients, sessionID string) error {
 		slog.Error("diagnostics failed", "error", err)
 		return fmt.Errorf("diagnostics failed: %w", err)
 	}
-	d := resp.Msg
 
-	fmt.Printf("Daemon v%s (pid %d, up %ds)\n", d.Version, d.Pid, d.UptimeSecs)
-	fmt.Println()
-
-	// Sessions tree.
-	fmt.Printf("═══ Sessions (%d)\n", len(d.Sessions))
-	for _, s := range d.Sessions {
-		status := "active"
-		if s.Finalized {
-			status = "finalized"
-		}
-		fmt.Printf("  ├─ %s (%s)\n", s.Id, status)
-		if s.CallbackUrl != "" {
-			fmt.Printf("  │  callback: %s\n", s.CallbackUrl)
-		}
-		fmt.Printf("  │  created: %s\n", s.CreatedAt)
-	}
-	fmt.Println()
-
-	// Plugins tree.
-	fmt.Printf("═══ Plugins (%d)\n", len(d.Plugins))
-	for _, p := range d.Plugins {
-		fmt.Printf("  ├─ %s v%s (%s)\n", p.DisplayName, p.Version, p.Url)
-		for _, svc := range p.Services {
-			fmt.Printf("  │  service: %s\n", svc)
-		}
-	}
-	fmt.Println()
-
-	// Active executor streams.
-	if len(d.Executors) > 0 {
-		fmt.Printf("═══ Active executor streams (%d)\n", len(d.Executors))
-		for _, e := range d.Executors {
-			fmt.Printf("  ├─ %s → %s\n", e.ClientId, e.PluginName)
-		}
-		fmt.Println()
-	}
-
-	// Background tasks.
-	if len(d.BackgroundTasks) > 0 {
-		fmt.Printf("═══ Background tasks (%d)\n", len(d.BackgroundTasks))
-		for _, t := range d.BackgroundTasks {
-			fmt.Printf("  ├─ [%s] %s\n", t.Id, t.Command)
-		}
-		fmt.Println()
-	}
-
+	printTree(resp.Msg.Root, "", true)
 	return nil
+}
+
+func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool) {
+	// Build the line prefix.
+	branch := "├── "
+	if isLast {
+		branch = "└── "
+	}
+
+	label := n.Label
+	if n.Status != "" {
+		label = fmt.Sprintf("%s (%s)", label, n.Status)
+	}
+	fmt.Printf("%s%s%s\n", prefix, branch, label)
+
+	// Print attributes indented.
+	for k, v := range n.Attrs {
+		childPrefix := prefix + "   "
+		if !isLast {
+			childPrefix = prefix + "│  "
+		}
+		fmt.Printf("%s%s: %s\n", childPrefix, k, v)
+	}
+
+	// Print children.
+	childPrefix := prefix
+	if isLast {
+		childPrefix += "   "
+	} else {
+		childPrefix += "│  "
+	}
+	for i, child := range n.Children {
+		printTree(child, childPrefix, i == len(n.Children)-1)
+	}
 }

@@ -66,48 +66,18 @@ message DiagnosticsRequest {
   Session session = 100;
 }
 
+// DiagNode represents one node in the daemon state tree.
+// Each node has a type label, a description, optional metadata,
+// and child nodes forming a parent-child hierarchy.
+message DiagNode {
+  string type = 1;    // node type: "daemon", "client", "executor", "session",
+                       // "plugin", "bg_task", "script", "exec_command"
+  string label = 2;   // human-readable name (e.g. "cli_xxx", "resources.ResourcesService.Current")
+  string status = 3;  // status: "active", "idle", "finalized", "running"
+  map<string, string> attrs = 4; // key-value details (pid, url, version, command, callback, etc.)
+  repeated DiagNode children = 5;
+}
+
 message DiagnosticsResponse {
-  // Daemon identity.
-  string version = 1;
-  int64 pid = 2;
-  int64 uptime_secs = 3;
-
-  // Active sessions.
-  repeated SessionNode sessions = 10;
-  // Currently loaded plugins with their callers.
-  repeated PluginNode plugins = 11;
-  // Active executor bidi streams.
-  repeated ExecutorNode executors = 12;
-  // Active background tasks.
-  repeated BackgroundTaskNode background_tasks = 13;
-}
-
-message SessionNode {
-  string id = 1;
-  bool finalized = 2;
-  string callback_url = 3;
-  string created_at = 4;
-  // Last exec command issued in this session.
-  string last_command = 5;
-}
-
-message PluginNode {
-  string name = 1;
-  string display_name = 2;
-  string version = 3;
-  string url = 4;
-  repeated string services = 5;
-  repeated string active_callers = 6; // client IDs currently calling this plugin
-}
-
-message ExecutorNode {
-  string client_id = 1;
-  string plugin_name = 2;
-  string service = 3;
-  string method = 4;
-}
-
-message BackgroundTaskNode {
-  string id = 1;
-  string command = 2;
+  DiagNode root = 1;  // full tree rooted at the daemon
 }
