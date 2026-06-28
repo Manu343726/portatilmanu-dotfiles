@@ -241,6 +241,10 @@ message PostSnapshotResponse {}
 service DiagnosticsQueryService {
   // QueryTree returns a filtered state tree.
   rpc QueryTree(QueryTreeRequest) returns (QueryTreeResponse);
+  // QueryResources returns filtered resources as a flat list (no tree
+  // reconstruction). Uses the same filter Phase 2 as QueryTree (§4.4)
+  // but returns the raw ResourceState list instead of building a tree.
+  rpc QueryResources(QueryResourcesRequest) returns (QueryResourcesResponse);
   // QueryHistory returns historical events.
   rpc QueryHistory(QueryHistoryRequest) returns (QueryHistoryResponse);
   // QueryMetrics returns metric data points.
@@ -294,6 +298,46 @@ message QueryMetricsResponse {
 
 message StreamEventsRequest {
   repeated string types = 1;             // event types to subscribe to
+}
+
+// ─────────────────────────────────────────────
+// Flat list queries
+// ─────────────────────────────────────────────
+
+message QueryResourcesRequest {
+  // All filter fields are identical to QueryTreeRequest.
+  repeated string include_types = 1;     // e.g. ["daemon", "plugin"]
+  string label_regex = 2;                // filter by label pattern
+  string status_filter = 3;              // e.g. "running", "bg_worker"
+  map<string, string> attr_filters = 4;  // key=value filter on attrs
+  // Time window for finished/crashed nodes.
+  //   0 or unset        → active-only
+  //   positive duration → include finished nodes within this window
+  //   -1 / "inf"        → no pruning
+  google.protobuf.Duration time_window = 6;
+  // Sort order for results.
+  string sort_by = 7;                    // "started_at", "type", "label", "status"
+  bool sort_desc = 8;                    // descending order (default: ascending)
+  int32 limit = 9;                       // max results (0 = no limit)
+}
+
+message QueryResourcesResponse {
+  repeated ResourceState resources = 1;
+  int32 total_count = 2;                 // total matching before limit
+}
+
+message ResourceState {
+  string id = 1;
+  string type = 2;
+  string label = 3;
+  string parent_id = 4;
+  string status = 5;
+  int64 created_at_ns = 6;
+  int64 started_at_ns = 7;
+  int64 finished_at_ns = 8;             // 0 if still active
+  int64 duration_ns = 9;                // 0 if still active
+  map<string, string> attrs = 10;
+  int32 exit_code = 11;
 }
 ```
 
@@ -486,6 +530,11 @@ FUNCTION ReconstructTree(cache, timeWindow, filters) → DiagNode
                 SKIP
 
     ADD (id → res) TO keep
+
+  // [NOTE: Phase 2 is shared with QueryResources (§4.9). The flat list
+  //  RPC runs the identical filter loop but stops here — it returns the
+  //  |keep| entries directly as a sorted flat list instead of proceeding
+  //  to adjacency and tree assembly.]
 
   ── PHASE 3: Build adjacency ──
   childrenOf = new Map(string → List)
@@ -706,6 +755,52 @@ And the `GetCurrentTree` method signature becomes:
 
 ```go
 func (e *Engine) GetCurrentTree(timeWindow time.Duration, filters ...FilterFunc) *DiagNode
+func (e *Engine) GetResources(filters ...FilterFunc) []*ResourceState
+```
+
+### 4.9 Flat List Queries
+
+In addition to tree output, the query service provides a `QueryResources` RPC
+that returns resources as a flat sorted list. This is useful for:
+
+- **Table views** in CLI (`dotfilesctl system resources`) and TUI
+- **Machine-friendly output** (JSON, YAML) for scripting
+- **Pagination** — the response carries `total_count` for building paginated UIs
+- **Sorting** — results can be ordered by any field (start time, type, status, label)
+
+**Implementation:** `QueryResources` reuses Phase 2 (filtering) of the tree
+reconstruction algorithm (§4.4) verbatim. After filtering, instead of building
+adjacency and DFS-assembling the tree, it:
+
+1. Collects the matching `ResourceState` entries into a flat slice
+2. Optionally sorts by `sort_by` / `sort_desc`
+3. Applies `limit` if set
+4. Returns the list with `total_count` (matching count before limit)
+
+The filter code path is **identical** — there is a single `filterSnapshot()`
+function called by both `ReconstructTree` and `QueryResources`:
+
+```
+filtered = filterSnapshot(snapshot, timeWindow, filters)
+
+// Tree path:
+adjacency = buildAdjacency(filtered)
+root = assembleTree(filtered, adjacency)
+
+// Flat list path:
+sorted = sort(filtered, sortBy, sortDesc)
+paginated = applyLimit(sorted, limit)
+```
+
+This ensures that `--type plugin --status crashed` returns exactly the same
+set of resources whether displayed as a tree or as a flat table.
+
+```bash
+# Flat list examples
+dotfilesctl system resources                              # all active resources
+dotfilesctl system resources --type executor              # only executor calls
+dotfilesctl system resources --status crashed --limit 10  # last 10 crashes
+dotfilesctl system resources --sort-by started_at --desc  # newest first
 ```
 
 ---
@@ -854,6 +949,15 @@ dotfilesctl system diag --time-window 30s
 
 # With explicit time window as duration
 dotfilesctl system diag --time-window 5m --type executor
+
+# Flat list: all active resources as a table
+dotfilesctl system resources
+
+# Flat list: only executor resources, sorted by start time
+dotfilesctl system resources --type executor --sort-by started_at --desc
+
+# Flat list: last 10 crashes
+dotfilesctl system resources --status crashed --limit 10
 ```
 
 ---
