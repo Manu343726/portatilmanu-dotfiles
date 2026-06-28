@@ -8,7 +8,9 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
+	"dotfilesd/internal/pkg/diagnostics"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
@@ -29,10 +31,16 @@ type scriptStep struct {
 type ScriptRunner struct {
 	store    *SessionStore
 	registry *ScriptRegistry
+	diag     *diagnostics.Engine
 }
 
 func NewScriptRunner(store *SessionStore, registry *ScriptRegistry) *ScriptRunner {
 	return &ScriptRunner{store: store, registry: registry}
+}
+
+// SetDiagEngine configures the diagnostics engine for script events.
+func (r *ScriptRunner) SetDiagEngine(eng *diagnostics.Engine) {
+	r.diag = eng
 }
 
 // ListScripts returns the registered script tree.
@@ -112,6 +120,33 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 		}), nil
 	}
 
+	// Determine a human-readable label for this script.
+	scriptLabel := "script"
+	switch src := rpcReq.Source.(type) {
+	case *dotfilesdv1.RunScriptRequest_RegisteredScript:
+		scriptLabel = src.RegisteredScript
+	case *dotfilesdv1.RunScriptRequest_ScriptPath:
+		// Extract a short name from the path (last path component).
+		if idx := strings.LastIndexByte(src.ScriptPath, '/'); idx >= 0 {
+			scriptLabel = src.ScriptPath[idx+1:]
+		} else {
+			scriptLabel = src.ScriptPath
+		}
+	}
+	scriptID := "script:" + scriptLabel + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+	scriptStart := time.Now()
+
+	// Push script_start.
+	if r.diag != nil {
+		r.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventScriptStart,
+			Resource:  scriptID,
+			Parent:    "session:" + session.id,
+			Timestamp: scriptStart,
+			Message:   scriptLabel,
+		})
+	}
+
 	// Execute.
 	var results []*dotfilesdv1.StepResult
 	allOK := true
@@ -127,7 +162,36 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 
 		switch step.kind {
 		case "exec":
+			execID := "exec:" + step.command + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+			execStart := time.Now()
+
+			if r.diag != nil {
+				r.diag.PushEvent(diagnostics.Event{
+					Type:      diagnostics.EventExecStart,
+					Resource:  execID,
+					Parent:    scriptID,
+					Timestamp: execStart,
+					Message:   step.command,
+				})
+			}
+
 			stdout, stderr, exitCode := shell.Exec(step.command, session.Variables())
+
+			if r.diag != nil {
+				execDur := time.Since(execStart)
+				r.diag.PushEvent(diagnostics.Event{
+					Type:     diagnostics.EventExecStop,
+					Resource: execID,
+					Parent:   scriptID,
+					Timestamp: time.Now(),
+					Message:  step.command,
+					Attrs: map[string]string{
+						"exit_code":   fmt.Sprintf("%d", exitCode),
+						"duration_ns": fmt.Sprintf("%d", execDur.Nanoseconds()),
+					},
+				})
+			}
+
 			result.Stdout = stdout
 			result.Stderr = stderr
 			result.ExitCode = int32(exitCode)
@@ -220,6 +284,22 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 	if !allOK {
 		errMsg = "one or more steps failed"
 	}
+
+	if r.diag != nil {
+		r.diag.PushEvent(diagnostics.Event{
+			Type:      diagnostics.EventScriptStop,
+			Resource:  scriptID,
+			Parent:    "session:" + session.id,
+			Timestamp: time.Now(),
+			Message:   scriptLabel,
+			Attrs: map[string]string{
+				"steps":       fmt.Sprintf("%d", len(steps)),
+				"all_ok":      fmt.Sprintf("%t", allOK),
+				"duration_ns": fmt.Sprintf("%d", time.Since(scriptStart).Nanoseconds()),
+			},
+		})
+	}
+
 	return connect.NewResponse(&dotfilesdv1.RunScriptResponse{
 		Steps:        results,
 		AllSucceeded: allOK,
@@ -352,7 +432,13 @@ type scriptServer struct {
 }
 
 func newScriptServer(store *SessionStore, registry *ScriptRegistry) *scriptServer {
-	return &scriptServer{runner: NewScriptRunner(store, registry)}
+	runner := NewScriptRunner(store, registry)
+	return &scriptServer{runner: runner}
+}
+
+// SetDiagEngine passes the diagnostics engine through to the runner.
+func (s *scriptServer) SetDiagEngine(eng *diagnostics.Engine) {
+	s.runner.SetDiagEngine(eng)
 }
 
 func (s *scriptServer) RunScript(ctx context.Context, req *connect.Request[dotfilesdv1.RunScriptRequest]) (*connect.Response[dotfilesdv1.RunScriptResponse], error) {

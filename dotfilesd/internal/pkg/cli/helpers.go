@@ -10,6 +10,11 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 )
 
+// DefaultSessionID is set by the root command's PersistentPreRunE so that
+// plugin command builders (which run later in RunE) can pass the session
+// context through executor calls for diagnostics traceability.
+var DefaultSessionID string
+
 // cliTraceLevel is a custom slog level for TRACE, below Debug.
 const cliTraceLevel = slog.Level(-8)
 

@@ -196,11 +196,19 @@ func (s *executorServer) CallPlugin(
 
 	executorID := fmt.Sprintf("executor:call_%d", time.Now().UnixNano())
 	openTime := time.Now()
+
+	// Determine parent: prefer the caller's session when available (CLI context),
+	// fall back to the plugin for background executor calls.
+	execParent := "plugin:" + pluginName
+	if sessionID := extractSessionFromClientID(clientID); sessionID != "" {
+		execParent = "session:" + sessionID
+	}
+
 	if s.daemon.diag != nil {
 		s.daemon.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventExecutorOpen,
 			Resource:  executorID,
-			Parent:    "plugin:" + pluginName,
+			Parent:    execParent,
 			Timestamp: openTime,
 			Message:   fmt.Sprintf("%s.%s", svcName, methodName),
 			Attrs: map[string]string{
@@ -210,7 +218,9 @@ func (s *executorServer) CallPlugin(
 			},
 		})
 		// Reparent the plugin's background session to hang from this call.
-		s.daemon.diag.UpdateParent("session:plugin-"+pluginName, executorID)
+		if execParent == "plugin:"+pluginName {
+			s.daemon.diag.UpdateParent("session:plugin-"+pluginName, executorID)
+		}
 	}
 	defer func() {
 		if s.daemon.diag != nil {
@@ -219,7 +229,7 @@ func (s *executorServer) CallPlugin(
 			s.daemon.diag.PushEvent(diagnostics.Event{
 				Type:      diagnostics.EventExecutorClose,
 				Resource:  executorID,
-				Parent:    "plugin:" + pluginName,
+				Parent:    execParent,
 				Timestamp: closeTime,
 				Message:   fmt.Sprintf("%s.%s", svcName, methodName),
 				Attrs: map[string]string{
@@ -323,4 +333,14 @@ func (s *executorServer) CallPlugin(
 			return stream.Send(&dotfilesdv1.CallPluginMessage{ResponseBody: result.respBody})
 		}
 	}
+}
+
+// extractSessionFromClientID extracts a session ID from a client ID that was
+// formatted as "cli_<timestamp>|ses_<id>" by the CLI. Returns empty string
+// if no session is encoded (e.g. for background executor calls from plugins).
+func extractSessionFromClientID(clientID string) string {
+	if idx := strings.Index(clientID, "|"); idx >= 0 && idx+1 < len(clientID) {
+		return clientID[idx+1:]
+	}
+	return ""
 }

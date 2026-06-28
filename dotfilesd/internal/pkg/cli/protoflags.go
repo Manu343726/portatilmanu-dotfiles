@@ -299,6 +299,9 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 		// Send request header with render output preference.
 		renderOutput := !jsonOutput
 		clientID := fmt.Sprintf("cli_%d", time.Now().UnixNano())
+		if DefaultSessionID != "" {
+			clientID += "|" + DefaultSessionID
+		}
 		if err := stream.Send(&dotfilesdv1.CallPluginMessage{
 			PluginName:   stripServiceSuffix(svcName),
 			Service:      svcName,

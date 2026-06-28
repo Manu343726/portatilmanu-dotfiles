@@ -202,6 +202,7 @@ func newRootCmd() *cobra.Command {
 					return err
 				}
 				sessionID = clients.SessionID
+				cli.DefaultSessionID = sessionID
 			} else {
 				clients.ClientType = "mcp"
 			}

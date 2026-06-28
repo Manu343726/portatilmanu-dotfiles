@@ -99,6 +99,7 @@ func (d *Daemon) Start() error {
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)
+	scriptSvc.SetDiagEngine(d.diag)
 	diagPostSvc := newDiagnosticsPostServer(d.diag)
 	diagQuerySvc := newDiagnosticsQueryServer(d.diag)
 
