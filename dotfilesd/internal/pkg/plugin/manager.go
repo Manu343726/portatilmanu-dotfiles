@@ -53,6 +53,7 @@ type Manager struct {
 	mu          sync.RWMutex
 	plugins     map[string]*PluginInfo
 	supervisors map[string]*supervisor
+	depGraph    map[string][]string // plugin → its dependencies (cached)
 }
 
 // NewManager creates a new plugin manager.
@@ -64,6 +65,7 @@ func NewManager(pluginsDir, cacheDir, ctxURL, ctxToken string) *Manager {
 		CtxToken:    ctxToken,
 		plugins:     make(map[string]*PluginInfo),
 		supervisors: make(map[string]*supervisor),
+		depGraph:    make(map[string][]string),
 	}
 }
 
@@ -113,6 +115,14 @@ func (m *Manager) LoadPlugins(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("discover plugins: %w", err)
 	}
+
+	// Cache the dependency graph for dependents-check at unload time.
+	m.mu.Lock()
+	m.depGraph = make(map[string][]string, len(pluginDeps))
+	for k, v := range pluginDeps {
+		m.depGraph[k] = v
+	}
+	m.mu.Unlock()
 
 	// Topological sort for build order.
 	buildOrder := topologicalSort(pluginDeps)
@@ -186,8 +196,33 @@ func (m *Manager) LoadPluginByName(ctx context.Context, name string) (*PluginInf
 }
 
 // UnloadPluginByName stops a plugin supervisor and removes it from the registry.
+// Returns an error if any other loaded plugin depends on this one.
 func (m *Manager) UnloadPluginByName(name string) error {
 	m.mu.Lock()
+
+	// Check for dependents before unloading.
+	var dependents []string
+	for pluginName, deps := range m.depGraph {
+		if pluginName == name {
+			continue
+		}
+		// Only consider loaded plugins.
+		if _, loaded := m.plugins[pluginName]; !loaded {
+			continue
+		}
+		for _, dep := range deps {
+			if dep == name {
+				dependents = append(dependents, pluginName)
+				break
+			}
+		}
+	}
+	if len(dependents) > 0 {
+		m.mu.Unlock()
+		return fmt.Errorf("cannot unload %q: %d loaded plugin(s) depend on it: %v",
+			name, len(dependents), dependents)
+	}
+
 	sup, hasSup := m.supervisors[name]
 	info, hasInfo := m.plugins[name]
 	if hasSup {
@@ -196,6 +231,7 @@ func (m *Manager) UnloadPluginByName(name string) error {
 	if hasInfo {
 		delete(m.plugins, name)
 	}
+	delete(m.depGraph, name)
 	m.mu.Unlock()
 
 	if !hasInfo {
@@ -215,6 +251,13 @@ func (m *Manager) UnloadPluginByName(name string) error {
 // This is the shared implementation used by both LoadPlugins (startup) and
 // LoadPluginByName (runtime dynamic loading).
 func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir string) error {
+	// Cache dependency info for this plugin.
+	pluginsDir := expandHome(m.PluginsDir)
+	deps, _ := parsePluginDeps(sourceDir, pluginsDir)
+	m.mu.Lock()
+	m.depGraph[name] = deps
+	m.mu.Unlock()
+
 	// Step a: Proto compilation.
 	if err := stepProto(sourceDir, name); err != nil {
 		return fmt.Errorf("proto compile: %w", err)
