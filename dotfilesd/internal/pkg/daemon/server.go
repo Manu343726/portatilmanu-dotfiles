@@ -139,13 +139,13 @@ func (d *Daemon) Start() error {
 		p, h := dotfilesdv1connect.NewDiagnosticsQueryServiceHandler(diagQuerySvc)
 		mux.Handle(p, h)
 	}
+	{
+		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
+		mux.Handle(p, h)
+	}
 
 	// —— Services accessible with X-Dotfiles-Context-Token auth ——
 	auth := d.tokenAuthMiddleware
-	{
-		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
-		mux.Handle(p, auth(h))
-	}
 	{
 		p, h := dotfilesdv1connect.NewFeedbackServiceHandler(newFeedbackServer(d.sessions))
 		mux.Handle(p, auth(h))
