@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func RunPing(clients *Clients, sessionID string) error {
@@ -61,10 +63,44 @@ func RunSudoMethods(clients *Clients, sessionID string) error {
 	return nil
 }
 
+// DiagParams holds optional filter flags for the diagnostics query.
+type DiagParams struct {
+	TimeWindow time.Duration
+	ShowIdle   bool
+	Types      []string
+	Status     string
+	Label      string
+	Attrs      []string // "key=value" pairs
+}
+
 // RunDiagnostics queries the daemon for full diagnostic state and prints a tree.
-func RunDiagnostics(clients *Clients, sessionID string) error {
-	slog.Debug("diagnostics requested", "session_id", sessionID)
-	req := connect.NewRequest(&dotfilesdv1.QueryTreeRequest{})
+func RunDiagnostics(clients *Clients, sessionID string, params DiagParams) error {
+	slog.Debug("diagnostics requested", "session_id", sessionID, "params", params)
+
+	req := connect.NewRequest(&dotfilesdv1.QueryTreeRequest{
+		ShowIdle:    params.ShowIdle,
+		IncludeTypes: params.Types,
+		StatusFilter: params.Status,
+		LabelRegex:   params.Label,
+	})
+
+	// Parse attrs.
+	if len(params.Attrs) > 0 {
+		req.Msg.AttrFilters = make(map[string]string, len(params.Attrs))
+		for _, pair := range params.Attrs {
+			k, v, ok := strings.Cut(pair, "=")
+			if !ok {
+				return fmt.Errorf("invalid attr filter %q: expected key=value", pair)
+			}
+			req.Msg.AttrFilters[k] = v
+		}
+	}
+
+	// Convert time window to proto Duration.
+	if params.TimeWindow > 0 {
+		req.Msg.TimeWindow = durationpb.New(params.TimeWindow)
+	}
+
 	resp, err := clients.DiagQuery.QueryTree(context.Background(), req)
 	if err != nil {
 		slog.Error("diagnostics failed", "error", err)
