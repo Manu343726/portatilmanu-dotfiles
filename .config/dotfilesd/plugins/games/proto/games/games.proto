@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package games;
+
+option go_package = "plugins/games/proto/games";
+
+// Solitaire — Klondike solitaire TUI game.
+service SolitaireService {
+  rpc Play(PlayRequest) returns (PlayResponse);
+}
+
+// Minesweeper — classic minesweeper TUI game.
+service MinesweeperService {
+  rpc Play(MinesweeperRequest) returns (PlayResponse);
+}
+
+// Game2048 — 2048 sliding tile TUI game.
+service Game2048Service {
+  rpc Play(PlayRequest) returns (PlayResponse);
+}
+
+// Battleship — battleship vs AI TUI game.
+service BattleshipService {
+  rpc Play(PlayRequest) returns (PlayResponse);
+}
+
+// Chess — chess vs AI TUI game.
+service ChessService {
+  rpc Play(PlayRequest) returns (PlayResponse);
+}
+
+message PlayRequest {
+  // Optional: player name or seed (unused for now).
+  string options = 1;
+}
+
+message MinesweeperRequest {
+  int32 width = 1;   // default 9
+  int32 height = 2;  // default 9
+  int32 bombs = 3;   // default 10
+  string options = 4;
+}
+
+message PlayResponse {
+  bool won = 1;
+  string summary = 2;
+}
