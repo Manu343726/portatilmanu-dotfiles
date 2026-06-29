@@ -282,8 +282,10 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 
 		// Open bidi stream to daemon's PluginExecutorService.
 		// Use h2c transport since bidi streaming requires HTTP/2.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+		// Use a very long timeout so interactive TUI games work without
+		// being killed mid-game. The caller (PersistentPostRunE) cleans
+		// up after the command completes.
+		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 
 		h2cTransport := &http2.Transport{
 			AllowHTTP: true,
@@ -313,8 +315,12 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			return fmt.Errorf("send request: %w", err)
 		}
 
-		// Send stdin chunks from local stdin if piped, then close request.
-		if isStdinAvailable() {
+		// Forward local stdin to the plugin in a background goroutine.
+		// stdin is closed after the response loop ends so the goroutine
+		// unblocks and exits cleanly.
+		stdinDone := make(chan struct{}, 1)
+		go func() {
+			defer func() { stdinDone <- struct{}{} }()
 			buf := make([]byte, 4096)
 			for {
 				n, err := os.Stdin.Read(buf)
@@ -324,13 +330,10 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 					})
 				}
 				if err != nil {
-					break
+					return
 				}
 			}
-		}
-		if err := stream.CloseRequest(); err != nil {
-			return fmt.Errorf("close request: %w", err)
-		}
+		}()
 
 		// Receive streaming response.
 		for {
@@ -361,6 +364,17 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			// pc.Stdout() which arrives as StdoutChunks above. ResponseBody
 			// is not printed — it's only used for JSON/programmatic access.
 		}
+
+		// Unblock the stdin goroutine (only needed for TTY stdin which
+		// never reaches EOF), wait for it to finish, then clean up.
+		_ = stream.CloseRequest()
+		select {
+		case <-stdinDone:
+		case <-time.After(50 * time.Millisecond):
+			os.Stdin.Close()
+			<-stdinDone
+		}
+		cancel()
 		return nil
 	}
 }
