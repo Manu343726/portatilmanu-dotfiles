@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/net/http2"
+	"golang.org/x/term"
 )
 
 // BuildPluginCommand creates a cobra command for a plugin, generating
@@ -286,6 +287,7 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 		// being killed mid-game. The caller (PersistentPostRunE) cleans
 		// up after the command completes.
 		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+		defer cancel()
 
 		h2cTransport := &http2.Transport{
 			AllowHTTP: true,
@@ -315,9 +317,24 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			return fmt.Errorf("send request: %w", err)
 		}
 
+		// Set terminal to raw mode for interactive input when stdin is a TTY.
+		// This disables echo (so keystrokes aren't echoed to the display) and
+		// makes each keypress available immediately (not just after Enter).
+		var oldTermState *term.State
+		if term.IsTerminal(int(os.Stdin.Fd())) {
+			s, err := term.MakeRaw(int(os.Stdin.Fd()))
+			if err == nil {
+				oldTermState = s
+			}
+		}
+		defer func() {
+			if oldTermState != nil {
+				_ = term.Restore(int(os.Stdin.Fd()), oldTermState)
+				oldTermState = nil
+			}
+		}()
+
 		// Forward local stdin to the plugin in a background goroutine.
-		// stdin is closed after the response loop ends so the goroutine
-		// unblocks and exits cleanly.
 		stdinDone := make(chan struct{}, 1)
 		go func() {
 			defer func() { stdinDone <- struct{}{} }()
@@ -325,9 +342,14 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			for {
 				n, err := os.Stdin.Read(buf)
 				if n > 0 {
-					_ = stream.Send(&dotfilesdv1.CallPluginMessage{
-						StdinChunk: buf[:n],
-					})
+					// In raw mode the terminal sends \r instead of \n on Enter.
+					// Convert to \n so the plugin's ReadString('\n') works.
+					data := bytes.ReplaceAll(buf[:n], []byte{'\r'}, []byte{'\n'})
+					if err := stream.Send(&dotfilesdv1.CallPluginMessage{
+						StdinChunk: data,
+					}); err != nil {
+						return
+					}
 				}
 				if err != nil {
 					return
@@ -365,16 +387,22 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			// is not printed — it's only used for JSON/programmatic access.
 		}
 
-		// Unblock the stdin goroutine (only needed for TTY stdin which
-		// never reaches EOF), wait for it to finish, then clean up.
+		// Clean up: close the stream request side, restore terminal state,
+		// then unblock the stdin goroutine and wait for it to finish.
 		_ = stream.CloseRequest()
+
+		// Restore terminal BEFORE closing stdin (needs a valid fd).
+		if oldTermState != nil {
+			_ = term.Restore(int(os.Stdin.Fd()), oldTermState)
+			oldTermState = nil // prevent defer from running again
+		}
+
 		select {
 		case <-stdinDone:
 		case <-time.After(50 * time.Millisecond):
 			os.Stdin.Close()
 			<-stdinDone
 		}
-		cancel()
 		return nil
 	}
 }
