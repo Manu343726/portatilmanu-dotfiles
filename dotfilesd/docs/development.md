@@ -84,15 +84,19 @@ dotfilesd/
 ├── cmd/
 │   ├── dotfilesd/           # Daemon entry point
 │   └── dotfilesctl/         # CLI entry point
-├── internal/pkg/daemon/     # Daemon: RPC handlers, session store, plugin mgr
-├── internal/pkg/cli/        # CLI + MCP bridge
-├── internal/pkg/plugin/     # Daemon-side plugin manager (builder, registry, supervisor)
-├── internal/pkg/logging/    # Structured logging package
-├── internal/pkg/shared/     # Shared utilities
+├── internal/pkg/
+│   ├── daemon/              # Daemon: RPC handlers, session store, plugin mgr
+│   ├── cli/                 # CLI + MCP bridge
+│   ├── diagnostics/         # Diagnostics engine (state cache, history, metrics)
+│   ├── logging/             # Structured logging package
+│   ├── plugin/              # Daemon-side plugin manager (builder, registry, supervisor)
+│   ├── rpcreflection/       # gRPC reflection utilities
+│   └── shared/              # Shared utilities (build hash)
 ├── plugin/                  # Plugin SDK (public API for plugin authors)
 ├── proto/                   # Protobuf definitions
 ├── docs/                    # Documentation
 ├── service/                 # systemd unit files
+├── test/                    # End-to-end tests
 └── Makefile
 ```
 

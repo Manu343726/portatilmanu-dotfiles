@@ -35,6 +35,30 @@ dotfilesctl system sudo
 # → available: pkexec, sudo
 ```
 
+### `system diag`
+
+Query the diagnostics engine for runtime state tree, events, and metrics.
+
+```sh
+# Show the current runtime tree (daemon, plugins, sessions, executors)
+dotfilesctl system diag
+
+# Filter by type
+dotfilesctl system diag --include-types=plugin,daemon
+
+# Show historical events
+dotfilesctl system diag --history
+
+# Show metrics
+dotfilesctl system diag --metrics
+
+# Include finished/crashed resources within a time window
+dotfilesctl system diag --time-window=5m
+
+# Show all resources (including idle/finished)
+dotfilesctl system diag --show-idle
+```
+
 ### `dotfiles status`
 
 ```sh
@@ -58,10 +82,15 @@ dotfilesctl exec --sudo "pacman -Syu"
 
 ### `script run` / `script list`
 
-Run registered scripts (.dsh files in `~/.config/dotfilesd/scripts/`).
+Run registered scripts (.dsh files in `~/.config/dotfilesd/scripts/`). Script commands
+are also auto-registered as top-level CLI subcommands in groups:
 
 ```sh
-dotfilesctl script run registerd git/status
+dotfilesctl git/status         # same as dotfilesctl script run git/status
+dotfilesctl reload/tmux         # same as dotfilesctl script run reload/tmux
+
+# Or use the generic script command:
+dotfilesctl script run git/status
 dotfilesctl script list
 ```
 
@@ -110,15 +139,31 @@ dotfilesctl git log       # → scripts/git/log.dsh
 ### `plugin`
 
 ```sh
-dotfilesctl plugin list              # all plugins and tools
+dotfilesctl plugin list              # all plugins and services
 dotfilesctl plugin list -v           # verbose with input schemas
-dotfilesctl plugin tree              # directory hierarchy
-dotfilesctl plugin list-tools <name> # tools for one plugin
+dotfilesctl plugin load <name>       # load a plugin by name
+dotfilesctl plugin unload <name>     # unload a plugin by name
+dotfilesctl plugin reload            # rescan plugins directory
 ```
 
-### `weather forecast`, `resources current`, ...
+### Plugin commands (auto-discovered)
 
-Plugin tools are auto-discovered and registered as CLI subcommands. Run `dotfilesctl --help` to see all available commands.
+Plugin services and RPCs are auto-discovered via grpcreflect and registered as
+top-level CLI subcommands with typed flags generated from proto schemas.
+
+```sh
+# Single-service plugin (service level elided):
+dotfilesctl weather forecast --location=Madrid --days=5
+
+# Multi-service plugin:
+dotfilesctl resources current
+dotfilesctl resources top --count=10 --sort=cpu
+dotfilesctl resources ps --pid=1234
+dotfilesctl resources history --count=30
+
+# Use --json flag for raw JSON output instead of formatted output:
+dotfilesctl weather forecast --location=Madrid --json
+```
 
 ## Sessions
 
@@ -156,5 +201,5 @@ When running as `dotfilesctl mcp`, the following MCP tools are exposed:
 | `dotfiles_git` | `scripts/git/<action>` via `RunScript` |
 | `script_run` | `RunScript` RPC |
 | `script_list` | `ListScripts` RPC |
-| `<plugin>_<tool>` | `CallPluginTool` RPC (auto-discovered) |
+| `<plugin>_<method>` | Auto-discovered via `PluginExecutorService.CallPlugin` (per-method, with typed input schema from proto) |
 | `_sudo_submit_password` | Internal MCP Apps webview tool |

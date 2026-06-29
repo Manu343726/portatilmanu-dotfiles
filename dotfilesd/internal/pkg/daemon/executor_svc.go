@@ -25,6 +25,7 @@ type activePluginCall struct {
 	stdinBuf   bytes.Buffer
 	stdinEOF   bool
 	mu         sync.Mutex
+	stdinCond  *sync.Cond
 	done       chan struct{}
 }
 
@@ -44,6 +45,7 @@ func registerCall(clientID, pluginName, service, method string) *activePluginCal
 		stderrChan: make(chan []byte, 256),
 		done:       make(chan struct{}),
 	}
+	call.stdinCond = sync.NewCond(&call.mu)
 	activeCallsMu.Lock()
 	activeCallsByClient[clientID] = call
 	activeCallsByPlugin[pluginName] = call
@@ -113,6 +115,7 @@ func StoreStdin(clientID string, data []byte) {
 	call.mu.Lock()
 	call.stdinBuf.Write(data)
 	call.mu.Unlock()
+	call.stdinCond.Broadcast()
 }
 
 // CloseStdin marks stdin as closed for a call.
@@ -126,9 +129,11 @@ func CloseStdin(clientID string) {
 	call.mu.Lock()
 	call.stdinEOF = true
 	call.mu.Unlock()
+	call.stdinCond.Broadcast()
 }
 
 // ReadStdinFromCall reads buffered stdin data for a call.
+// Blocks until data is available or stdin is closed.
 func ReadStdinFromCall(clientID string, maxBytes int) ([]byte, bool) {
 	activeCallsMu.RLock()
 	call := activeCallsByClient[clientID]
@@ -138,8 +143,11 @@ func ReadStdinFromCall(clientID string, maxBytes int) ([]byte, bool) {
 	}
 	call.mu.Lock()
 	defer call.mu.Unlock()
-	if call.stdinBuf.Len() == 0 {
-		return nil, call.stdinEOF
+	for call.stdinBuf.Len() == 0 {
+		if call.stdinEOF {
+			return nil, true
+		}
+		call.stdinCond.Wait() // releases mu, blocks, reacquires mu on signal
 	}
 	n := maxBytes
 	if n <= 0 || n > call.stdinBuf.Len() {
@@ -191,7 +199,10 @@ func (s *executorServer) CallPlugin(
 	}
 
 	call := registerCall(clientID, pluginName, svcName, methodName)
-	defer unregisterCall(clientID, pluginName)
+	defer func() {
+		CloseStdin(clientID)
+		unregisterCall(clientID, pluginName)
+	}()
 
 	// Determine parent for the diagnostics tree: prefer the caller's session
 	// when available (CLI context), fall back to the plugin.

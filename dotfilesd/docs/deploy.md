@@ -69,12 +69,25 @@ The daemon reads from `~/.config/dotfilesd/config.yaml`:
 port: 9105
 log_dir: ~/dotfilesd/logs
 log_level: info
+log_max_mb: 10
+log_backup: 5
+log_age: 30
 plugins_dir: ~/.config/dotfilesd/plugins
 plugin_cache_dir: ~/.cache/dotfilesd/plugins
 scripts_dir: ~/.config/dotfilesd/scripts
 ```
 
 Environment variables override config values: `DOTFILESD_PORT`, `DOTFILESD_LOG_LEVEL`, `DOTFILESD_LOG_DIR`.
+
+### Configuration reload
+
+The daemon supports runtime reconfiguration of the log level without restart:
+
+```sh
+dotfilesctl config reconfigure --log-level debug
+dotfilesctl config reconfigure --log-level trace
+dotfilesctl config reconfigure --log-level warn
+```
 
 ## Post-install
 

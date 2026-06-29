@@ -4,24 +4,26 @@
 > **Date:** 2026-06-27
 > **Purpose:** Reference for implementing type-safe Connect RPC for plugins
 
-> **⚠️ COMPLETE REWRITE — ZERO BACKWARDS COMPATIBILITY**
+> **✅ IMPLEMENTED — This specification is complete**
 >
-> This document describes a **from-scratch rewrite** of the entire plugin
-> architecture. The old `Tool`-based system, `plugin.proto`, `extension.proto`,
-> `plugin_base.proto`, stringly-typed dispatch, and all existing plugin code
-> are **deleted and replaced**. Nothing from the v1 plugin system survives.
+> The old `Tool`-based system (`plugin.proto`, `extension.proto`,
+> `plugin_base.proto`, stringly-typed dispatch) has been **deleted and replaced**
+> with the Connect RPC architecture described here. All components described
+> in this document are implemented and in active use:
 >
-> - Old plugins **will not work** — every existing plugin (weather, resources)
->   must be rewritten from scratch as a Connect RPC service.
-> - The old SDK (`plugin.NewTool`, `plugin.RegisterTool`, etc.) is **gone** —
->   replaced by `plugin.Serve()` with Connect RPC handlers and protobuf.
-> - There is **no migration path, no compatibility shim, no adapter layer.**
-> - This is a clean break: the new system is designed as if the old one never
->   existed.
+> - **Plugin SDK** (`dotfilesd/plugin/`) — `Serve(cfg Config)`, `Context` interface,
+>   `ExtractContext()`, default `DocumentationService`, auto-mounted grpcreflect
+> - **Plugin Manager** (`internal/pkg/plugin/`) — discovery, build, launch,
+>   grpcreflect-based service discovery, dependency ordering, crash supervision
+> - **PluginRegistryService** — `GetPlugin`, `ListPlugins`, `LoadPlugin`,
+>   `UnloadPlugin`, `ReloadPlugins` RPCs with full type introspection schemas
+> - **PluginExecutorService** — bidi-stream proxy for CLI/MCP → plugin calls
+> - **CLI command generation** — typed flags from proto schemas via
+>   `protoflags.go` (`BuildPluginCommand`)
+> - **MCP tool generation** — per-method tools auto-registered from plugin schemas
 >
-> All existing plugin code in `~/.config/dotfilesd/plugins/` will be replaced
-> in a single coordinated commit that also updates the daemon, SDK, CLI, and
-> build system.
+> Old plugins (weather, resources) have been rewritten as Connect RPC services.
+> All existing plugin code at `~/.config/dotfilesd/plugins/` uses the new SDK.
 
 ## Table of Contents
 

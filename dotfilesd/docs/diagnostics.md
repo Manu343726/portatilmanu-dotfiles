@@ -1,19 +1,30 @@
 # Diagnostics System — Design Document
 
-> **Status:** Draft
+> **Status:** Implemented
 > **Date:** 2026-06-28
-> **Purpose:** Specify the diagnostics subsystem — a centralized engine for
+> **Last updated:** 2026-06-29
+> **Purpose:** Reference for the diagnostics subsystem — a centralized engine for
 > collecting, storing, and querying real-time state and metrics from the
 > dotfiles runtime.
 
-> **⚠️ Full rewrite — no backwards compatibility.** This document describes
-> a ground-up redesign of the diagnostics system. The existing
-> `SystemService.Diagnostics` RPC, the ad-hoc tree builder in
-> `daemon/system.go`, and the old `DiagNode`-based snapshot model are all
-> **removed and replaced**. There is no migration path, no compatibility
-> shim, and no hybrid mode. Old CLI workflows that consume the previous
-> diagnostics output will break until updated to use the new
-> `DiagnosticsQueryService` / `DiagnosticsPostService` RPCs.
+> **✅ IMPLEMENTED — This specification is complete**
+>
+> The diagnostics system described in this document is fully implemented:
+>
+> - **Diagnostics Engine** (`internal/pkg/diagnostics/`) — `Engine` struct with
+>   `StateCache`, ring-buffer history, metrics store, retention policies, and
+>   real-time event subscribers
+> - **DiagnosticsPostService** — `PostEvent`, `PostMetric`, `PostSnapshot` RPCs
+>   registered on the daemon mux (see `daemon/diagnostics_svc.go`)
+> - **DiagnosticsQueryService** — `QueryTree`, `QueryResources`, `QueryHistory`,
+>   `QueryMetrics`, `StreamEvents` RPCs with full filter support
+> - **Tree reconstruction** — five-phase algorithm (snapshot → filter → adjacency
+>   → DFS assembly → root wrap) as described in §4
+> - **Proto definitions** — `DiagNode`, `DiagEvent`, `MetricPoint`, `ResourceState`,
+>   `QueryTreeRequest`, `QueryHistoryRequest`, etc. in `diagnostics.proto`
+>
+> The previous `SystemService.Diagnostics` RPC and ad-hoc tree builder have been
+> removed. CLI workflows use `dotfilesctl system diag` to query the new service.
 
 ---
 

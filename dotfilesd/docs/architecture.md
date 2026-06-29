@@ -1,11 +1,5 @@
 # Architecture
 
-> **⚠️ This document is partially outdated.** See
-> [`plugin-rpc-architecture.md`](plugin-rpc-architecture.md) for the current
-> plugin system design. The old Tool-based API (`CallPluginTool`,
-> `extension.proto`, `plugin.proto`) has been replaced by Connect RPC
-> services discovered via gRPC reflection.
-
 dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, exposed to AI agents via MCP.
 
 ```
@@ -36,36 +30,51 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 ┌──────────────────────────────────────────────────────────────────────┐
 │  dotfilesd  (daemon — RPC server + plugin supervisor)                │
 │                                                                      │
-│  ADMIN services (CLI only):                                          │
-│  ┌─────────────────┐  ┌─────────────────────┐                       │
-│  │  SystemService   │  │  SessionService      │                       │
-│  │  · Ping          │  │  · CreateSession     │                       │
-│  │  · RuntimeInfo   │  │  · Connect (callback)│                       │
-│  │  · SudoMethods   │  │  · FinalizeSession   │                       │
-│  └─────────────────┘  │  · GetSession         │                       │
-│                        │  · ListSessions       │                       │
-│  ┌─────────────────┐  └─────────────────────┘                       │
+│  PUBLIC services (no auth required):                                 │
+│  ┌─────────────────┐  ┌──────────────────────┐                      │
+│  │  SystemService   │  │  SessionService      │                      │
+│  │  · Ping          │  │  · CreateSession     │                      │
+│  │  · RuntimeInfo   │  │  · Connect (callback)│                      │
+│  │  · SudoMethods   │  │  · FinalizeSession   │                      │
+│  └─────────────────┘  │  · GetSession         │                      │
+│                        │  · ListSessions       │                      │
+│  ┌─────────────────┐  └──────────────────────┘                      │
 │  │  ConfigService   │                                                │
-│  │  · Reconfigure   │                                                │
-│  │  · Restart       │                                                │
-│  └─────────────────┘                                                │
+│  │  · Reconfigure   │  ┌───────────────────────────┐                │
+│  │  · Restart       │  │  DiagnosticsPostService    │                │
+│  └─────────────────┘  │  · PostEvent               │                │
+│                        │  · PostMetric              │                │
+│  ┌──────────────────┐  │  · PostSnapshot            │                │
+│  │  DotfilesService  │  └───────────────────────────┘                │
+│  │  · Status         │                                              │
+│  └──────────────────┘  ┌───────────────────────────┐                │
+│                        │  DiagnosticsQueryService   │                │
+│  ┌──────────────────┐  │  · QueryTree               │                │
+│  │  ScriptService    │  │  · QueryResources         │                │
+│  │  · RunScript      │  │  · QueryHistory           │                │
+│  │  · ListScripts    │  │  · QueryMetrics           │                │
+│  └──────────────────┘  │  · StreamEvents            │                │
+│                        └───────────────────────────┘                │
+│  ┌───────────────────┐                                              │
+│  │  ExecService       │  ┌───────────────────────────┐              │
+│  │  · Exec            │  │  PluginRegistryService     │              │
+│  │  · ExecStream      │  │  · GetPlugin               │              │
+│  │  · BackgroundExec  │  │  · ListPlugins             │              │
+│  │  · SudoExec        │  │  · LoadPlugin              │              │
+│  └───────────────────┘  │  · UnloadPlugin             │              │
+│                          │  · ReloadPlugins            │              │
+│  ┌───────────────────┐  └───────────────────────────┘              │
+│  │  PluginExecutorSvc  │                                            │
+│  │  · CallPlugin       │                                            │
+│  └───────────────────┘                                              │
 │                                                                      │
-│  USAGE services (CLI + plugins, token-authenticated):                │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│  │  ExecService      │  │  FeedbackService  │  │  IOService        │  │
-│  │  · Exec           │  │  · RequestInput   │  │  · Log            │  │
-│  │  · ExecStream     │  │  · RequestConfirm │  │                   │  │
-│  │  · BackgroundExec │  │  · RequestChoose  │  │                   │  │
-│  │  · SudoExec       │  └──────────────────┘  └──────────────────┘  │
-│  └──────────────────┘                                                │
-│                                                                      │
-│  ┌──────────────────┐  ┌──────────────────┐                         │
-│  │  PluginService    │  │  ScriptService    │                         │
-│  │  · ListPlugins    │  │  · RunScript      │                         │
-│  │  · ListPluginTree │  │  · ListScripts    │                         │
-│  │  · (removed —     │  │                   │                         │
-│  │    now direct RPC)│  │                   │                         │
-│  └──────────────────┘  └──────────────────┘                         │
+│  AUTH-REQUIRED services (token-authenticated, plugins + CLI):       │
+│  ┌──────────────────┐  ┌──────────────────┐                        │
+│  │  FeedbackService  │  │  IOService        │                        │
+│  │  · RequestInput   │  │  · Log            │                        │
+│  │  · RequestConfirm │  │                   │                        │
+│  │  · RequestChoose  │  │                   │                        │
+│  └──────────────────┘  └──────────────────┘                        │
 │                                                                      │
 │  CALLBACK services (daemon → client):                                │
 │  ┌───────────────────────────────────────────────┐                  │
@@ -74,16 +83,25 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 │  └───────────────────────────────────────────────┘                  │
 │                                                                      │
 │  ┌─────────────────────────────────────────────────────────────┐    │
+│  │  Diagnostics Engine                                          │    │
+│  │  · State cache (resource lifecycle tracking)                 │    │
+│  │  · History ring buffers (per event type)                    │    │
+│  │  · Metrics store                                            │    │
+│  │  · Real-time event subscribers                              │    │
+│  │  · Configurable retention policies                          │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
 │  │  Plugin Manager                                              │    │
 │  │  ┌───────────────┐  ┌───────────────┐  ┌──────────────────┐ │    │
 │  │  │  Builder       │  │  Registry      │  │  Supervisor       │ │    │
 │  │  │  · source hash │  │  · plugin dir  │  │  · crash restart  │ │    │
 │  │  │  · cache       │  │  · tool index  │  │  · exponential    │ │    │
-│  │  │  · rebuild     │  │               │  │    backoff 1-30s  │ │    │
+│  │  │  · proto comp  │  │  · deps graph  │  │    backoff 1-30s  │ │    │
 │  │  └───────┬───────┘  └───────┬───────┘  └────────┬─────────┘ │    │
 │  │          │                  │                     │           │    │
 │  │  ┌───────▼──────────────────▼─────────────────────▼────────┐ │    │
-│  │  │  Runtime (process launcher, handshake, shutdown)         │ │    │
+│  │  │  Runtime (grpcreflect discovery, handshake, shutdown)    │ │    │
 │  │  └─────────────────────────────────────────────────────────┘ │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 │                                                                      │
@@ -100,9 +118,14 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 ┌──────────────────────────────────────────────────────────────────────┐
 │  Plugin Ecosystem  (standalone Go binaries, separate processes)      │
 │                                                                      │
+│  Plugins serve Connect RPC services discovered via grpcreflect.     │
+│  The daemon auto-discovers all services, generates CLI commands     │
+│  with typed flags from proto schemas, and exposes per-method MCP    │
+│  tools for AI agents.                                               │
+│                                                                      │
 │  ┌──────────────────────┐  ┌──────────────────────────────────────┐  │
 │  │  Weather Plugin       │  │  Resources Plugin                     │  │
-│  │  · forecast tool      │  │  · current (RAM/CPU/disk/I/O)        │  │
+│  │  · forecast RPC       │  │  · current (RAM/CPU/disk/I/O)        │  │
 │  │  · ctx.Exec("curl…")  │  │  · top (N processes by CPU/mem)      │  │
 │  │  · wttr.in            │  │  · ps (PID detail)                   │  │
 │  │                       │  │  · history (sparkline graphs)         │  │
@@ -111,12 +134,13 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  SDK (dotfilesd/plugin/)                                      │   │
-│  │  · Serve() / ServeWithBackground() — plugin entry point       │   │
-│  │  · Context interface — Exec, ExecStream, BackgroundExec       │   │
-│  │  · CallPlugin / CallPluginStream — plugin-to-plugin calls     │   │
+│  │  · Serve(cfg Config) — entry point with grpcreflect          │   │
+│  │  · Context interface — Exec, ExecStream, BackgroundExec      │   │
+│  │  · Plugin-to-plugin calls via generated Connect clients      │   │
 │  │  · RunScript — invoke registered scripts                      │   │
 │  │  · BackgroundTask — Stdin/Stdout/Tee/Cancel/Wait              │   │
 │  │  · RequestInput / RequestConfirm / RequestChoose              │   │
+│  │  · RenderOutput() — format control flag                       │   │
 │  │  · Log() — structured logging via daemon                      │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
@@ -124,17 +148,17 @@ dotfilesd is a daemon + CLI that manages dotfiles and hosts a plugin ecosystem, 
 
 ## Service architecture
 
-Services are split into three categories:
+Services are split into three access tiers:
 
 | Category | Access | Services |
 |----------|--------|----------|
-| **Admin** | CLI only (via session) | `SystemService`, `ConfigService`, `SessionService`, `DotfilesService` |
-| **Usage** | CLI + plugins (token or session) | `ExecService`, `ScriptService`, `FeedbackService`, `IOService`, `PluginService` |
+| **Public** | No auth required | `SystemService`, `ConfigService`, `SessionService`, `DotfilesService`, `ScriptService`, `ExecService`, `DiagnosticsPostService`, `DiagnosticsQueryService`, `PluginRegistryService`, `PluginExecutorService` |
+| **Auth-required** | Token (`X-Dotfiles-Context-Token`) | `FeedbackService`, `IOService` |
 | **Callback** | Daemon → client | `InputService`, `ConfirmService`, `ChooseService` |
 
-This separation prevents plugins from accessing admin-only features (reconfigure, restart, session listing).
+Previously the system had an **Admin vs Usage** split. The current design uses a simpler model: most services are public (no auth), token-gated services are for sensitive operations (feedback, I/O), and callback services are daemon-initiated only.
 
-### Admin services
+### Public services
 
 **SystemService** — Daemon health and runtime environment.
 - `Ping` — version, PID, uptime
@@ -153,7 +177,9 @@ This separation prevents plugins from accessing admin-only features (reconfigure
 **DotfilesService** — Dotfiles repository status.
 - `Status` — git branch, clean/dirty, last commit
 
-### Usage services
+**ScriptService** — Multi-step scripts with feedback directives.
+- `RunScript` — inline script, file path, or registered script name (e.g. `"git/status"`)
+- `ListScripts` — tree of registered `.dsh` scripts
 
 **ExecService** — Command execution (the only path to run shell commands).
 - `Exec` — unary, returns complete stdout/stderr
@@ -161,17 +187,33 @@ This separation prevents plugins from accessing admin-only features (reconfigure
 - `BackgroundExec` — bidi-stream, stdin/stdout/cancel, returns `BackgroundTask`
 - `SudoExec` — challenge-response sudo protocol
 
-**ScriptService** — Multi-step scripts with feedback directives.
-- `RunScript` — inline script, file path, or registered script name (e.g. `"git/status"`)
-- `ListScripts` — tree of registered `.dsh` scripts
+**DiagnosticsPostService** — Push events, metrics, and snapshots into the diagnostics engine.
+- `PostEvent` — record a timestamped event (daemon start, plugin spawn, exec start, etc.)
+- `PostMetric` — record a metric data point
+- `PostSnapshot` — replace current state for a resource subtree
 
-**FeedbackService** — User interaction prompts (input, confirm, choose).
+**DiagnosticsQueryService** — Query the diagnostics engine.
+- `QueryTree` — filtered state tree with parent/child reconstruction
+- `QueryResources` — flat resource list (no tree)
+- `QueryHistory` — historical events (ring buffer)
+- `QueryMetrics` — metric data points
+- `StreamEvents` — real-time event subscription (server-streaming)
 
-**IOService** — Plugin I/O (logging + stdout/stderr) routed through the daemon.
+**PluginRegistryService** — Plugin discovery and lifecycle.
+- `GetPlugin` — connection info and schema for a named plugin
+- `ListPlugins` — all registered plugins with full type introspection data
+- `LoadPlugin` — load a plugin by name (including dependencies)
+- `UnloadPlugin` — stop a plugin by name
+- `ReloadPlugins` — rescan plugins directory
 
-**PluginService** — Plugin discovery and invocation.
-- `ListPlugins` / `ListPluginTree` — discover loaded plugins
-- ~~`CallPluginTool` — invoke a plugin tool, streaming output~~ *(removed — replaced by direct Connect RPC via grpcreflect)*
+**PluginExecutorService** — Proxy RPC calls from CLI/MCP to plugins.
+- `CallPlugin` — bidi-stream between client and plugin (stdin/stdout/stderr passthrough)
+
+### Auth-required services
+
+**FeedbackService** — User interaction prompts (input, confirm, choose) accessible to plugins and CLI via token auth.
+
+**IOService** — Plugin I/O (logging + stdout/stderr) routed through the daemon, accessible via token auth.
 
 ### Callback services
 
@@ -203,8 +245,8 @@ Service definitions are in `proto/dotfilesd/v1/dotfilesdv1/`:
 | `script.proto` | `ScriptService` (RunScript, ListScripts) |
 | `feedback.proto` | `FeedbackService` + `InputService` + `ConfirmService` + `ChooseService` |
 | `io.proto` | `IOService` |
-| ~~`plugin.proto`~~ | ~~Old tool-dispatch protocol — removed~~ |
-| ~~`extension.proto`~~ | ~~Old ExtensionService — removed~~ |
+| `diagnostics.proto` | `DiagnosticsPostService` (PostEvent, PostMetric, PostSnapshot) + `DiagnosticsQueryService` (QueryTree, QueryResources, QueryHistory, QueryMetrics, StreamEvents) + `DiagNode`, `DiagEvent`, `MetricPoint`, `ResourceState` messages |
+| `plugin_registry.proto` | `PluginRegistryService` (GetPlugin, ListPlugins, LoadPlugin, UnloadPlugin, ReloadPlugins) + `PluginExecutorService` (CallPlugin) + `ServiceSchema`, `MethodSchema`, `FieldSchema`, `MessageSchema`, `EnumSchema` type introspection messages |
 
 Generated `.pb.go` and `.connect.go` files are gitignored. Run `make proto` to regenerate them.
 
@@ -221,11 +263,30 @@ internal/pkg/daemon/
 ├── script.go              # Script parser + runner
 ├── scripts_registry.go    # Script discovery from filesystem
 ├── feedback.go            # FeedbackService handler
-├── io.go                   # IOService handler
+├── io.go                  # IOService handler
 ├── plugin.go              # InitPlugins, token generation, session creation
-├── plugin_svc.go          # PluginService handler
+├── registry_svc.go        # PluginRegistryService + PluginExecutorService handler
+├── diagnostics_svc.go     # DiagnosticsPostService + DiagnosticsQueryService handler
+├── executor_svc.go        # Plugin executor (bidi-stream proxy to plugins)
 ├── background_task.go     # Background task manager
 ├── helpers.go             # runCmd, runCmdFull, runCmdStream
 ├── logging.go             # Logging setup, logLevelToSlog
 └── *_test.go              # Tests
+
+internal/pkg/diagnostics/   # Diagnostics engine (zero daemon dependencies)
+├── engine.go              # Engine struct, PushEvent, PushMetric, PushSnapshot
+├── state.go               # StateCache, ResourceState, lifecycle status
+├── tree.go                # ReconstructTree, FilterResources, filter logic
+└── engine_test.go         # Tests
+
+internal/pkg/plugin/        # Daemon-side plugin manager
+├── manager.go             # Manager (NewManager, LoadPlugins, ListPlugins, discovery)
+└── supervisor.go          # Supervisor (auto-restart with exponential backoff)
+
+plugin/                     # Plugin SDK (public API, compiled into each plugin)
+├── serve.go               # Serve(cfg Config) — server, grpcreflect, handshake
+├── context.go             # Context interface (Exec, RequestInput, Log, ...)
+├── ctxkey.go              # Context key for ExtractContext
+├── background_task.go     # BackgroundTask type
+├── docs.go                # Default DocumentationService implementation
 ```

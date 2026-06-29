@@ -1,23 +1,27 @@
 # Plugin System
 
-> **⚠️ OUTDATED — SUPERSEDED BY `plugin-rpc-architecture.md`**
+> **Status:** Active — Connect RPC architecture (implemented)
 >
-> This document describes the old Tool-based plugin API which has been
-> replaced by the Connect RPC service architecture. See
-> [`plugin-rpc-architecture.md`](plugin-rpc-architecture.md) for the current
-> design. This page is kept for historical reference only.
+> See [`plugin-rpc-architecture.md`](plugin-rpc-architecture.md) for the full
+> design specification.
 
-Plugins are standalone Go programs that serve **Connect RPC services** — methods auto-exposed as `dotfilesctl` CLI subcommands and per-method MCP tools for AI agents.
+Plugins are standalone Go programs that serve **Connect RPC services** — methods
+auto-exposed as `dotfilesctl` CLI subcommands (with typed flags from proto schemas)
+and per-method MCP tools for AI agents.
 
 ## Architecture
 
 ```
-~/.config/dotfilesd/plugins/<name>/   →   compiled →   subprocess   →   Connect RPC
-                                      (builder,       (runtime,         (Extension
-                                       hash cache)     supervisor)       API)
+~/.config/dotfilesd/plugins/<name>/   →   compiled →   subprocess   →   grpcreflect
+                                      (builder,       (runtime,         →
+                                       hash cache,     supervisor)       daemon discovers
+                                       proto comp)                       ALL services)
 ```
 
-The daemon scans `~/.config/dotfilesd/plugins/`, builds Go sources, launches binaries, and queries their capabilities via the Extension API. Server-type plugins are supervised with automatic restart on crash.
+The daemon scans `~/.config/dotfilesd/plugins/`, compiles proto files if present,
+builds Go sources, launches binaries, reads the handshake JSON from stdout, and
+discovers all services via `grpcreflect.NewClient().ListServices()`. Server-type
+plugins are supervised with automatic restart on crash.
 
 ### Plugin types
 
@@ -26,7 +30,7 @@ The daemon scans `~/.config/dotfilesd/plugins/`, builds Go sources, launches bin
 | `server` (default) | Long-lived, supervised (auto-restart on crash) | Most plugins — weather, resources |
 | `command` | Ephemeral — launched per invocation, not supervised | One-shot tasks |
 
-Controlled by the README.md key `type: command` in the plugin directory.
+Controlled by the `Type` field in the plugin's `Config` struct.
 
 ## Directory structure
 
@@ -35,7 +39,10 @@ Controlled by the README.md key `type: command` in the plugin directory.
 └── weather/
     ├── main.go          # Plugin entry point (package main)
     ├── go.mod           # Must have replace directive to dotfilesd
-    └── go.sum
+    ├── go.sum
+    └── proto/
+        └── weather/     # Optional: proto files for this plugin
+            └── weather.proto
 ```
 
 ## `go.mod` setup
@@ -49,97 +56,117 @@ require dotfilesd v0.0.0
 replace dotfilesd => /home/manu343726/dotfilesd
 ```
 
-## Writing a plugin (new RPC SDK)
+Optionally, plugins can depend on other plugins via `require` directives in
+`go.mod`. The daemon performs dependency-aware topological sort when building.
 
-Plugins now serve **Connect RPC services** discovered via HTTP-based gRPC reflection.
-See [`plugin-rpc-architecture.md`](plugin-rpc-architecture.md) §6–§10 for the full SDK guide.
+## Writing a plugin
+
+Plugins serve **Connect RPC services** discovered via gRPC reflection.
 
 ```go
 package main
 
 import (
     "context"
-    "fmt"
-    "net/http"
-
     "dotfilesd/plugin"
-    "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
-    "dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
+    pb "plugins/weather/proto/weather"
+    "plugins/weather/proto/weather/weatherconnect"
+    "connectrpc.com/connect"
 )
 
-type weatherService struct {
-    dotfilesdv1connect.UnimplementedWeatherServiceHandler
-}
+type weatherService struct{}
 
-func (s *weatherService) Forecast(ctx context.Context, req *dotfilesdv1.ForecastRequest) (*dotfilesdv1.ForecastResponse, error) {
-    // Use the daemon context for shell commands, logging, user I/O, etc.
-    pctx := plugin.ExtractContext(ctx)
-    result, _ := pctx.Exec("curl -s 'wttr.in/" + req.Location + "?format=%c+%t'")
-    return &dotfilesdv1.ForecastResponse{
-        Content: result.Stdout,
-    }, nil
+func (s *weatherService) Forecast(ctx context.Context, req *connect.Request[pb.ForecastRequest]) (*connect.Response[pb.ForecastResponse], error) {
+    pc := plugin.ExtractContext(ctx)
+    if pc != nil {
+        pc.Log().Info("forecasting", "loc", req.Msg.Location)
+        result, _ := pc.Exec("curl -s wttr.in/" + req.Msg.Location + "?0")
+        return connect.NewResponse(&pb.ForecastResponse{Report: result.Stdout}), nil
+    }
+    return connect.NewResponse(&pb.ForecastResponse{ErrorMessage: "no context"}), nil
 }
 
 func main() {
-    plugin.Serve("weather", "Weather Plugin", "1.0.0",
-        "Fetches weather data from wttr.in",
-        plugin.Service{
-            Name:    "WeatherService",
-            Handler: &weatherService{},
+    svc := &weatherService{}
+    path, handler := weatherconnect.NewWeatherServiceHandler(svc)
+    plugin.Serve(plugin.Config{
+        Name:        "weather",
+        DisplayName: "Weather",
+        Version:     "1.0.0",
+        Description: "Fetches weather data from wttr.in",
+        Services: []plugin.Service{
+            {Name: "weather.WeatherService", Description: "Weather forecast API",
+             Path: path, Handler: handler},
         },
-    )
+    })
 }
 ```
 
-## SDK Reference (OLD — Tool-based API, no longer accurate)
+## SDK Reference
 
-> ⚠️ The API described below is the **old Tool-based system**. The current SDK
-> uses Connect RPC services with `plugin.Service`, `plugin.Serve()`, and
-> `plugin.ExtractContext()`. See `plugin-rpc-architecture.md` §6–§10.
+### `plugin.Config` — Plugin server configuration
 
-### `plugin.Context` — the plugin's interface to the host
+```go
+type Config struct {
+    Name, DisplayName, Version, Description, Author string
+    Type     string   // "server" or "command"
+    Services []Service
+    Background func(ctx Context, stop <-chan struct{})
+}
+```
 
-The `Context` is the ONLY way a plugin interacts with the system. Plugins never call daemon RPCs directly.
+### `plugin.Serve(cfg Config)` — Entry point
 
-#### Execution
+Starts HTTP server on random port. Auto-mounts:
+- `grpc.reflection.v1.ServerReflection` / `v1alpha` — daemon discovers all services
+- `dotfilesd.v1.DocumentationService` — default implementation (can be overridden)
+- All user services from `Config.Services`
 
-| Method | Description |
-|--------|-------------|
-| `Exec(cmd string) (ExecResult, error)` | Run a shell command, return buffered result |
-| `SudoExec(cmd string) (ExecResult, error)` | Run with sudo (password handled by daemon) |
-| `ExecStream(cmd string, sudo bool) (int, error)` | Run and stream output in real time to Stdout()/Stderr() |
-| `BackgroundExec(cmd string, sudo bool) (BackgroundTask, error)` | Start a background command with stdin/stdout/cancel/tee |
+Writes handshake JSON to stdout:
+```json
+{"protocol":"dotfilesd-plugin-v1","url":"http://127.0.0.1:PORT",
+ "session_id":"plugin-weather","name":"weather","version":"1.0.0",
+ "description":"Weather forecast"}
+```
 
-#### Plugin-to-plugin calls
+### `plugin.Context` — Interface to the daemon
 
-| Method | Description |
-|--------|-------------|
-| `CallPlugin(name, tool, args) (ExecResult, error)` | Invoke another plugin's tool, return buffered result |
-| `CallPluginStream(name, tool, args) error` | Invoke another plugin's tool, pipe output to Stdout()/Stderr() in real time |
+```go
+type Context interface {
+    Stdout() io.Writer
+    Stderr() io.Writer
+    Stdin() io.Reader
+    Log() logging.Logger
+    RenderOutput() bool
+    DiagParent() string
+    WithRenderOutput(bool) Context
 
-#### Scripts
+    // Colored output
+    ColorStdout() io.Writer
+    Greenf(...) string / Redf(...) / Bluef(...) / etc.
 
-| Method | Description |
-|--------|-------------|
-| `RunScript(name string) (ScriptResult, error)` | Run a registered script (e.g. `"git/status"`) |
+    // Shell execution
+    Exec(cmd string) (ExecResult, error)
+    SudoExec(cmd string) (ExecResult, error)
+    ExecStream(cmd string, sudo bool) (int, error)
+    BackgroundExec(cmd string, sudo bool) (BackgroundTask, error)
 
-#### User interaction
+    // User interaction
+    RequestInput(prompt, defaultVal string, sensitive bool) (string, error)
+    RequestConfirm(msg string, defaultConfirm bool) (bool, error)
+    RequestChoose(prompt string, options []string, defaultIndex int) (int, string, error)
 
-| Method | Description |
-|--------|-------------|
-| `RequestInput(prompt, default, sensitive) (string, error)` | Ask user for text input |
-| `RequestConfirm(msg, defaultConfirm) (bool, error)` | Ask user yes/no |
-| `RequestChoose(prompt, options, defaultIdx) (int, string, error)` | Ask user to pick from options |
+    // Scripts
+    RunScript(name string) (ScriptResult, error)
+}
+```
 
-#### Output and logging
+### `plugin.ExtractContext(ctx) Context`
 
-| Method | Description |
-|--------|-------------|
-| `Stdout() io.Writer` | Write to the caller's stdout (tunnels via RPC stream) |
-| `Stderr() io.Writer` | Write to the caller's stderr |
-| `Log() logging.Logger` | Structured logging routed through the daemon |
+Extracts the daemon context from a Connect RPC handler's `context.Context`.
+Returns nil if not running inside a daemon-managed plugin process.
 
-### `BackgroundTask` — interactive command control
+### `BackgroundTask` — Interactive command control
 
 ```go
 task, err := ctx.BackgroundExec("python3 -i", false)
@@ -148,10 +175,6 @@ task, err := ctx.BackgroundExec("python3 -i", false)
 io.WriteString(task.Stdin(), "print('hello')\n")
 task.Stdin().Close()
 
-// Tee: stream to user AND get readers for processing
-stdoutR, stderrR := task.Tee()
-go processStdout(stdoutR)
-
 // Wait for completion
 exitCode, err := task.Wait()
 
@@ -159,42 +182,42 @@ exitCode, err := task.Wait()
 task.Cancel()
 ```
 
-### `ServeWithBackground` — persistent background worker
+### Plugin-to-plugin calls
+
+Plugin B discovers plugin A via the daemon's `PluginRegistryService` at runtime,
+then calls plugin A using generated Connect clients (full type safety):
 
 ```go
-plugin.ServeWithBackground("monitor", "Monitor", "1.0.0",
-    "Continuous system monitoring",
-    func(ctx plugin.Context, stop <-chan struct{}) {
-        for {
-            select {
-            case <-stop:
-                return
-            case <-time.After(5 * time.Second):
-                ctx.Exec("...")
-            }
-        }
-    },
-    plugin.NewTool("status", "Show current status", nil, nil, statusFn),
-)
+regClient := dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, daemonURL)
+info, _ := regClient.GetPlugin(ctx, &connect.Request{
+    Msg: &dotfilesdv1.RegistryGetPluginRequest{PluginName: "weather"},
+})
+weatherClient := weatherconnect.NewWeatherServiceClient(http.DefaultClient, info.Msg.Url)
+forecast, _ := weatherClient.Forecast(ctx, &connect.Request{
+    Msg: &pb.ForecastRequest{Location: "Madrid"},
+})
 ```
 
 ## Building plugins
 
 ```sh
-make plugin-build PLUGIN=weather     # build a specific plugin
-make plugin-build-all                # build all plugins
+make plugin-build PLUGIN=weather     # build a specific plugin (compiles proto first)
+make plugin-build-all                # build all plugins in dependency order
 make plugin-clean                    # clear plugin cache
+make plugin-proto PLUGIN=weather     # compile proto files for a plugin
 ```
 
-Binaries are cached in `~/.cache/dotfilesd/plugins/<name>/` keyed by source hash. Rebuilds only happen when sources change.
+Binaries are cached in `~/.cache/dotfilesd/plugins/<name>/` keyed by source hash.
+Rebuilds only happen when sources change.
 
 ## Debugging
 
 ```sh
-dotfilesctl plugin list          # list all plugins and tools
-dotfilesctl plugin list -v       # verbose, with input schemas
-dotfilesctl plugin tree          # show directory hierarchy
-dotfilesctl plugin list-tools <name>  # show tools for one plugin
+dotfilesctl plugin list              # all plugins and services
+dotfilesctl plugin list -v           # verbose, with input schemas
+dotfilesctl plugin load <name>       # load a plugin dynamically
+dotfilesctl plugin unload <name>     # unload a plugin
+dotfilesctl plugin reload            # rescan plugins directory
 
 # Tail plugin logs
 tail -f ~/dotfilesd/logs/dotfilesd.log | grep "plugin."

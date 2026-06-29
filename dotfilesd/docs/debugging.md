@@ -91,14 +91,47 @@ dotfilesctl script list
 
 Scripts are discovered from `~/.config/dotfilesd/scripts/`. Files must end in `.dsh` and have valid front matter.
 
+### Diagnostics engine not showing expected resources
+
+```sh
+dotfilesctl system diag --show-idle          # show all resources
+dotfilesctl system diag --include-types=plugin  # filter by type
+dotfilesctl system diag --history            # show recent events
+dotfilesctl system diag --time-window=10m    # include recent finished resources
+```
+
+If the diagnostics tree looks incomplete, the engine may have pruned finished
+resources via retention policies. Use `--show-idle` or `--time-window` to
+expand the view.
+
+### Plugin command flags not working
+
+Plugin CLI commands are generated dynamically from proto schemas cached in
+the `PluginRegistryService`. If flags don't match expectations, reload plugins:
+```sh
+dotfilesctl plugin reload
+```
+
+### Plugin executor call fails
+
+The `PluginExecutorService` proxies stdin/stdout/stderr between CLI and plugin
+via bidi streams. If a plugin call hangs:
+1. Check the plugin process is running: `dotfilesctl plugin list`
+2. Check daemon logs: `grep "executor" ~/dotfilesd/logs/dotfilesd.log`
+
 ### Session warnings in logs
 
 The daemon creates named sessions for plugins at load time. If you see "session not found" warnings, ensure plugins were loaded correctly (`dotfilesctl plugin list`).
 
 ### Plugin-to-plugin calls fail with 404
 
-This means the plugin's SDK is outdated. Rebuild the calling plugin:
+This means the calling plugin cannot find the target plugin's RPC service. Verify:
+1. Both plugins are loaded: `dotfilesctl plugin list`
+2. The target plugin exposes the expected service
+3. The calling plugin's `go.mod` has the correct `replace` directive for the target plugin
+
+Rebuild both:
 ```sh
-make plugin-build PLUGIN=<name>
+make plugin-build-all
 systemctl --user restart dotfilesd
 ```

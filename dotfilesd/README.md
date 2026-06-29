@@ -17,35 +17,44 @@ dotfilesctl ping
 ```sh
 dotfilesctl ping                    # health check
 dotfilesctl info                    # system info
+dotfilesctl sudo                    # available sudo methods
+dotfilesctl system diag             # runtime diagnostics (state tree, events, metrics)
 dotfilesctl status                  # repo status
-dotfilesctl git status              # git operations
 dotfilesctl exec 'ls -la'           # run command
 dotfilesctl exec --sudo pacman -Syu # run command with sudo
 dotfilesctl config reload tmux      # reload config
+dotfilesctl config reconfigure --log-level debug  # change log level at runtime
 dotfilesctl config restart          # restart daemon
 dotfilesctl mcp                     # start MCP stdio server (for AI agents)
 dotfilesctl session create          # create a new session
 dotfilesctl session list            # list active sessions
 dotfilesctl session finalize <id>   # close a session
 dotfilesctl plugin list             # list loaded plugins
-dotfilesctl plugin call weather forecast location=Madrid  # call plugin tool
-dotfilesctl plugin tree             # show plugin hierarchy
+dotfilesctl plugin load <name>      # load a plugin dynamically
+dotfilesctl plugin unload <name>    # unload a plugin
+dotfilesctl git status              # git operations (via scripts)
 dotfilesctl script run hello.dsh    # run a script
 dotfilesctl script list             # list available scripts
+
+# Plugin commands (auto-discovered, typed flags from proto schemas):
+dotfilesctl weather forecast --location=Madrid --days=5
+dotfilesctl resources top --count=10 --sort=cpu
+dotfilesctl resources current
 ```
 
 ## Plugins
 
 dotfilesd supports dynamic extensions called **plugins** — standalone Go programs
-that register tools which get automatically exposed as both CLI subcommands and
-MCP tools. See `docs/plugins.md` for full documentation.
+that serve Connect RPC services. The daemon discovers all services via gRPC
+reflection and auto-exposes them as CLI subcommands (with typed flags from proto
+schemas) and per-method MCP tools. See `docs/plugins.md` for full documentation.
 
 ### Weather plugin (example)
 
 Fetches forecasts via wttr.in:
 
 ```sh
-dotfilesctl plugin call weather forecast location=Madrid
+dotfilesctl weather forecast --location=Madrid
 # → Weather for Madrid, Spain
 #    ⛅  +22°C
 ```
@@ -55,10 +64,10 @@ dotfilesctl plugin call weather forecast location=Madrid
 Monitors system resources (RAM, CPU, disk, I/O) with background data collection:
 
 ```sh
-dotfilesctl plugin call resources current     # resource snapshot
-dotfilesctl plugin call resources top         # top processes by CPU/mem
-dotfilesctl plugin call resources ps          # detailed process list
-dotfilesctl plugin call resources history     # sparkline graphs
+dotfilesctl resources current               # resource snapshot
+dotfilesctl resources top --count=10        # top processes by CPU/mem
+dotfilesctl resources ps --pid=1234         # detailed process list
+dotfilesctl resources history --count=30    # sparkline graphs
 ```
 
 ## MCP tools (for AI agents)
@@ -68,21 +77,18 @@ When running `dotfilesctl mcp`, the following tools are available via MCP stdio:
 | Tool | Description |
 |------|-------------|
 | `system_ping` | Daemon health check |
-| `system_info` | Detailed system information |
+| `system_runtime` | Detailed system information |
 | `system_sudo` | Available sudo methods |
 | `dotfiles_status` | Dotfiles repo status |
-| `dotfiles_git` | Git operations on dotfiles repo |
+| `dotfiles_git` | Git operations on dotfiles repo (status, diff, add, commit, push, log) |
 | `exec_run` | Execute shell commands (supports `sudo=true`) |
 | `config_reload` | Reload dotfiles configs (tmux, i3, kitty) |
 | `config_reconfigure` | Change daemon runtime config (log level) |
 | `config_restart` | Gracefully restart the daemon |
 | `script_run` | Run a multi-step script with feedback directives |
 | `script_list` | List registered scripts |
-| `weather_forecast` | Get weather forecast (plugin) |
-| `resources_current` | System resource snapshot (plugin) |
-| `resources_top` | Top processes by CPU/memory (plugin) |
-| `resources_ps` | Detailed process list (plugin) |
-| `resources_history` | Historical sparkline graphs (plugin) |
+| `<plugin>_<method>` | Auto-discovered plugin methods (e.g. `weather_forecast`, `resources_current`, `resources_top`, `resources_ps`, `resources_history`) |
+| `_sudo_submit_password` | Internal MCP Apps webview tool (visibility: app) |
 
 ### Sudo password flow
 
@@ -102,22 +108,28 @@ For commands with `sudo=true`, the daemon supports multiple auth methods:
 | Features | `docs/features.md` |
 | Logging System | `docs/logging.md` |
 | Plugin System | `docs/plugins.md` |
+| Plugin RPC Architecture (design spec) | `docs/plugin-rpc-architecture.md` |
+| Diagnostics System (design spec) | `docs/diagnostics.md` |
+| MCP Apps Research | `docs/mcp-apps-research.md` |
 
 ## Project layout
 
 ```
 cmd/dotfilesd/            # Daemon (Connect RPC server)
-cmd/dotfilesctl/          # CLI client
+cmd/dotfilesctl/          # CLI client + MCP stdio server
 internal/pkg/daemon/      # Daemon RPC server implementations
-internal/pkg/cli/         # CLI action logic + MCP server
-internal/pkg/plugin/      # Plugin manager, builder, runtime, registry
-internal/pkg/shared/      # Shared utilities
-plugin/                   # Public plugin SDK
-plugins/                  # Example plugins (weather/, resources/)
+internal/pkg/cli/         # CLI action logic + MCP bridge
+internal/pkg/plugin/      # Plugin manager (builder, runtime, registry, supervisor)
+internal/pkg/diagnostics/ # Diagnostics engine (state cache, history, metrics)
+internal/pkg/logging/     # Structured logging package
+internal/pkg/shared/      # Shared utilities (build hash)
+internal/pkg/rpcreflection/ # gRPC reflection utilities
+plugin/                   # Public plugin SDK (Serve, Context, Extractions)
 proto/                    # Protobuf definitions + generated code
 scripts/                  # Dotfiles scripts (.dsh files)
 service/                  # Systemd user service template
 docs/                     # Documentation
+test/                     # End-to-end tests
 Makefile                  # Build, install, proto, service, plugin, test
 
 ## Tech stack
@@ -125,6 +137,7 @@ Makefile                  # Build, install, proto, service, plugin, test
 - **Go 1.26** — Standard library slog, net/http
 - **Connect RPC** — gRPC-compatible HTTP API on port 9105
 - **protobuf** — Service definitions and code generation
+- **grpcreflect** — gRPC server reflection for plugin service discovery
 - **Cobra + Viper** — CLI framework (commands, flags, config)
 - **MCP** — Model Context Protocol stdio (via `dotfilesctl mcp`)
 - **MCP Apps** — HTML webviews for interactive UI (sudo password form)
