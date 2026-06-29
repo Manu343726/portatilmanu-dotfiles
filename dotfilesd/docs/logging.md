@@ -19,7 +19,7 @@ colored output, rotating file sinks, and full integration with the plugin ecosys
                     │        ▼         │
                     │  ┌────────────┐  │
                     │  │ buildEntry │  │  ← format entry with timestamp,
-                    │  └─────┬──────┘  │     level, module, source, attrs
+                    │  └─────┬──────┘  │    level, module, source, attrs
                     │        │         │
                     │        ▼         │
                     │  ┌────────────┐  │

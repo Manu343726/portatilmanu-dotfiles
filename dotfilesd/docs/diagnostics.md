@@ -32,22 +32,22 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        Daemon Components                          │
-│                                                                   │
-│  Manager      Executor     IO Service     Session Store           │
-│  Plugin Mgr   Exec Server  Log/Stdin     Shell Sessions           │
-│       │           │             │              │                  │
-│       ▼           ▼             ▼              ▼                  │
+│                        Daemon Components                         │
+│                                                                  │
+│  Manager      Executor     IO Service     Session Store          │
+│  Plugin Mgr   Exec Server  Log/Stdin     Shell Sessions          │
+│       │           │             │              │                 │
+│       ▼           ▼             ▼              ▼                 │
 │  ┌───────────────────────────────────────────────────────────┐   │
-│  │              DiagnosticsPostService (RPC)                  │   │
-│  │  PostEvent(), PostMetric(), PostSnapshot()                 │   │
+│  │              DiagnosticsPostService (RPC)                 │   │
+│  │  PostEvent(), PostMetric(), PostSnapshot()                │   │
 │  └───────────────────────┬───────────────────────────────────┘   │
-└──────────────────────────┼────────────────────────────────────────┘
+└──────────────────────────┼───────────────────────────────────────┘
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│              Diagnostics Engine (internal/pkg/diagnostics/)        │
-│                                                                   │
+│              Diagnostics Engine (internal/pkg/diagnostics/)      │
+│                                                                  │
 │  ┌──────────────────────┐  ┌──────────────────────────────────┐  │
 │  │  Current State Cache │  │  History Store (ring buffer)     │  │
 │  │  (latest snapshot)   │  │  - Per-resource-type retention   │  │
@@ -61,22 +61,22 @@
 │  │  metrics             │  │  - exec_start/stop               │  │
 │  └──────────────────────┘  │  - client_connect/disconnect     │  │
 │                             │  - executor_open/close          │  │
-│                             └──────────────────────────────────┘  │
+│                            └───────────────────────────────────┘ │
 └───────────────────────┬──────────────────────────────────────────┘
                         │
                         ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│              DiagnosticsQueryService (RPC)                        │
-│  QueryTree(filter) → DiagNode tree                                │
-│  QueryHistory(filter) → []Event                                    │
-│  QueryMetrics(filter) → []MetricPoint                              │
+│              DiagnosticsQueryService (RPC)                       │
+│  QueryTree(filter) → DiagNode tree                               │
+│  QueryHistory(filter) → []Event                                  │
+│  QueryMetrics(filter) → []MetricPoint                            │
 └───────┬───────────────────────────────────────┬──────────────────┘
         │                                       │
         ▼                                       ▼
 ┌───────────────┐              ┌──────────────────────────────┐
-│ dotfilesctl   │              │  tui-diagnostics plugin       │
-│ system diag   │              │  (htop-like, live tree,       │
-│ system events │              │   filters, search, history)   │
+│ dotfilesctl   │              │  tui-diagnostics plugin      │
+│ system diag   │              │  (htop-like, live tree,      │
+│ system events │              │   filters, search, history)  │
 │ system stats  │              └──────────────────────────────┘
 └───────────────┘
 ```

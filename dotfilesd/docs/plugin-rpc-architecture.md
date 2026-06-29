@@ -63,7 +63,7 @@
                         │ Connect RPC over HTTP (port 9105)
                         ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    dotfilesd (daemon)                                 │
+│                    dotfilesd (daemon)                                │
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  Plugin Manager                                               │   │
@@ -74,9 +74,9 @@
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  PluginRegistryService (daemon-known proto)                    │   │
+│  │  PluginRegistryService (daemon-known proto)                   │   │
 │  │  GetPlugin(name) → URL + services                             │   │
-│  │  ListPlugins() → all plugins                                   │   │
+│  │  ListPlugins() → all plugins                                  │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────┬───────────────────────────────────────────┘
                            │ launches subprocesses
