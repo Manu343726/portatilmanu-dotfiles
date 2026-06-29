@@ -96,3 +96,5 @@
 /.config/autorandr/laptop-only/*
 !/.config/autorandr/laptop-only/config
 !/.config/autorandr/laptop-only/setup
+*.cache/dotfilesd/plugins/**/games
+*.local/bin/*
