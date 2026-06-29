@@ -5,7 +5,7 @@ Monokai-themed dotfiles for Manjaro i3 on an ASUS ROG Flow X13.
 ## Quick start
 
 ```sh
-git clone ssh://git@172.25.10.159:2222/manu343726/portatilmanu-dotfiles.git ~
+git clone https://github.com/manu343726/portatilmanu-dotfiles.git ~
 tmux source-file ~/.tmux.conf
 i3-msg reload
 ```

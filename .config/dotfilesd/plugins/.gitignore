@@ -1,0 +1,3 @@
+# Generated protobuf code — run `make proto` to regenerate
+**/*.pb.go
+**/*.connect.go
