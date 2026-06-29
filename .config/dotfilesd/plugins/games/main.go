@@ -7,20 +7,95 @@ package main
 import (
 	"bufio"
 	"context"
+	"embed"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"math/rand"
 	"strconv"
 	"strings"
 	"time"
 
+	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 	"dotfilesd/plugin"
 	pb "plugins/games/proto/games"
 	"plugins/games/proto/games/gamesconnect"
 
 	"connectrpc.com/connect"
 )
+
+// ─── embedded docs ──────────────────────────────────────────────────────────
+
+//go:embed README-*.md
+var gameDocs embed.FS
+
+// docsServer implements the DocumentationService RPC, serving per-game READMEs.
+type docsServer struct {
+	names []string // service names to support
+}
+
+func (d *docsServer) GetDocumentation(ctx context.Context, req *connect.Request[dotfilesdv1.DocumentationRequest]) (*connect.Response[dotfilesdv1.DocumentationResponse], error) {
+	svcName := req.Msg.ServiceName
+	if svcName == "" {
+		return d.pluginDocs()
+	}
+
+	// Map service name → embedded README filename.
+	file := mapServiceToDocFile(svcName)
+	if file == "" {
+		slog.Debug("no doc file for service", "service", svcName)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no documentation for service %q", svcName))
+	}
+
+	content, err := gameDocs.ReadFile(file)
+	if err != nil {
+		slog.Debug("failed to read doc file", "file", file, "error", err)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no documentation for service %q", svcName))
+	}
+
+	return connect.NewResponse(&dotfilesdv1.DocumentationResponse{
+		Format:  "markdown",
+		Content: string(content),
+	}), nil
+}
+
+func (d *docsServer) pluginDocs() (*connect.Response[dotfilesdv1.DocumentationResponse], error) {
+	var b strings.Builder
+	fmt.Fprintln(&b, "# Games\n")
+	fmt.Fprintln(&b, "Five terminal-based games you can play directly from your shell via `dotfilesctl`:\n")
+	fmt.Fprintln(&b, "| Command | Game |")
+	fmt.Fprintln(&b, "|---|---|")
+	fmt.Fprintln(&b, "| `dotfilesctl games Game2048` | 2048 |")
+	fmt.Fprintln(&b, "| `dotfilesctl games Minesweeper` | Minesweeper |")
+	fmt.Fprintln(&b, "| `dotfilesctl games Solitaire` | Klondike Solitaire |")
+	fmt.Fprintln(&b, "| `dotfilesctl games Battleship` | Battleship |")
+	fmt.Fprintln(&b, "| `dotfilesctl games Chess` | Chess (vs AI) |")
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "All games support `--json` for programmatic output. Press **Ctrl+C** to exit any game cleanly.")
+	return connect.NewResponse(&dotfilesdv1.DocumentationResponse{
+		Format:  "markdown",
+		Content: b.String(),
+	}), nil
+}
+
+func mapServiceToDocFile(svcName string) string {
+	switch svcName {
+	case "games.Game2048Service":
+		return "README-2048.md"
+	case "games.MinesweeperService":
+		return "README-minesweeper.md"
+	case "games.SolitaireService":
+		return "README-solitaire.md"
+	case "games.BattleshipService":
+		return "README-battleship.md"
+	case "games.ChessService":
+		return "README-chess.md"
+	default:
+		return ""
+	}
+}
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -1441,6 +1516,18 @@ func main() {
 	sP, sH := gamesconnect.NewSolitaireServiceHandler(&solSvc{})
 	bP, bH := gamesconnect.NewBattleshipServiceHandler(&bsSvc{})
 	cP, cH := gamesconnect.NewChessServiceHandler(&chSvc{})
+
+	// Custom DocumentationService that serves per-game README files.
+	docsP, docsH := dotfilesdv1connect.NewDocumentationServiceHandler(&docsServer{
+		names: []string{
+			"games.Game2048Service",
+			"games.MinesweeperService",
+			"games.SolitaireService",
+			"games.BattleshipService",
+			"games.ChessService",
+		},
+	})
+
 	plugin.Serve(plugin.Config{
 		Name: "games", DisplayName: "Games", Version: "1.0.0",
 		Description: "TUI games: minesweeper, 2048, solitaire, battleship, chess",
@@ -1450,6 +1537,7 @@ func main() {
 			{Name: "games.SolitaireService", Description: "Klondike solitaire", Path: sP, Handler: sH, PluginAccessible: true},
 			{Name: "games.BattleshipService", Description: "Battleship vs AI", Path: bP, Handler: bH, PluginAccessible: true},
 			{Name: "games.ChessService", Description: "Chess vs AI", Path: cP, Handler: cH, PluginAccessible: true},
+			{Name: "dotfilesd.v1.DocumentationService", Description: "Game documentation", Path: docsP, Handler: docsH, PluginAccessible: false},
 		},
 	})
 }
