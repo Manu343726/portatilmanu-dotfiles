@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"dotfilesd/plugin"
 	pb "plugins/resources/proto/resources"
@@ -149,10 +148,21 @@ func parseMemLine(line, prefix string) float64 {
 
 // resourcesServer implements the type-safe ResourcesService.
 type resourcesServer struct {
-	state *SharedState
+	state  *SharedState
+	poller *SmartPoller
+}
+
+// ensureFreshData is a helper for RPC handlers. It records the call, then
+// triggers a synchronous poll if the cached data is stale (cold start).
+func (s *resourcesServer) ensureFreshData() {
+	s.poller.NoteCall()
+	if s.poller.IsStale() {
+		s.poller.PollNow()
+	}
 }
 
 func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.CurrentRequest]) (*connect.Response[pb.CurrentResponse], error) {
+	s.ensureFreshData()
 	ram, cpu, disk, diskIO := s.state.get()
 
 	pc := plugin.ExtractContext(ctx)
@@ -214,6 +224,7 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 }
 
 func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRequest]) (*connect.Response[pb.TopResponse], error) {
+	s.ensureFreshData()
 	ram, cpu, disk, _ := s.state.get()
 	_ = disk
 
@@ -252,6 +263,7 @@ func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRe
 }
 
 func (s *resourcesServer) PS(ctx context.Context, req *connect.Request[pb.PSRequest]) (*connect.Response[pb.PSResponse], error) {
+	s.ensureFreshData()
 	ram, cpu, _, _ := s.state.get()
 	_ = cpu
 
@@ -280,6 +292,7 @@ func (s *resourcesServer) PS(ctx context.Context, req *connect.Request[pb.PSRequ
 }
 
 func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.HistoryRequest]) (*connect.Response[pb.HistoryResponse], error) {
+	s.ensureFreshData()
 	resource := req.Msg.Resource
 	if resource == "" {
 		resource = "ram"
@@ -314,22 +327,14 @@ func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.H
 	}), nil
 }
 
-func backgroundCollector(ctx plugin.Context, state *SharedState, stop <-chan struct{}) {
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-stop:
-			return
-		case <-ticker.C:
-			ram := collectRAM(ctx)
-			cpu := collectCPU(ctx)
-			disk := collectDisk(ctx)
-			diskIO := collectDiskIO(ctx)
-			state.update(ram, cpu, disk, diskIO)
-		}
-	}
+// collectAll gathers all system stats. This is the function passed to the
+// SmartPoller so it's called on every poll cycle.
+func collectAll(ctx plugin.Context, state *SharedState) {
+	ram := collectRAM(ctx)
+	cpu := collectCPU(ctx)
+	disk := collectDisk(ctx)
+	diskIO := collectDiskIO(ctx)
+	state.update(ram, cpu, disk, diskIO)
 }
 
 func collectRAM(ctx plugin.Context) RAMSnapshot {
@@ -490,8 +495,9 @@ func collectDiskIO(ctx plugin.Context) DiskIOSnapshot {
 
 func main() {
 	state := newSharedState()
+	poller := NewSmartPoller()
 
-	svc := &resourcesServer{state: state}
+	svc := &resourcesServer{state: state, poller: poller}
 	path, handler := resourcesconnect.NewResourcesServiceHandler(svc)
 
 	plugin.Serve(plugin.Config{
@@ -509,7 +515,12 @@ func main() {
 			},
 		},
 		Background: func(ctx plugin.Context, stop <-chan struct{}) {
-			backgroundCollector(ctx, state, stop)
+			// SmartPoller adapts its polling rate to incoming call frequency.
+			// When no RPC handlers are being invoked it goes idle, and on cold
+			// start the first call triggers an immediate synchronous poll.
+			poller.Run(stop, func() {
+				collectAll(ctx, state)
+			})
 		},
 	})
 }
