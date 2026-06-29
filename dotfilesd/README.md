@@ -4,6 +4,8 @@ Go daemon for managing dotfiles on `portatilmanu` (ASUS ROG Flow X13, Manjaro i3
 
 Exposes dotfiles management through a Connect RPC daemon (port 9105) and a CLI client with an MCP stdio server for AI agent integration.
 
+The repository is mirrored to two remotes — **GitHub** (public) and an **internal LAN server** (private). A plain `git push` sends to both.
+
 ## Quick start
 
 ```sh

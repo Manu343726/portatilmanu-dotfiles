@@ -107,6 +107,6 @@ dotfilesd/
 3. Run `make build` to compile.
 4. Run `make install` to deploy and restart the daemon.
 5. Run tests: `go test -count=1 ./internal/...`
-6. Commit and push both repos (`~/dotfilesd` and `~` for dotfiles/scripts).
+6. Commit and push — `git push` pushes to **both** GitHub and the internal LAN server.
 
 > Never run `go build` directly for the final build — use `make build` which regenerates protos first. Never use `sudo` for shell commands — the daemon handles sudo via pkexec or password elicitation.
