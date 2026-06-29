@@ -367,10 +367,18 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 				return fmt.Errorf("plugin error: %s", msg.Error)
 			}
 			if len(msg.StdoutChunk) > 0 {
-				fmt.Print(string(msg.StdoutChunk))
+				out := msg.StdoutChunk
+				if oldTermState != nil {
+					out = bytes.ReplaceAll(out, []byte{'\n'}, []byte{'\r', '\n'})
+				}
+				fmt.Print(string(out))
 			}
 			if len(msg.StderrChunk) > 0 {
-				fmt.Fprint(os.Stderr, string(msg.StderrChunk))
+				out := msg.StderrChunk
+				if oldTermState != nil {
+					out = bytes.ReplaceAll(out, []byte{'\n'}, []byte{'\r', '\n'})
+				}
+				fmt.Fprint(os.Stderr, string(out))
 			}
 			// With --json, the plugin skips rendering and the CLI prints the
 			// raw response body as prettified JSON instead.
