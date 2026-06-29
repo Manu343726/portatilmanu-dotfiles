@@ -342,9 +342,21 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			for {
 				n, err := os.Stdin.Read(buf)
 				if n > 0 {
+					data := buf[:n]
+
+					// In raw mode, Ctrl+C (0x03) is sent as a regular byte
+					// instead of generating SIGINT. Catch it here and exit.
+					if bytes.Contains(data, []byte{0x03}) {
+						if oldTermState != nil {
+							_ = term.Restore(int(os.Stdin.Fd()), oldTermState)
+							oldTermState = nil
+						}
+						os.Exit(130)
+					}
+
 					// In raw mode the terminal sends \r instead of \n on Enter.
 					// Convert to \n so the plugin's ReadString('\n') works.
-					data := bytes.ReplaceAll(buf[:n], []byte{'\r'}, []byte{'\n'})
+					data = bytes.ReplaceAll(data, []byte{'\r'}, []byte{'\n'})
 					if err := stream.Send(&dotfilesdv1.CallPluginMessage{
 						StdinChunk: data,
 					}); err != nil {
