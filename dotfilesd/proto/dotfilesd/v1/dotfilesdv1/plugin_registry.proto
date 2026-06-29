@@ -201,6 +201,10 @@ message MethodSchema {
   MessageSchema request = 3;
   // Full schema of the response message.
   MessageSchema response = 4;
+  // True when this method requires interactive stdin (e.g. TUI games).
+  // The daemon uses this hint to decide whether to set up raw terminal
+  // mode and stdin forwarding for CLI calls to this method.
+  bool needs_interactive_stdin = 5;
 }
 
 // ServiceSchema describes a service — the full introspection result for one

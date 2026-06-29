@@ -79,10 +79,11 @@ func main() {
 		Description: "Reads from stdin and echoes back.",
 		Services: []plugin.Service{
 			{
-				Name:        "stdinecho.StdinechoService",
-				Description: "Read lines from stdin and echo them back",
-				Path:        path,
-				Handler:     handler,
+				Name:               "stdinecho.StdinechoService",
+				Description:        "Read lines from stdin and echo them back",
+				Path:               path,
+				Handler:            handler,
+				InteractiveMethods: []string{"Echo"},
 			},
 		},
 	})

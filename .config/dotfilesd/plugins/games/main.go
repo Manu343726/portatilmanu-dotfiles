@@ -1532,11 +1532,11 @@ func main() {
 		Name: "games", DisplayName: "Games", Version: "1.0.0",
 		Description: "TUI games: minesweeper, 2048, solitaire, battleship, chess",
 		Services: []plugin.Service{
-			{Name: "games.MinesweeperService", Description: "Minesweeper", Path: msP, Handler: msH, PluginAccessible: true},
-			{Name: "games.Game2048Service", Description: "2048", Path: tP, Handler: tH, PluginAccessible: true},
-			{Name: "games.SolitaireService", Description: "Klondike solitaire", Path: sP, Handler: sH, PluginAccessible: true},
-			{Name: "games.BattleshipService", Description: "Battleship vs AI", Path: bP, Handler: bH, PluginAccessible: true},
-			{Name: "games.ChessService", Description: "Chess vs AI", Path: cP, Handler: cH, PluginAccessible: true},
+			{Name: "games.MinesweeperService", Description: "Minesweeper", Path: msP, Handler: msH, PluginAccessible: true, InteractiveMethods: []string{"Play"}},
+			{Name: "games.Game2048Service", Description: "2048", Path: tP, Handler: tH, PluginAccessible: true, InteractiveMethods: []string{"Play"}},
+			{Name: "games.SolitaireService", Description: "Klondike solitaire", Path: sP, Handler: sH, PluginAccessible: true, InteractiveMethods: []string{"Play"}},
+			{Name: "games.BattleshipService", Description: "Battleship vs AI", Path: bP, Handler: bH, PluginAccessible: true, InteractiveMethods: []string{"Play"}},
+			{Name: "games.ChessService", Description: "Chess vs AI", Path: cP, Handler: cH, PluginAccessible: true, InteractiveMethods: []string{"Play"}},
 			{Name: "dotfilesd.v1.DocumentationService", Description: "Game documentation", Path: docsP, Handler: docsH, PluginAccessible: false},
 		},
 	})

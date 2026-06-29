@@ -324,8 +324,22 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 	// Build schemas for CLI/MCP clients.
 	schemas := rpcreflection.BuildServiceSchemas(nonSystemInfos)
 
-	// Step f: DocumentationService.
+	// Step f1: Fetch method hints (interactive stdin requirements) from the
+	// plugin's /__dotfiles/method_hints endpoint and merge into schemas.
 	httpClient := &http.Client{}
+	if hints := fetchMethodHints(ctx, httpClient, hs.URL); hints != nil {
+		for _, svc := range schemas {
+			if svcHints, ok := hints[svc.Name]; ok {
+				for _, m := range svc.Methods {
+					if svcHints[m.Name] {
+						m.NeedsInteractiveStdin = true
+					}
+				}
+			}
+		}
+	}
+
+	// Step f2: DocumentationService.
 	docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
 
 	// Step g: Store PluginInfo + start supervisor.
@@ -644,4 +658,57 @@ func fetchDocumentation(ctx context.Context, httpClient *http.Client, pluginURL 
 		return nil
 	}
 	return cache
+}
+
+// methodHintsResponse is the JSON structure returned by the plugin's
+// /__dotfiles/method_hints endpoint.
+type methodHintsResponse struct {
+	Services []struct {
+		Name              string   `json:"name"`
+		InteractiveMethod []string `json:"interactive_methods"`
+	} `json:"services"`
+}
+
+// fetchMethodHints calls the plugin's /__dotfiles/method_hints endpoint
+// and returns a map of service_name → method_name → needs_interactive_stdin.
+// Returns nil if the endpoint is not available or returns an error.
+func fetchMethodHints(ctx context.Context, httpClient *http.Client, pluginURL string) map[string]map[string]bool {
+	req, err := http.NewRequestWithContext(ctx, "GET", pluginURL+"/__dotfiles/method_hints", nil)
+	if err != nil {
+		slog.Debug("fetchMethodHints: create request failed", "url", pluginURL, "error", err)
+		return nil
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		slog.Debug("fetchMethodHints: request failed", "url", pluginURL, "error", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Debug("fetchMethodHints: non-200", "url", pluginURL, "status", resp.StatusCode)
+		return nil
+	}
+
+	var hints methodHintsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&hints); err != nil {
+		slog.Debug("fetchMethodHints: decode failed", "url", pluginURL, "error", err)
+		return nil
+	}
+
+	result := make(map[string]map[string]bool, len(hints.Services))
+	for _, svc := range hints.Services {
+		methods := make(map[string]bool, len(svc.InteractiveMethod))
+		for _, m := range svc.InteractiveMethod {
+			methods[m] = true
+		}
+		if len(methods) > 0 {
+			result[svc.Name] = methods
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }

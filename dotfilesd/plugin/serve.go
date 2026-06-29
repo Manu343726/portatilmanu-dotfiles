@@ -32,6 +32,10 @@ type Service struct {
 	Handler http.Handler
 	// Whether this service is accessible to other plugins.
 	PluginAccessible bool
+	// Method names that need interactive stdin (e.g. "Play2048", "Move").
+	// The daemon uses this hint to set up raw terminal mode and stdin
+	// forwarding so TUI plugins receive keystrokes in real time.
+	InteractiveMethods []string
 }
 
 // Config configures a plugin.
@@ -104,6 +108,15 @@ func Serve(cfg Config) {
 	for _, svc := range cfg.Services {
 		mux.Handle(svc.Path, svc.Handler)
 	}
+
+	// Serve method hints — tells the daemon which RPCs need interactive
+	// stdin (e.g. TUI games). The daemon fetches this at plugin load time
+	// and populates MethodSchema.needs_interactive_stdin accordingly.
+	mux.HandleFunc("/__dotfiles/method_hints", func(w http.ResponseWriter, r *http.Request) {
+		hints := buildMethodHints(cfg.Services)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(hints)
+	})
 
 	// Context injection middleware: wraps every request so handlers can
 	// call plugin.ExtractContext(ctx) to get daemon access.
@@ -230,4 +243,29 @@ func extractMethodName(path string) string {
 		return parts[0]
 	}
 	return path
+}
+
+// methodHintsJSON is the JSON structure returned by /__dotfiles/method_hints.
+type methodHintsJSON struct {
+	Services []serviceHintsJSON `json:"services"`
+}
+
+type serviceHintsJSON struct {
+	Name              string   `json:"name"`
+	InteractiveMethod []string `json:"interactive_methods,omitempty"`
+}
+
+// buildMethodHints collects interactive stdin hints from all services
+// into a JSON-serializable structure.
+func buildMethodHints(services []Service) methodHintsJSON {
+	out := methodHintsJSON{}
+	for _, svc := range services {
+		if len(svc.InteractiveMethods) > 0 {
+			out.Services = append(out.Services, serviceHintsJSON{
+				Name:              svc.Name,
+				InteractiveMethod: svc.InteractiveMethods,
+			})
+		}
+	}
+	return out
 }

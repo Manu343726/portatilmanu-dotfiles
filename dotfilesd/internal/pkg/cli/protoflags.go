@@ -317,11 +317,16 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			return fmt.Errorf("send request: %w", err)
 		}
 
-		// Set terminal to raw mode for interactive input when stdin is a TTY.
-		// This disables echo (so keystrokes aren't echoed to the display) and
-		// makes each keypress available immediately (not just after Enter).
-		var oldTermState *term.State
-		if term.IsTerminal(int(os.Stdin.Fd())) {
+		// Set terminal to raw mode for interactive input when the method
+		// needs it (e.g. TUI games). For non-interactive methods (the common
+		// case), stdin forwarding is skipped entirely so the command exits
+		// cleanly when the plugin response arrives.
+		var (
+			oldTermState *term.State
+			stdinDone    chan struct{}
+		)
+
+		if m.NeedsInteractiveStdin && term.IsTerminal(int(os.Stdin.Fd())) {
 			s, err := term.MakeRaw(int(os.Stdin.Fd()))
 			if err == nil {
 				oldTermState = s
@@ -334,40 +339,42 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			}
 		}()
 
-		// Forward local stdin to the plugin in a background goroutine.
-		stdinDone := make(chan struct{}, 1)
-		go func() {
-			defer func() { stdinDone <- struct{}{} }()
-			buf := make([]byte, 4096)
-			for {
-				n, err := os.Stdin.Read(buf)
-				if n > 0 {
-					data := buf[:n]
+		if oldTermState != nil {
+			// Forward local stdin to the plugin in a background goroutine.
+			stdinDone = make(chan struct{}, 1)
+			go func() {
+				defer func() { stdinDone <- struct{}{} }()
+				buf := make([]byte, 4096)
+				for {
+					n, err := os.Stdin.Read(buf)
+					if n > 0 {
+						data := buf[:n]
 
-					// In raw mode, Ctrl+C (0x03) is sent as a regular byte
-					// instead of generating SIGINT. Catch it here and exit.
-					if bytes.Contains(data, []byte{0x03}) {
-						if oldTermState != nil {
-							_ = term.Restore(int(os.Stdin.Fd()), oldTermState)
-							oldTermState = nil
+						// In raw mode, Ctrl+C (0x03) is sent as a regular byte
+						// instead of generating SIGINT. Catch it here and exit.
+						if bytes.Contains(data, []byte{0x03}) {
+							if oldTermState != nil {
+								_ = term.Restore(int(os.Stdin.Fd()), oldTermState)
+								oldTermState = nil
+							}
+							os.Exit(130)
 						}
-						os.Exit(130)
-					}
 
-					// In raw mode the terminal sends \r instead of \n on Enter.
-					// Convert to \n so the plugin's ReadString('\n') works.
-					data = bytes.ReplaceAll(data, []byte{'\r'}, []byte{'\n'})
-					if err := stream.Send(&dotfilesdv1.CallPluginMessage{
-						StdinChunk: data,
-					}); err != nil {
+						// In raw mode the terminal sends \r instead of \n on Enter.
+						// Convert to \n so the plugin's ReadString('\n') works.
+						data = bytes.ReplaceAll(data, []byte{'\r'}, []byte{'\n'})
+						if err := stream.Send(&dotfilesdv1.CallPluginMessage{
+							StdinChunk: data,
+						}); err != nil {
+							return
+						}
+					}
+					if err != nil {
 						return
 					}
 				}
-				if err != nil {
-					return
-				}
-			}
-		}()
+			}()
+		}
 
 		// Receive streaming response.
 		for {
@@ -417,18 +424,17 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			oldTermState = nil // prevent defer from running again
 		}
 
-		select {
-		case <-stdinDone:
-		case <-time.After(50 * time.Millisecond):
-			os.Stdin.Close()
-			<-stdinDone
+		if stdinDone != nil {
+			select {
+			case <-stdinDone:
+			case <-time.After(50 * time.Millisecond):
+				os.Stdin.Close()
+				<-stdinDone
+			}
 		}
 		return nil
 	}
 }
-
-// stripServiceSuffix extracts the plugin name from a fully-qualified
-// service name like "resources.ResourcesService" → "resources".
 func stripServiceSuffix(fullName string) string {
 	parts := strings.Split(fullName, ".")
 	if len(parts) > 0 {
