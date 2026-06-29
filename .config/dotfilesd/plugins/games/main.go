@@ -183,42 +183,39 @@ func (m *msGame) run(ctx plugin.Context) bool {
 	r := bufio.NewReader(ctx.Stdin())
 	for !m.over && !m.won {
 		m.render(ctx.Stdout())
-		fmt.Fprint(ctx.Stdout(), "> ")
-		l, e := r.ReadString('\n')
+		b, e := r.ReadByte()
 		if e != nil {
 			return false
 		}
-		l = strings.TrimSpace(strings.ToLower(l))
-		switch l {
+		switch strings.ToLower(string(b)) {
 		case "q":
 			return false
-		case "w", "up":
+		case "w":
 			if m.cy > 0 {
 				m.cy--
 			}
-		case "s", "down":
+		case "s":
 			if m.cy < m.h-1 {
 				m.cy++
 			}
-		case "a", "left":
+		case "a":
 			if m.cx > 0 {
 				m.cx--
 			}
-		case "d", "right":
+		case "d":
 			if m.cx < m.w-1 {
 				m.cx++
 			}
-		case "r", "reveal":
+		case "r":
 			if m.g[m.cy][m.cx].st == 0 {
 				m.reveal(m.cx, m.cy)
 				m.won = m.win()
 			}
-		case "f", "flag":
+		case "f":
 			if m.g[m.cy][m.cx].st == 0 {
 				m.g[m.cy][m.cx].st = 2
 				m.flags--
-			}
-			if m.g[m.cy][m.cx].st == 2 {
+			} else if m.g[m.cy][m.cx].st == 2 {
 				m.g[m.cy][m.cx].st = 0
 				m.flags++
 			}
@@ -376,25 +373,24 @@ func (s *g2048State) run(ctx plugin.Context) bool {
 	r := bufio.NewReader(ctx.Stdin())
 	for !s.ov && !s.wn {
 		s.render(ctx.Stdout())
-		fmt.Fprint(ctx.Stdout(), "> ")
-		l, e := r.ReadString('\n')
+		b, e := r.ReadByte()
 		if e != nil {
 			return false
 		}
-		l = strings.TrimSpace(strings.ToLower(l))
+		l := strings.ToLower(string(b))
 		if l == "q" {
 			return false
 		}
 		md := false
 		switch l {
-		case "w", "up":
-			md = s.mv(0, -1)
-		case "s", "down":
+		case "w":
 			md = s.mv(0, 1)
-		case "a", "left":
-			md = s.mv(-1, 0)
-		case "d", "right":
+		case "s":
+			md = s.mv(0, -1)
+		case "a":
 			md = s.mv(1, 0)
+		case "d":
+			md = s.mv(-1, 0)
 		}
 		if md {
 			s.sp()
