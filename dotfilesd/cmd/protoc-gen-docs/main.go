@@ -46,17 +46,20 @@ func main() {
 			})
 		}
 
-		// Generate Go embed file for the markdown docs.
-		goPkg := goPackageName(fdp)
-		if goPkg == "" {
-			continue
+		// Generate Go embed file only for protos with services (plugins).
+		// Multiple protos in the same package would conflict on the var name.
+		if len(fdp.GetService()) > 0 {
+			goPkg := goPackageName(fdp)
+			if goPkg == "" {
+				continue
+			}
+			goOutName := protoDocGoEmbedName(fdp.GetName())
+			goContent := renderGoEmbed(fdp.GetName(), goPkg)
+			resp.File = append(resp.File, &pluginpb.CodeGeneratorResponse_File{
+				Name:    proto.String(goOutName),
+				Content: proto.String(goContent),
+			})
 		}
-		goOutName := protoDocGoEmbedName(fdp.GetName())
-		goContent := renderGoEmbed(fdp.GetName(), goPkg)
-		resp.File = append(resp.File, &pluginpb.CodeGeneratorResponse_File{
-			Name:    proto.String(goOutName),
-			Content: proto.String(goContent),
-		})
 	}
 
 	if resp.File == nil {
