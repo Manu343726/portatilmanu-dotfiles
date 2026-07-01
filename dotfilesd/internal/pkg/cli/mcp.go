@@ -242,9 +242,13 @@ func getPluginTools(clients *Clients) []toolDef {
 				schema.Properties["session_id"] = propSchema{Type: "string", Description: "optional session ID for grouping"}
 				schema.Properties["_render_output"] = propSchema{Type: "boolean", Description: "set true to request human-readable formatted output"}
 
+				methodDesc := methodSchema.Description
+				if methodDesc == "" {
+					methodDesc = pluginDesc
+				}
 				tool := toolDef{
 					Name:        toolName,
-					Description: fmt.Sprintf("[%s] %s.%s — %s", p.Name, shortSvcName(svcSchema.Name), methodSchema.Name, pluginDesc),
+					Description: fmt.Sprintf("[%s] %s.%s — %s", p.Name, shortSvcName(svcSchema.Name), methodSchema.Name, methodDesc),
 					InputSchema: schema,
 					Meta:        mustMarshalMeta(map[string]string{"plugin": p.Name, "service": svcSchema.Name, "method": methodSchema.Name}),
 				}
@@ -276,7 +280,10 @@ func protoSchemaToToolSchema(msg *dotfilesdv1.MessageSchema) toolSchema {
 
 // protoFieldToPropSchema converts a single registry FieldSchema to a JSON Schema property.
 func protoFieldToPropSchema(fs *dotfilesdv1.FieldSchema, parentMsg *dotfilesdv1.MessageSchema) propSchema {
-	desc := fs.Name
+	desc := fs.Description
+	if desc == "" {
+		desc = fs.Name
+	}
 
 	// Handle repeated fields first.
 	if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED {

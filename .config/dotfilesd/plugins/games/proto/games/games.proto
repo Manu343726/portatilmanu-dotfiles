@@ -4,44 +4,78 @@ package games;
 
 option go_package = "plugins/games/proto/games";
 
-// Solitaire — Klondike solitaire TUI game.
+// SolitaireService provides a Klondike solitaire game playable in the
+// terminal. Uses standard Klondike rules: draw from stock, build tableau
+// columns in descending alternating colors, move completed foundations.
 service SolitaireService {
+  // Play starts a new solitaire game. The game is interactive: use D to
+  // draw from stock, 1-7 to auto-move a tableau column, "s d n" to move
+  // n cards from source to destination column, and Q to quit.
   rpc Play(PlayRequest) returns (PlayResponse);
 }
 
-// Minesweeper — classic minesweeper TUI game.
+// MinesweeperService provides a classic minesweeper game playable in the
+// terminal. Reveal cells, flag bombs, and try to clear the board without
+// detonating any mines.
 service MinesweeperService {
+  // Play starts a new minesweeper game with configurable dimensions.
+  // Controls: WASD/arrows to move cursor, R to reveal, F to flag, Q to quit.
+  // Game ends when you reveal a bomb or clear all safe cells.
   rpc Play(MinesweeperRequest) returns (PlayResponse);
 }
 
-// Game2048 — 2048 sliding tile TUI game.
+// Game2048Service provides a 2048 sliding tile puzzle game. Combine tiles
+// by sliding them with arrow keys to reach the 2048 tile.
 service Game2048Service {
+  // Play starts a new 2048 game on a 4x4 grid. Use WASD to slide tiles
+  // in the respective direction. Tiles with the same value merge when they
+  // collide. Reach 2048 to win.
   rpc Play(PlayRequest) returns (PlayResponse);
 }
 
-// Battleship — battleship vs AI TUI game.
+// BattleshipService provides a battleship game against an AI opponent.
+// Place your ships on a 10x10 grid, then take turns firing at the enemy
+// grid to sink all their ships before they sink yours.
 service BattleshipService {
+  // Play starts a new battleship game. First place your ships by entering
+  // coordinates (e.g., "A1 H" for horizontal, "A1 V" for vertical, or "R"
+  // for random placement). Then take turns entering target coordinates
+  // (e.g., "B4") to fire at the enemy grid.
   rpc Play(PlayRequest) returns (PlayResponse);
 }
 
-// Chess — chess vs AI TUI game.
+// ChessService provides a chess game against a simple AI opponent. Uses
+// standard chess rules with algebraic notation for moves.
 service ChessService {
+  // Play starts a new chess game. Enter moves in algebraic notation
+  // (e.g., "e2 e4"). Special moves: "O-O" for kingside castle, "O-O-O"
+  // for queenside castle. The AI plays black automatically.
   rpc Play(PlayRequest) returns (PlayResponse);
 }
 
+// PlayRequest is the base request for games that don't need extra setup.
 message PlayRequest {
-  // Optional: player name or seed (unused for now).
+  // Optional: player name or game seed (currently unused, reserved).
   string options = 1;
 }
 
+// MinesweeperRequest configures the minesweeper board dimensions.
 message MinesweeperRequest {
-  int32 width = 1; // default 9
-  int32 height = 2; // default 9
-  int32 bombs = 3; // default 10
+  // Board width in cells (default: 9).
+  int32 width = 1;
+  // Board height in cells (default: 9).
+  int32 height = 2;
+  // Number of mines to place (default: 10, max: width*height-1).
+  int32 bombs = 3;
+  // Optional: player name or game seed (currently unused, reserved).
   string options = 4;
 }
 
+// PlayResponse reports the game outcome.
 message PlayResponse {
+  // Whether the player won the game.
   bool won = 1;
+  // Human-readable result summary (e.g., "You won minesweeper!", "Boom!",
+  // "Checkmate!", "Game over").
   string summary = 2;
 }

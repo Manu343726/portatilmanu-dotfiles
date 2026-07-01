@@ -4,15 +4,24 @@ package stdinecho;
 
 option go_package = "plugins/stdinecho/proto/stdinecho";
 
+// StdinechoService reads lines from standard input and echoes them back.
+// Useful for testing stdin forwarding, interactive input pipelines, and
+// daemon-mediated I/O between CLI tools and plugins.
 service StdinechoService {
-  // Echo reads lines from stdin and echoes them back.
+  // Echo reads up to N lines from stdin and returns them as a repeated
+  // string. Each line is forwarded to stdout as it's received. Supports
+  // RenderOutput mode for interactive echo feedback.
   rpc Echo(EchoRequest) returns (EchoResponse);
 }
 
+// EchoRequest specifies how many lines to read.
 message EchoRequest {
-  int32 lines = 1; // Number of lines to read (default: 5)
+  // Number of lines to read from stdin before returning (default: 5).
+  int32 lines = 1;
 }
 
+// EchoResponse contains the lines that were read.
 message EchoResponse {
+  // Lines read from stdin, in order.
   repeated string lines = 1;
 }

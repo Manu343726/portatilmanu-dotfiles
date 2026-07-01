@@ -634,6 +634,7 @@ func fetchPluginDocs(ctx context.Context, httpClient *http.Client, pluginURL str
 
 // enrichSchemasFromDocs populates ServiceSchema descriptions from the
 // structured Documentation proto returned by the plugin's DocumentationService.
+// Recursively propagates service, method, message, and field descriptions.
 func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv1.Documentation) {
 	if doc == nil {
 		return
@@ -646,10 +647,37 @@ func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv
 					for _, md := range sd.Methods {
 						if md.Name == m.Name {
 							m.Description = md.Description
+							enrichMessageSchema(m.Request, md.Request)
+							enrichMessageSchema(m.Response, md.Response)
 							break
 						}
 					}
 				}
+				break
+			}
+		}
+	}
+}
+
+// enrichMessageSchema recursively propagates MessageDoc descriptions
+// (message, fields, nested messages) into a MessageSchema.
+func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageDoc) {
+	if ms == nil || md == nil {
+		return
+	}
+	ms.Description = md.Description
+	for _, f := range ms.Fields {
+		for _, fd := range md.Fields {
+			if fd.Name == f.Name {
+				f.Description = fd.Description
+				break
+			}
+		}
+	}
+	for _, nested := range ms.Messages {
+		for _, nd := range md.NestedMessages {
+			if nd.Name == nested.Name {
+				enrichMessageSchema(nested, nd)
 				break
 			}
 		}

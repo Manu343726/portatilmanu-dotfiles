@@ -4,51 +4,87 @@ package tmuxbar;
 
 option go_package = "plugins/tmuxbar/proto/tmuxbar";
 
-// TmuxBarService provides formatted tmux status bar widgets.
-// It depends on the resources plugin for system data.
+// TmuxBarService provides formatted status bar widgets for tmux via the
+// resources plugin. Each RPC returns a pre-formatted text string suitable
+// for display in a tmux status line. The StatusBar RPC combines multiple
+// widgets into a single compact output.
 service TmuxBarService {
-  // RAM usage widget: "RAM 6.2/15.9 GB 39%"
+  // RAMWidget returns a formatted RAM usage string like "RAM 6.2/15.9 GB 39%".
+  // The percent value is also returned as a structured field for custom
+  // formatting or threshold-based color coding.
   rpc RAMWidget(RAMWidgetRequest) returns (RAMWidgetResponse);
-  // CPU usage widget: "CPU 24% ▁▃▅▇▆▄▃"
+  // CPUWidget returns a formatted CPU usage string like "CPU 24%".
   rpc CPUWidget(CPUWidgetRequest) returns (CPUWidgetResponse);
-  // CPU temperature widget: "🌡 65°C"
+  // CPUTempWidget returns a formatted CPU temperature string like "🌡 65°C".
+  // Supports Celsius and Fahrenheit units.
   rpc CPUTempWidget(CPUTempWidgetRequest) returns (CPUTempWidgetResponse);
-  // Battery widget: "🔋 85%" or "⚡charging"
+  // BatteryWidget returns a formatted battery status string like "🔋 85%"
+  // or "⚡charging". Includes structured percent and charging state for
+  // custom formatting.
   rpc BatteryWidget(BatteryWidgetRequest) returns (BatteryWidgetResponse);
-  // Combined compact status: "CPU 24% | RAM 39% | 65°C"
+  // StatusBar returns a combined compact status line that merges CPU, RAM,
+  // and other widgets into a single string like "CPU 24% | RAM 39% | 65°C".
+  // Intended as a one-call solution for tmux status-right configuration.
   rpc StatusBar(StatusBarRequest) returns (StatusBarResponse);
 }
 
+// RAMWidgetRequest configures the RAM widget output.
 message RAMWidgetRequest {
-  string format = 1; // Optional format override
+  // Optional format string (not yet implemented, reserved for future use).
+  string format = 1;
 }
+
+// RAMWidgetResponse contains the RAM widget result.
 message RAMWidgetResponse {
-  string text = 1; // e.g. "RAM 6.2/15.9 GB 39%"
+  // Formatted text string for display (e.g., "RAM 6.2/15.9 GB 39%").
+  string text = 1;
+  // RAM usage percentage for custom formatting or thresholds.
   double percent = 2;
 }
 
+// CPUWidgetRequest is currently empty.
 message CPUWidgetRequest {}
+
+// CPUWidgetResponse contains the CPU widget result.
 message CPUWidgetResponse {
-  string text = 1; // e.g. "CPU 24%"
+  // Formatted text string for display (e.g., "CPU 24%").
+  string text = 1;
+  // CPU usage percentage for custom formatting or thresholds.
   double percent = 2;
 }
 
+// CPUTempWidgetRequest configures the temperature unit.
 message CPUTempWidgetRequest {
-  string unit = 1; // "celsius" or "fahrenheit"
+  // Temperature unit: "celsius" or "fahrenheit" (default: "celsius").
+  string unit = 1;
 }
+
+// CPUTempWidgetResponse contains the temperature widget result.
 message CPUTempWidgetResponse {
-  string text = 1; // e.g. "🌡 65°C"
+  // Formatted text string for display (e.g., "🌡 65°C").
+  string text = 1;
+  // Temperature value in the requested unit.
   double temperature = 2;
 }
 
+// BatteryWidgetRequest is currently empty.
 message BatteryWidgetRequest {}
+
+// BatteryWidgetResponse contains the battery widget result.
 message BatteryWidgetResponse {
-  string text = 1; // e.g. "🔋 85%" or "⚡charging"
+  // Formatted text string for display (e.g., "🔋 85%" or "⚡charging").
+  string text = 1;
+  // Battery charge percentage.
   double percent = 2;
+  // Whether the battery is currently charging.
   bool charging = 3;
 }
 
+// StatusBarRequest is currently empty.
 message StatusBarRequest {}
+
+// StatusBarResponse contains the combined status line.
 message StatusBarResponse {
-  string text = 1; // e.g. "CPU 24% | RAM 39% | 65°C"
+  // Combined compact status line (e.g., "CPU 24% | RAM 39% | 65°C").
+  string text = 1;
 }

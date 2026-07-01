@@ -4,69 +4,127 @@ package pcgordo;
 
 option go_package = "plugins/pcgordo/proto/pcgordo";
 
+// PcgordoService controls and monitors the PCGORDO desktop PC (Salon)
+// via Home Assistant. Supports power management (WOL, shutdown, restart,
+// hibernate), monitor control, satellite management, status queries,
+// screen captures, and Windows Update monitoring.
 service PcgordoService {
+  // WOL sends a Wake-on-LAN magic packet to wake the PC from off state.
   rpc WOL(WOLRequest) returns (WOLResponse);
+  // Shutdown gracefully shuts down the main PC.
   rpc Shutdown(Empty) returns (ActionResult);
+  // Restart reboots the main PC.
   rpc Restart(Empty) returns (ActionResult);
+  // Hibernate puts the main PC into hibernation (saves state to disk).
   rpc Hibernate(Empty) returns (ActionResult);
+  // MonitorSleep turns off the PC's display monitors.
   rpc MonitorSleep(Empty) returns (ActionResult);
+  // MonitorWake turns on the PC's display monitors.
   rpc MonitorWake(Empty) returns (ActionResult);
+  // SatelliteHibernate hibernates the salon HTPC satellite.
   rpc SatelliteHibernate(Empty) returns (ActionResult);
+  // SatelliteRestart reboots the salon HTPC satellite.
   rpc SatelliteRestart(Empty) returns (ActionResult);
+  // SatelliteShutdown shuts down the salon HTPC satellite.
   rpc SatelliteShutdown(Empty) returns (ActionResult);
+  // Status queries the full system status from Home Assistant.
+  // Returns power state, CPU/GPU metrics, active window, monitor power,
+  // and all available entity states.
   rpc Status(Empty) returns (StatusResponse);
+  // Screenshot captures the current screen of the PC and returns a URL
+  // to the camera entity image. Returns available=false if the PC is
+  // offline or the camera is unavailable.
   rpc Screenshot(Empty) returns (ScreenshotResponse);
+  // WindowsUpdates queries available and pending Windows updates.
+  // Returns separate counts for software and driver updates.
   rpc WindowsUpdates(Empty) returns (WindowsUpdatesResponse);
 }
 
+// Generic empty message for RPCs that take no parameters.
 message Empty {}
 
+// WOLRequest contains the MAC address to wake.
 message WOLRequest {
+  // MAC address of the target machine (e.g., "bc:fc:e7:b2:e1:f5").
   string mac = 1;
 }
 
+// WOLResponse confirms the WOL packet was sent.
 message WOLResponse {
+  // Whether the WOL magic packet was successfully sent.
   bool success = 1;
+  // Status message ("WOL packet sent" or error description).
   string message = 2;
 }
 
+// ActionResult reports the outcome of a power management action.
 message ActionResult {
+  // Whether the action was successfully triggered.
   bool success = 1;
+  // Status message ("ok" or error description).
   string message = 2;
 }
 
+// EntityState represents a single Home Assistant entity.
 message EntityState {
+  // Entity ID (e.g., "binary_sensor.pcgordo_zerotier_ping").
   string entity_id = 1;
+  // Human-readable name from Home Assistant.
   string friendly_name = 2;
+  // Current state value.
   string state = 3;
+  // Unit of measurement if applicable.
   string unit = 4;
+  // Device class if set (e.g., "temperature", "power").
   string device_class = 5;
 }
 
+// StatusResponse contains the full PC status from Home Assistant.
 message StatusResponse {
-  string pc_state = 1;           // "online" or "offline"
+  // Power state: "online", "offline", or Home Assistant state.
+  string pc_state = 1;
+  // Timestamp of last boot (ISO 8601).
   string last_boot = 2;
+  // Timestamp of last user activity (ISO 8601).
   string last_active = 3;
+  // CPU load as percentage (0-100).
   double cpu_load = 4;
+  // GPU load as percentage (0-100).
   double gpu_load = 5;
+  // GPU temperature in Celsius.
   double gpu_temp = 6;
+  // Memory usage as percentage (0-100).
   double memory_usage = 7;
+  // Title of the currently active window.
   string active_window = 8;
+  // Name of the currently active virtual desktop.
   string active_desktop = 9;
+  // Monitor power state ("on", "off", or "unknown").
   string monitor_power = 10;
+  // ZeroTier network connectivity status.
   string zerotier_ping = 11;
+  // All entity states available for this PC.
   repeated EntityState entities = 12;
 }
 
+// ScreenshotResponse provides a URL to a screen capture image.
 message ScreenshotResponse {
+  // Whether a screenshot is currently available.
   bool available = 1;
+  // URL to the screenshot image from the Home Assistant camera entity.
   string image_url = 2;
+  // Error message if the screenshot is unavailable.
   string error = 3;
 }
 
+// WindowsUpdatesResponse reports available Windows updates.
 message WindowsUpdatesResponse {
+  // Number of available software (non-driver) updates.
   int32 available_software_updates = 1;
+  // Number of pending software updates awaiting reboot.
   int32 pending_software_updates = 2;
+  // Number of available driver updates.
   int32 available_driver_updates = 3;
+  // Number of pending driver updates awaiting reboot.
   int32 pending_driver_updates = 4;
 }

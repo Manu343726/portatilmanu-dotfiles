@@ -4,20 +4,38 @@ package weather;
 
 option go_package = "plugins/weather/proto/weather";
 
-// WeatherService is the type-safe RPC service exposed by the weather plugin.
-// Other plugins can import this package and call Forecast directly.
+// WeatherService provides weather forecasts by querying wttr.in.
+// Supports both human-readable formatted output and structured JSON data
+// for plugin-to-plugin callers.
 service WeatherService {
-  // Forecast returns the weather forecast for a location.
+  // Forecast fetches the weather forecast for a location.
+  // Returns current conditions (temperature, humidity, wind, pressure, etc.)
+  // from wttr.in. Use format="json" to get structured data for programmatic
+  // consumption.
   rpc Forecast(ForecastRequest) returns (ForecastResponse);
 }
 
+// Request for a weather forecast for a specific location.
 message ForecastRequest {
+  // Location to forecast (city name, "London", "Paris", or IP address).
+  // Supports any location that wttr.in understands.
   string location = 1;
-  string format = 2; // "brief", "full", "json"
+  // Output format: "brief" (one-line summary), "full" (detailed), or "json"
+  // (structured data). Defaults to brief for human output, json for
+  // programmatic callers.
+  string format = 2;
 }
 
+// Response containing the weather forecast result.
 message ForecastResponse {
+  // Raw forecast output from wttr.in. Content depends on format:
+  // - "brief": one-line text summary
+  // - "full": multi-line detailed report
+  // - "json": structured JSON for programmatic parsing
   string report = 1;
+  // Exit code from the curl command. 0 on success, non-zero on error.
   int32 exit_code = 2;
+  // Error message if the forecast could not be retrieved (network error,
+  // unknown location, etc.).
   string error_message = 3;
 }

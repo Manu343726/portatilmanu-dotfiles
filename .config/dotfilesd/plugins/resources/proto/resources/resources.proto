@@ -4,94 +4,160 @@ package resources;
 
 option go_package = "plugins/resources/proto/resources";
 
-// ResourcesService provides system resource monitoring data.
-// The plugin runs a background collector that samples RAM, CPU, disk,
-// and disk I/O every 3 seconds, storing snapshots in a ring buffer.
-// All RPCs read from this shared state for instant responses.
+// ResourcesService provides system resource monitoring data (RAM, CPU, disk,
+// disk I/O). A background collector samples stats every 3 seconds and stores
+// them in a ring buffer. All RPCs read from this shared state for instant
+// responses without blocking on shell commands.
 service ResourcesService {
-  // Current returns the latest snapshot of all resources.
+  // Current returns the latest snapshot of all system resources at once.
+  // Includes RAM, CPU, disk usage, and disk I/O metrics. Use this for a
+  // comprehensive overview or when you need all data in one call.
   rpc Current(CurrentRequest) returns (CurrentResponse);
-  // Top returns the top N processes by CPU or memory usage.
+  // Top returns the top N processes sorted by CPU or memory usage.
+  // Useful for identifying resource-heavy processes on the system.
   rpc Top(TopRequest) returns (TopResponse);
-  // PS returns detailed per-process metrics.
+  // PS returns detailed per-process metrics, optionally filtered to a
+  // specific PID. Similar to the standard `ps` command but returns
+  // structured data for programmatic consumption.
   rpc PS(PSRequest) returns (PSResponse);
-  // History returns historical resource usage data points.
+  // History returns historical resource usage data points from the ring
+  // buffer. Use this to track resource usage trends over time.
   rpc History(HistoryRequest) returns (HistoryResponse);
 }
 
+// CurrentRequest is empty. Current returns the latest snapshot.
 message CurrentRequest {}
+
+// CurrentResponse contains the latest snapshot of all resources.
 message CurrentResponse {
+  // RAM usage snapshot.
   RAMSnapshot ram = 1;
+  // CPU usage snapshot with per-type breakdown.
   CPUSnapshot cpu = 2;
+  // Root disk partition usage.
   DiskSnapshot disk = 3;
+  // Primary block device I/O statistics.
   DiskIOSnapshot disk_io = 4;
 }
 
+// Request to list top processes by resource usage.
 message TopRequest {
-  int32 count = 1; // Number of processes (default: 10)
-  string sort = 2; // "cpu" or "mem" (default: cpu)
+  // Number of processes to return (default: 10).
+  int32 count = 1;
+  // Sort order: "cpu" for CPU usage, "mem" for memory usage (default: "cpu").
+  string sort = 2;
 }
+
+// TopResponse contains the list of top processes.
 message TopResponse {
+  // Top processes sorted by the requested metric.
   repeated ProcessInfo processes = 1;
 }
 
+// Request to query detailed process information.
 message PSRequest {
-  int32 pid = 1; // Filter to a specific PID (optional)
-  int32 count = 2; // Number of processes (default: 20)
-  string sort = 3; // "cpu" or "mem" (default: cpu)
+  // Filter to a specific process PID. Empty means list all processes.
+  int32 pid = 1;
+  // Number of processes to return (default: 20).
+  int32 count = 2;
+  // Sort order: "cpu" or "mem" (default: "cpu").
+  string sort = 3;
 }
+
+// PSResponse contains detailed process information.
 message PSResponse {
+  // Process list matching the query criteria.
   repeated ProcessInfo processes = 1;
 }
 
+// Request for historical resource data.
 message HistoryRequest {
-  string resource = 1; // "ram", "cpu", or "disk" (default: ram)
-  int32 count = 2; // Number of data points (default: 20)
+  // Resource to query: "ram", "cpu", or "disk" (default: "ram").
+  string resource = 1;
+  // Number of data points to return (default: 20, max: 100).
+  int32 count = 2;
 }
+
+// HistoryResponse contains time-series data for a resource.
 message HistoryResponse {
+  // Data point values in chronological order (oldest first).
   repeated double values = 1;
+  // The resource these values correspond to ("ram", "cpu", or "disk").
   string resource = 2;
+  // Unit of measurement for the values ("%" for all resources).
   string unit = 3;
 }
 
+// ---------------------------------------------------------------------------
 // Shared data types
+// ---------------------------------------------------------------------------
 
+// RAMSnapshot captures memory usage at a point in time.
 message RAMSnapshot {
+  // Total physical RAM in MB.
   double total_mb = 1;
+  // Currently used RAM in MB (excluding buffers/cache).
   double used_mb = 2;
+  // Available RAM in MB (includes buffers/cache reclaimable by apps).
   double available_mb = 3;
+  // RAM usage as percentage of total.
   double percent = 4;
 }
 
+// CPUSnapshot captures CPU utilization at a point in time.
 message CPUSnapshot {
+  // Total CPU usage across all cores as percentage.
   double total_percent = 1;
+  // CPU time spent in user space as percentage.
   double user_percent = 2;
+  // CPU time spent in kernel space as percentage.
   double system_percent = 3;
+  // CPU time waiting for I/O operations as percentage.
   double iowait_percent = 4;
+  // Number of logical CPU cores detected.
   int32 num_cores = 5;
 }
 
+// DiskSnapshot captures disk usage for the root partition.
 message DiskSnapshot {
+  // Mount point path (e.g., "/").
   string mount_point = 1;
+  // Total disk capacity in GB.
   double total_gb = 2;
+  // Used disk space in GB.
   double used_gb = 3;
+  // Available disk space in GB.
   double avail_gb = 4;
+  // Disk usage as percentage.
   double percent = 5;
 }
 
+// DiskIOSnapshot captures block device I/O metrics.
 message DiskIOSnapshot {
+  // Block device name (e.g., "nvme0n1" or "sda").
   string device = 1;
+  // Read operations per second.
   double reads_per_sec = 2;
+  // Write operations per second.
   double writes_per_sec = 3;
+  // Bytes read per second.
   double read_bytes_per_sec = 4;
+  // Bytes written per second.
   double write_bytes_per_sec = 5;
 }
 
+// ProcessInfo describes a running process.
 message ProcessInfo {
+  // Process ID.
   int32 pid = 1;
+  // Process name (comm).
   string name = 2;
+  // CPU usage percentage.
   double cpu_percent = 3;
+  // Memory usage percentage.
   double mem_percent = 4;
+  // Memory usage in MB.
   double mem_mb = 5;
+  // Process state (R, S, D, Z, etc.).
   string state = 6;
 }
