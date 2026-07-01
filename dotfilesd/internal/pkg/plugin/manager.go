@@ -38,6 +38,10 @@ type PluginInfo struct {
 	// DocumentationService.
 	DocsCache map[string]string
 
+	// PluginDocs holds the structured Documentation proto when the plugin
+	// serves embedded docs via protoc-gen-docs.
+	PluginDocs *dotfilesdv1.Documentation
+
 	// Schemas holds full introspection data (methods, fields, types, enums).
 	Schemas []*dotfilesdv1.ServiceSchema
 }
@@ -342,9 +346,10 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 		}
 	}
 
-	// Step f2: DocumentationService — fetch docs and enrich schemas.
+	// Step f2: DocumentationService — fetch structured docs and enrich schemas.
 	docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
-	enrichSchemasFromDocsCache(schemas, docsCache)
+	pluginDocs := fetchPluginDocs(ctx, httpClient, hs.URL)
+	enrichSchemasFromDocs(schemas, pluginDocs)
 
 	// Step g: Store PluginInfo + start supervisor.
 	displayName := hs.DisplayName
@@ -362,6 +367,7 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 		URL:         hs.URL,
 		Services:    services,
 		DocsCache:   docsCache,
+		PluginDocs:  pluginDocs,
 		Schemas:     schemas,
 		Process:     procCmd.Process,
 		SourceDir:   sourceDir,
@@ -616,71 +622,38 @@ func readJSONLine(r io.Reader, v interface{}) error {
 	return json.Unmarshal(buf[:n], v)
 }
 
-// enrichSchemasFromDocsCache parses documentation responses from the
-// DocumentationService and populates ServiceSchema descriptions.
-func enrichSchemasFromDocsCache(schemas []*dotfilesdv1.ServiceSchema, docsCache map[string]string) {
-	if docsCache == nil {
+// fetchPluginDocs fetches structured documentation from the plugin's
+// DocumentationService returning the Documentation proto if available.
+func fetchPluginDocs(ctx context.Context, httpClient *http.Client, pluginURL string) *dotfilesdv1.Documentation {
+	docsClient := dotfilesdv1connect.NewDocumentationServiceClient(httpClient, pluginURL)
+	if resp, err := docsClient.GetDocumentation(ctx, connect.NewRequest(&dotfilesdv1.DocumentationRequest{})); err == nil {
+		return resp.Msg.Documentation
+	}
+	return nil
+}
+
+// enrichSchemasFromDocs populates ServiceSchema descriptions from the
+// structured Documentation proto returned by the plugin's DocumentationService.
+func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv1.Documentation) {
+	if doc == nil {
 		return
 	}
 	for _, svc := range schemas {
-		svcMD, ok := docsCache[svc.Name]
-		if !ok || svcMD == "" {
-			continue
-		}
-		// Per-service docs have "# ServiceName\n\n<body>".
-		// Extract the service description from the body.
-		body := svcMD
-		if idx := strings.Index(svcMD, "\n\n"); idx >= 0 {
-			body = svcMD[idx+2:]
-		}
-		lines := strings.Split(body, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line != "" && !strings.HasPrefix(line, "- **") && !strings.HasPrefix(line, "|") && !strings.HasPrefix(line, "|") {
-				svc.Description = line
+		for _, sd := range doc.Services {
+			if sd.Name == svc.Name {
+				svc.Description = sd.Description
+				for _, m := range svc.Methods {
+					for _, md := range sd.Methods {
+						if md.Name == m.Name {
+							m.Description = md.Description
+							break
+						}
+					}
+				}
 				break
 			}
 		}
-
-		// Extract method descriptions from #### headings.
-		for _, m := range svc.Methods {
-			methodSection := extractSection(body, "#### "+m.Name)
-			if methodSection == "" {
-				continue
-			}
-			for _, line := range strings.Split(methodSection, "\n") {
-				line = strings.TrimSpace(line)
-				if line != "" && !strings.HasPrefix(line, "- **") && !strings.HasPrefix(line, "|") {
-					m.Description = line
-					break
-				}
-			}
-		}
 	}
-}
-
-// extractSection returns content between the heading starting with marker
-// and the next heading at the same or lower level, or end of string.
-func extractSection(md, marker string) string {
-	idx := strings.Index(md, marker)
-	if idx < 0 {
-		return ""
-	}
-	rest := md[idx+len(marker):]
-	eol := strings.Index(rest, "\n")
-	if eol >= 0 {
-		rest = rest[eol+1:]
-	}
-	end := -1
-	for _, prefix := range []string{"\n### ", "\n## ", "\n# "} {
-		if pos := strings.Index(rest, prefix); pos >= 0 && (end < 0 || pos < end) {
-			end = pos
-		}
-	}
-	if end >= 0 {
-		rest = rest[:end]
-	}
-	return strings.TrimSpace(rest)
 }
 
 // fetchDocumentation calls the plugin's DocumentationService for every

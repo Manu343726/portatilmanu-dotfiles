@@ -220,7 +220,7 @@ func main() {
 		DisplayName: "Weather",
 		Version:     "1.0.0",
 		Description: "Weather forecast plugin using wttr.in",
-		DocsContent: pb.PluginDocs,
+		DocsProto: pb.PluginDocs,
 		Services: []plugin.Service{
 			{
 				Name:             "weather.WeatherService",

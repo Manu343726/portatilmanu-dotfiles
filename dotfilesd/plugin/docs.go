@@ -12,9 +12,10 @@ import (
 
 // documentationServiceServer implements the default DocumentationService.
 //
-// When docsContent is set (pre-generated markdown from protoc-gen-docs,
-// embedded via //go:embed at compile time), it serves that content directly.
-// Otherwise it auto-generates docs from Config fields.
+// When DocsProto is set (pre-generated Documentation proto from protoc-gen-docs,
+// embedded via //go:embed at compile time), it returns structured docs in the
+// documentation field of the response. Otherwise it auto-generates docs from
+// Config fields.
 //
 // Plugins can override by providing their own DocumentationService in
 // Config.Services with the name "dotfilesd.v1.DocumentationService". If
@@ -27,34 +28,30 @@ type documentationServiceServer struct {
 	description string
 	services    []Service
 	docsContent string
+	docsProto   *dotfilesdv1.Documentation
 }
 
-// GetDocumentation returns markdown-formatted documentation for a service
-// or for the entire plugin.
+// GetDocumentation returns documentation for a service or the entire plugin.
 func (s *documentationServiceServer) GetDocumentation(
 	ctx context.Context,
 	req *connect.Request[dotfilesdv1.DocumentationRequest],
 ) (*connect.Response[dotfilesdv1.DocumentationResponse], error) {
 	svcName := req.Msg.ServiceName
 
+	// Structured proto docs take precedence.
+	if s.docsProto != nil {
+		return s.serveProto(svcName)
+	}
+
+	// Legacy markdown embedded content.
 	if s.docsContent != "" {
-		if svcName == "" {
-			return connect.NewResponse(&dotfilesdv1.DocumentationResponse{
-				Format:  "markdown",
-				Content: s.docsContent,
-			}), nil
-		}
-		section := extractSection(s.docsContent, "### "+svcName)
-		if section == "" {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("service %q not found", svcName))
-		}
 		return connect.NewResponse(&dotfilesdv1.DocumentationResponse{
 			Format:  "markdown",
-			Content: "# " + svcName + "\n\n" + section,
+			Content: s.docsContent,
 		}), nil
 	}
 
+	// Auto-generate from Config fields.
 	if svcName == "" {
 		return s.pluginDocs()
 	}
@@ -62,6 +59,29 @@ func (s *documentationServiceServer) GetDocumentation(
 	for _, svc := range s.services {
 		if svc.Name == svcName {
 			return s.serviceDocs(svc)
+		}
+	}
+
+	return nil, connect.NewError(connect.CodeNotFound,
+		fmt.Errorf("service %q not found", svcName))
+}
+
+func (s *documentationServiceServer) serveProto(svcName string) (*connect.Response[dotfilesdv1.DocumentationResponse], error) {
+	resp := &dotfilesdv1.DocumentationResponse{}
+
+	if svcName == "" {
+		resp.Documentation = s.docsProto
+		return connect.NewResponse(resp), nil
+	}
+
+	for _, svc := range s.docsProto.Services {
+		if svc.Name == svcName {
+			resp.Documentation = &dotfilesdv1.Documentation{
+				Package:     s.docsProto.Package,
+				Description: s.docsProto.Description,
+				Services:    []*dotfilesdv1.ServiceDoc{svc},
+			}
+			return connect.NewResponse(resp), nil
 		}
 	}
 
@@ -98,28 +118,4 @@ func (s *documentationServiceServer) serviceDocs(svc Service) (*connect.Response
 		Format:  "markdown",
 		Content: b.String(),
 	}), nil
-}
-
-// extractSection returns content between the heading starting with marker
-// and the next heading at the same or lower level, or end of string.
-func extractSection(md, marker string) string {
-	idx := strings.Index(md, marker)
-	if idx < 0 {
-		return ""
-	}
-	rest := md[idx+len(marker):]
-	eol := strings.Index(rest, "\n")
-	if eol >= 0 {
-		rest = rest[eol+1:]
-	}
-	end := -1
-	for _, prefix := range []string{"\n### ", "\n## ", "\n# "} {
-		if pos := strings.Index(rest, prefix); pos >= 0 && (end < 0 || pos < end) {
-			end = pos
-		}
-	}
-	if end >= 0 {
-		rest = rest[:end]
-	}
-	return strings.TrimSpace(rest)
 }

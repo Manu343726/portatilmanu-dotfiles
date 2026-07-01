@@ -167,7 +167,7 @@ func main() {
 		DisplayName: "TmuxBar",
 		Version:     "1.0.0",
 		Description: "Tmux status bar widgets using resources plugin",
-		DocsContent: pb.PluginDocs,
+		DocsProto: pb.PluginDocs,
 		Services: []plugin.Service{
 			{
 				Name:             "tmuxbar.TmuxBarService",

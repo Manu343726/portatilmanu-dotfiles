@@ -77,7 +77,7 @@ func main() {
 		DisplayName: "Stdin Echo",
 		Version:     "1.0.0",
 		Description: "Reads from stdin and echoes back.",
-		DocsContent: pb.PluginDocs,
+		DocsProto: pb.PluginDocs,
 		Services: []plugin.Service{
 			{
 				Name:               "stdinecho.StdinechoService",

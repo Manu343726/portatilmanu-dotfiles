@@ -255,7 +255,7 @@ func main() {
 		DisplayName: "PCGORDO",
 		Version:     "1.0.0",
 		Description: "Control and monitor the PCGORDO desktop PC (Salon) via Home Assistant",
-		DocsContent: pb.PluginDocs,
+		DocsProto: pb.PluginDocs,
 		Services: []plugin.Service{
 			{
 				Name:             "pcgordo.PcgordoService",
