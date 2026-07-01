@@ -137,17 +137,8 @@ eval "$(zoxide init zsh)"
 # opencode
 export PATH=/home/manu343726/.opencode/bin:$PATH
 
-# Load opencode secrets and generate MCP configs from templates
-if [ -f "$HOME/.config/opencode/.env" ]; then
-  source "$HOME/.config/opencode/.env"
-  vars='${HA_MCP_URL}${HA_MCP_TOKEN}'
-  # Generate opencode.jsonc
-  [ -f "$HOME/.config/opencode/opencode.jsonc.template" ] && \
-    envsubst "$vars" < "$HOME/.config/opencode/opencode.jsonc.template" > "$HOME/.config/opencode/opencode.jsonc"
-  # Generate VSCode mcp.json
-  [ -f "$HOME/.vscode/mcp.json.template" ] && \
-    envsubst "$vars" < "$HOME/.vscode/mcp.json.template" > "$HOME/.vscode/mcp.json"
-fi
+# Generate MCP configs from .env + templates
+[ -f "$HOME/.config/opencode/generate-configs.sh" ] && source "$HOME/.config/opencode/generate-configs.sh"
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm

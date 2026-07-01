@@ -64,6 +64,7 @@
 !/.config/opencode/
 /.config/opencode/*
 !/.config/opencode/opencode.jsonc.template
+!/.config/opencode/generate-configs.sh
 
 # dotfilesd config
 !/.config/dotfilesd/
