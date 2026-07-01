@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "dotfilesd": {
+      "type": "local",
+      "command": ["dotfilesctl", "mcp"],
+      "enabled": true
+    },
+    "homeassistant": {
+      "type": "remote",
+      "url": "${HA_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${HA_MCP_TOKEN}"
+      },
+      "enabled": true
+    }
+  }
+}

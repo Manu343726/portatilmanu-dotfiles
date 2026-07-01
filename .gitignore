@@ -18,7 +18,7 @@
 !/.vscode/
 /.vscode/*
 !/.vscode/launch.json
-!/.vscode/mcp.json
+!/.vscode/mcp.json.template
 !/.vscode/tasks.json
 !/.bashrc
 !/.profile
@@ -63,7 +63,7 @@
 # opencode MCP config
 !/.config/opencode/
 /.config/opencode/*
-!/.config/opencode/opencode.jsonc
+!/.config/opencode/opencode.jsonc.template
 
 # dotfilesd config
 !/.config/dotfilesd/

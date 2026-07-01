@@ -1,0 +1,18 @@
+{
+    "servers": {
+        "dotfilesd": {
+            "command": "dotfilesctl",
+            "args": [
+                "mcp"
+            ],
+            "env": {}
+        },
+        "homeassistant": {
+            "type": "http",
+            "url": "${HA_MCP_URL}",
+            "headers": {
+                "Authorization": "Bearer ${HA_MCP_TOKEN}"
+            }
+        }
+    }
+}
