@@ -78,8 +78,13 @@ PROTO_SRCS := $(wildcard $(PROTO_DIR)/*.proto)
 PROTO_PB_GO := $(patsubst $(PROTO_DIR)/%.proto, $(PROTO_DIR)/%.pb.go, $(PROTO_SRCS))
 PROTO_CONNECT_DIR := $(PROTO_DIR)/dotfilesdv1connect
 PROTO_CONNECT_GO := $(patsubst $(PROTO_DIR)/%.proto, $(PROTO_CONNECT_DIR)/%.connect.go, $(PROTO_SRCS))
+PROTO_DOCS_DIR := docs/proto
+PROTO_DOCS := $(addprefix $(PROTO_DOCS_DIR)/, $(PROTO_SRCS:.proto=.md))
 
-proto: $(PROTO_PB_GO) $(PROTO_CONNECT_GO)
+proto: $(PROTO_PB_GO) $(PROTO_CONNECT_GO) proto-docs
+
+protoc-gen-docs:
+	$(GO) build -o $(HOME)/go/bin/protoc-gen-docs ./cmd/protoc-gen-docs
 
 $(PROTO_PB_GO) $(PROTO_CONNECT_GO): $(PROTO_SRCS)
 	PATH="$(HOME)/go/bin:$(PATH)" protoc \
@@ -87,6 +92,14 @@ $(PROTO_PB_GO) $(PROTO_CONNECT_GO): $(PROTO_SRCS)
 		--go_out=. --go_opt=paths=source_relative \
 		--connect-go_out=. --connect-go_opt=paths=source_relative \
 		$(PROTO_SRCS)
+
+proto-docs: $(PROTO_SRCS)
+	@mkdir -p $(PROTO_DOCS_DIR)
+	PATH="$(HOME)/go/bin:$(PATH)" protoc \
+		--proto_path=. \
+		--docs_out=$(PROTO_DOCS_DIR) \
+		$(PROTO_SRCS)
+	@echo "  proto docs generated -> $(PROTO_DOCS_DIR)"
 
 proto-tools:
 	@echo "installing protoc-gen-go and protoc-gen-connect-go..."
