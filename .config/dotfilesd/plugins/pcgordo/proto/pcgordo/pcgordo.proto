@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package pcgordo;
+
+option go_package = "plugins/pcgordo/proto/pcgordo";
+
+service PcgordoService {
+  rpc WOL(WOLRequest) returns (WOLResponse);
+  rpc Shutdown(Empty) returns (ActionResult);
+  rpc Restart(Empty) returns (ActionResult);
+  rpc Hibernate(Empty) returns (ActionResult);
+  rpc MonitorSleep(Empty) returns (ActionResult);
+  rpc MonitorWake(Empty) returns (ActionResult);
+  rpc SatelliteHibernate(Empty) returns (ActionResult);
+  rpc SatelliteRestart(Empty) returns (ActionResult);
+  rpc SatelliteShutdown(Empty) returns (ActionResult);
+  rpc Status(Empty) returns (StatusResponse);
+  rpc Screenshot(Empty) returns (ScreenshotResponse);
+  rpc WindowsUpdates(Empty) returns (WindowsUpdatesResponse);
+}
+
+message Empty {}
+
+message WOLRequest {
+  string mac = 1;
+}
+
+message WOLResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ActionResult {
+  bool success = 1;
+  string message = 2;
+}
+
+message EntityState {
+  string entity_id = 1;
+  string friendly_name = 2;
+  string state = 3;
+  string unit = 4;
+  string device_class = 5;
+}
+
+message StatusResponse {
+  string pc_state = 1;           // "online" or "offline"
+  string last_boot = 2;
+  string last_active = 3;
+  double cpu_load = 4;
+  double gpu_load = 5;
+  double gpu_temp = 6;
+  double memory_usage = 7;
+  string active_window = 8;
+  string active_desktop = 9;
+  string monitor_power = 10;
+  string zerotier_ping = 11;
+  repeated EntityState entities = 12;
+}
+
+message ScreenshotResponse {
+  bool available = 1;
+  string image_url = 2;
+  string error = 3;
+}
+
+message WindowsUpdatesResponse {
+  int32 available_software_updates = 1;
+  int32 pending_software_updates = 2;
+  int32 available_driver_updates = 3;
+  int32 pending_driver_updates = 4;
+}
