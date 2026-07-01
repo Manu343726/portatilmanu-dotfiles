@@ -87,16 +87,19 @@ func stepProto(sourceDir, name string) error {
 	if err != nil || len(matches) == 0 {
 		return nil // no proto files to compile
 	}
+	home, _ := os.UserHomeDir()
+	pathEnv := "PATH=" + filepath.Join(home, "go", "bin") + ":" + os.Getenv("PATH")
+
+	// Generate Go code and markdown docs.
 	cmd := exec.Command("protoc",
 		"--proto_path="+sourceDir,
 		"--go_out="+sourceDir, "--go_opt=paths=source_relative",
 		"--connect-go_out="+sourceDir, "--connect-go_opt=paths=source_relative",
+		"--docs_out="+sourceDir,
 	)
 	cmd.Args = append(cmd.Args, matches...)
 	cmd.Dir = sourceDir
-	// Ensure protoc can find protoc-gen-go and protoc-gen-connect-go in PATH.
-	home, _ := os.UserHomeDir()
-	cmd.Env = append(os.Environ(), "PATH="+filepath.Join(home, "go", "bin")+":"+os.Getenv("PATH"))
+	cmd.Env = append(os.Environ(), pathEnv)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("proto compile: %w\n%s", err, string(out))
 	}
@@ -339,8 +342,9 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 		}
 	}
 
-	// Step f2: DocumentationService.
+	// Step f2: DocumentationService — fetch docs and enrich schemas.
 	docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
+	enrichSchemasFromDocsCache(schemas, docsCache)
 
 	// Step g: Store PluginInfo + start supervisor.
 	displayName := hs.DisplayName
@@ -612,22 +616,79 @@ func readJSONLine(r io.Reader, v interface{}) error {
 	return json.Unmarshal(buf[:n], v)
 }
 
-// fetchDocumentation calls the plugin's DocumentationService (if exposed)
-// and returns a map of service name → markdown content. The empty-string key
-// holds plugin-level docs. Returns nil if the plugin doesn't expose the
-// DocumentationService or if all calls fail.
-func fetchDocumentation(ctx context.Context, httpClient *http.Client, pluginURL string, services []string) map[string]string {
-	hasDocs := false
-	for _, s := range services {
-		if s == "dotfilesd.v1.DocumentationService" {
-			hasDocs = true
-			break
+// enrichSchemasFromDocsCache parses documentation responses from the
+// DocumentationService and populates ServiceSchema descriptions.
+func enrichSchemasFromDocsCache(schemas []*dotfilesdv1.ServiceSchema, docsCache map[string]string) {
+	if docsCache == nil {
+		return
+	}
+	for _, svc := range schemas {
+		svcMD, ok := docsCache[svc.Name]
+		if !ok || svcMD == "" {
+			continue
+		}
+		// Per-service docs have "# ServiceName\n\n<body>".
+		// Extract the service description from the body.
+		body := svcMD
+		if idx := strings.Index(svcMD, "\n\n"); idx >= 0 {
+			body = svcMD[idx+2:]
+		}
+		lines := strings.Split(body, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line != "" && !strings.HasPrefix(line, "- **") && !strings.HasPrefix(line, "|") && !strings.HasPrefix(line, "|") {
+				svc.Description = line
+				break
+			}
+		}
+
+		// Extract method descriptions from #### headings.
+		for _, m := range svc.Methods {
+			methodSection := extractSection(body, "#### "+m.Name)
+			if methodSection == "" {
+				continue
+			}
+			for _, line := range strings.Split(methodSection, "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" && !strings.HasPrefix(line, "- **") && !strings.HasPrefix(line, "|") {
+					m.Description = line
+					break
+				}
+			}
 		}
 	}
-	if !hasDocs {
-		return nil
-	}
+}
 
+// extractSection returns content between the heading starting with marker
+// and the next heading at the same or lower level, or end of string.
+func extractSection(md, marker string) string {
+	idx := strings.Index(md, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := md[idx+len(marker):]
+	eol := strings.Index(rest, "\n")
+	if eol >= 0 {
+		rest = rest[eol+1:]
+	}
+	end := -1
+	for _, prefix := range []string{"\n### ", "\n## ", "\n# "} {
+		if pos := strings.Index(rest, prefix); pos >= 0 && (end < 0 || pos < end) {
+			end = pos
+		}
+	}
+	if end >= 0 {
+		rest = rest[:end]
+	}
+	return strings.TrimSpace(rest)
+}
+
+// fetchDocumentation calls the plugin's DocumentationService for every
+// non-system service and returns a map of service name → markdown content.
+// The empty-string key holds plugin-level docs. Returns nil if all calls fail.
+// The DocumentationService is always mounted by the plugin SDK, so we always
+// attempt to fetch docs.
+func fetchDocumentation(ctx context.Context, httpClient *http.Client, pluginURL string, services []string) map[string]string {
 	docsClient := dotfilesdv1connect.NewDocumentationServiceClient(httpClient, pluginURL)
 	cache := make(map[string]string)
 

@@ -100,6 +100,13 @@ proto-docs: $(PROTO_SRCS)
 		--docs_out=$(PROTO_DOCS_DIR) \
 		$(PROTO_SRCS)
 	@echo "  proto docs generated -> $(PROTO_DOCS_DIR)"
+	@echo "  removing markdown docs from build output..."
+	@# Remove docs for protobuf well-known types that protoc includes.
+	rm -rf $(PROTO_DOCS_DIR)/google/
+	@# Remove any docs outside of our proto tree (from proto_path scanning).
+	@for f in $(PROTO_DOCS_DIR)/*.md; do [ -f "$$f" ] && rm "$$f"; done 2>/dev/null || true
+	@# Remove _docs.go files (only plugins need the Go embed; this dir is just docs).
+	@find $(PROTO_DOCS_DIR) -name '*_docs.go' -delete 2>/dev/null || true
 
 proto-tools:
 	@echo "installing protoc-gen-go and protoc-gen-connect-go..."
@@ -189,6 +196,7 @@ plugin-proto:
 			--proto_path=. \
 			--go_out=. --go_opt=paths=source_relative \
 			--connect-go_out=. --connect-go_opt=paths=source_relative \
+			--docs_out=. \
 			proto/$(PLUGIN)/*.proto; \
 		echo "plugin '$(PLUGIN)' protos compiled."; \
 	fi

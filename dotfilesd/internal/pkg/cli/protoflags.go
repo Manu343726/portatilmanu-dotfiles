@@ -71,7 +71,8 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 			shortName := shortSvcName(svc.Name)
 			svcCmd = &cobra.Command{
 				Use:   shortName,
-				Short: svc.Name,
+				Short: descOr(svc.Description, svc.Name),
+				Long:  fmt.Sprintf("%s\n\n%s", svc.Name, svc.Description),
 				RunE:  func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 			}
 			pluginCmd.AddCommand(svcCmd)
@@ -79,19 +80,21 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 
 		for _, m := range svc.Methods {
 			runE := makeRunEProtoFromSchema(p.URL, p.DaemonURL, svc.Name, m)
-			shortDesc := fmt.Sprintf("%s.%s", shortSvcName(svc.Name), m.Name)
+			methodShort := descOr(m.Description, fmt.Sprintf("%s.%s", shortSvcName(svc.Name), m.Name))
 
 			if elideRPC {
 				addFlagsFromSchema(svcCmd, m.Request, "")
 				svcCmd.RunE = runE
 				if !elideSvc {
 					svcCmd.Use = fmt.Sprintf("%s [flags]", svcCmd.Use)
-					svcCmd.Short = shortDesc
+					svcCmd.Short = methodShort
+					svcCmd.Long = fmt.Sprintf("%s/%s\n\n%s", svc.Name, m.Name, m.Description)
 				}
 			} else {
 				rpcCmd := &cobra.Command{
 					Use:   camelToKebab(m.Name),
-					Short: shortDesc,
+					Short: methodShort,
+					Long:  fmt.Sprintf("%s/%s\n\n%s", svc.Name, m.Name, m.Description),
 					RunE:  runE,
 				}
 				addFlagsFromSchema(rpcCmd, m.Request, "")
@@ -157,10 +160,7 @@ func buildStaticPluginCommand(p PluginRegistryInfo) *cobra.Command {
 func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, prefix string) {
 	for _, fs := range msg.Fields {
 		flagName := camelToKebab(prefix + fs.Name)
-		desc := fs.Name
-		if fs.TypeName != "" {
-			desc = desc + " (" + fs.TypeName + ")"
-		}
+		desc := flagDescription(fs)
 
 		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
 			// Repeated message fields use StringToString with the pattern
@@ -811,4 +811,27 @@ func isStdinAvailable() bool {
 	}
 	// Check if stdin is a pipe or socket (not a terminal).
 	return (stat.Mode() & os.ModeCharDevice) == 0
+}
+
+// descOr returns desc if non-empty, otherwise fallback.
+func descOr(desc, fallback string) string {
+	if desc != "" {
+		return desc
+	}
+	return fallback
+}
+
+// flagDescription builds a human-readable description for a field schema flag.
+// Uses the field's description when available, with the type name appended.
+func flagDescription(fs *dotfilesdv1.FieldSchema) string {
+	if fs.Description != "" {
+		if fs.TypeName != "" {
+			return fs.Description + " (" + fs.TypeName + ")"
+		}
+		return fs.Description
+	}
+	if fs.TypeName != "" {
+		return fs.Name + " (" + fs.TypeName + ")"
+	}
+	return fs.Name
 }

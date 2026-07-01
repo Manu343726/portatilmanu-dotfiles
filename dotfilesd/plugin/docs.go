@@ -12,9 +12,9 @@ import (
 
 // documentationServiceServer implements the default DocumentationService.
 //
-// Plugin-level docs are generated from Config fields (name, display name,
-// version, description, list of services). Per-service docs are generated
-// from each Service.Name and Service.Description.
+// When docsContent is set (pre-generated markdown from protoc-gen-docs,
+// embedded via //go:embed at compile time), it serves that content directly.
+// Otherwise it auto-generates docs from Config fields.
 //
 // Plugins can override by providing their own DocumentationService in
 // Config.Services with the name "dotfilesd.v1.DocumentationService". If
@@ -26,6 +26,7 @@ type documentationServiceServer struct {
 	version     string
 	description string
 	services    []Service
+	docsContent string
 }
 
 // GetDocumentation returns markdown-formatted documentation for a service
@@ -35,6 +36,24 @@ func (s *documentationServiceServer) GetDocumentation(
 	req *connect.Request[dotfilesdv1.DocumentationRequest],
 ) (*connect.Response[dotfilesdv1.DocumentationResponse], error) {
 	svcName := req.Msg.ServiceName
+
+	if s.docsContent != "" {
+		if svcName == "" {
+			return connect.NewResponse(&dotfilesdv1.DocumentationResponse{
+				Format:  "markdown",
+				Content: s.docsContent,
+			}), nil
+		}
+		section := extractSection(s.docsContent, "### "+svcName)
+		if section == "" {
+			return nil, connect.NewError(connect.CodeNotFound,
+				fmt.Errorf("service %q not found", svcName))
+		}
+		return connect.NewResponse(&dotfilesdv1.DocumentationResponse{
+			Format:  "markdown",
+			Content: "# " + svcName + "\n\n" + section,
+		}), nil
+	}
 
 	if svcName == "" {
 		return s.pluginDocs()
@@ -79,4 +98,28 @@ func (s *documentationServiceServer) serviceDocs(svc Service) (*connect.Response
 		Format:  "markdown",
 		Content: b.String(),
 	}), nil
+}
+
+// extractSection returns content between the heading starting with marker
+// and the next heading at the same or lower level, or end of string.
+func extractSection(md, marker string) string {
+	idx := strings.Index(md, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := md[idx+len(marker):]
+	eol := strings.Index(rest, "\n")
+	if eol >= 0 {
+		rest = rest[eol+1:]
+	}
+	end := -1
+	for _, prefix := range []string{"\n### ", "\n## ", "\n# "} {
+		if pos := strings.Index(rest, prefix); pos >= 0 && (end < 0 || pos < end) {
+			end = pos
+		}
+	}
+	if end >= 0 {
+		rest = rest[:end]
+	}
+	return strings.TrimSpace(rest)
 }

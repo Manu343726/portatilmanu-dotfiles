@@ -505,6 +505,7 @@ func main() {
 		DisplayName: "Resources",
 		Version:     "1.0.0",
 		Description: "System resource monitoring (RAM, CPU, disk, I/O)",
+		DocsContent: pb.PluginDocs,
 		Services: []plugin.Service{
 			{
 				Name:             "resources.ResourcesService",

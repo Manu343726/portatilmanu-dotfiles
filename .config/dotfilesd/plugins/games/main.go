@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
+	"dotfilesd/plugin"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
-	"dotfilesd/plugin"
 	pb "plugins/games/proto/games"
 	"plugins/games/proto/games/gamesconnect"
 

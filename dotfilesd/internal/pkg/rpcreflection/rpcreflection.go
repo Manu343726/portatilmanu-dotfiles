@@ -45,6 +45,10 @@ type ServiceInfo struct {
 	// for this service and its dependencies. Clients can reconstruct
 	// protoreflect descriptors without direct grpcreflect access.
 	RawFdProtos [][]byte
+	// Descriptor is the live protoreflect.ServiceDescriptor.
+	// Populated by DiscoverServices and BuildServiceInfoFromProtos.
+	// Used by BuildServiceSchema to extract source comments.
+	Descriptor protoreflect.ServiceDescriptor
 }
 
 // Client discovers services and invokes methods on a Connect RPC server
@@ -132,7 +136,7 @@ func (c *Client) DiscoverServices(ctx context.Context) ([]ServiceInfo, error) {
 			rawFds = append(rawFds, b)
 		}
 
-		svcInfos = append(svcInfos, ServiceInfo{FullName: s, Methods: methods, RawFdProtos: rawFds})
+		svcInfos = append(svcInfos, ServiceInfo{FullName: s, Methods: methods, RawFdProtos: rawFds, Descriptor: svcDesc})
 	}
 	return svcInfos, nil
 }
@@ -264,6 +268,7 @@ func BuildServiceInfoFromProtos(svcFullName string, rawFds [][]byte) (ServiceInf
 		FullName:    svcFullName,
 		Methods:     methods,
 		RawFdProtos: rawFds,
+		Descriptor:  svcDesc,
 	}, nil
 }
 
@@ -298,6 +303,7 @@ func BuildServiceSchema(svc *ServiceInfo) *dotfilesdv1.ServiceSchema {
 		Name:    svc.FullName,
 		Methods: make([]*dotfilesdv1.MethodSchema, 0, len(svc.Methods)),
 	}
+
 	visited := make(map[string]bool)
 	for _, m := range svc.Methods {
 		ms := &dotfilesdv1.MethodSchema{
@@ -331,9 +337,9 @@ func buildMessageSchema(md protoreflect.MessageDescriptor, visited map[string]bo
 	visited[name] = true
 
 	schema := &dotfilesdv1.MessageSchema{
-		Name:     name,
-		Fields:   make([]*dotfilesdv1.FieldSchema, 0, md.Fields().Len()),
-		Enums:    make([]*dotfilesdv1.EnumSchema, 0),
+		Name:   name,
+		Fields: make([]*dotfilesdv1.FieldSchema, 0, md.Fields().Len()),
+		Enums:  make([]*dotfilesdv1.EnumSchema, 0),
 		Messages: make([]*dotfilesdv1.MessageSchema, 0),
 	}
 

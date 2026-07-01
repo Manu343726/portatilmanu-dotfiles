@@ -51,6 +51,13 @@ type Config struct {
 	// Custom Connect RPC services this plugin exposes.
 	// Other plugins can call these after discovering them via the registry.
 	Services []Service
+
+	// DocsContent is optional pre-generated markdown documentation for the
+	// full plugin (services, methods, fields). When set, the default
+	// DocumentationService serves this content instead of auto-generating
+	// from Config fields. Use //go:embed to embed the output of
+	// protoc-gen-docs at compile time.
+	DocsContent string
 }
 
 // Serve starts the plugin server.
@@ -99,6 +106,7 @@ func Serve(cfg Config) {
 			version:     cfg.Version,
 			description: cfg.Description,
 			services:    cfg.Services,
+			docsContent: cfg.DocsContent,
 		}
 		docsPath, docsHandler := dotfilesdv1connect.NewDocumentationServiceHandler(docsSvc)
 		mux.Handle(docsPath, docsHandler)
