@@ -34,7 +34,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 
 	pluginCmd := &cobra.Command{
 		Use:     name,
-		Short:   disp,
+		Short:   descOr(p.Description, disp),
 		Long:    fmt.Sprintf("Plugin: %s (%s v%s)\n%s", p.Name, p.DisplayName, p.Version, p.Description),
 		GroupID: "plugins",
 		RunE:    func(cmd *cobra.Command, args []string) error { return cmd.Help() },
