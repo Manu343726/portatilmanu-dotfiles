@@ -784,15 +784,31 @@ func shortSvcName(fullName string) string {
 
 // camelToKebab converts CamelCase and snake_case to kebab-case.
 func camelToKebab(s string) string {
+	if s == "" {
+		return ""
+	}
+	runes := []rune(s)
 	var result strings.Builder
-	for i, r := range s {
+	n := len(runes)
+
+	for i, r := range runes {
 		if r == '_' {
 			result.WriteRune('-')
 			continue
 		}
 		if r >= 'A' && r <= 'Z' {
+			// Insert hyphen before uppercase that follows lowercase
+			// or before the last uppercase in an acronym when followed by lowercase.
 			if i > 0 {
-				result.WriteRune('-')
+				prevLower := runes[i-1] >= 'a' && runes[i-1] <= 'z'
+				next := rune(0)
+				if i+1 < n {
+					next = runes[i+1]
+				}
+				nextLower := next >= 'a' && next <= 'z'
+				if prevLower || (nextLower && i+1 < n) {
+					result.WriteRune('-')
+				}
 			}
 			result.WriteRune(r - 'A' + 'a')
 		} else {
