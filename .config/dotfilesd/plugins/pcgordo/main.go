@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	ha "github.com/mkelcik/go-ha-client"
 	"connectrpc.com/connect"
@@ -34,16 +35,16 @@ func (s *pcgordoServer) callButton(ctx context.Context, entityID string) (*conne
 	return connect.NewResponse(&pb.ActionResult{Success: true, Message: "ok"}), nil
 }
 
-func (s *pcgordoServer) WOL(ctx context.Context, req *connect.Request[pb.WOLRequest]) (*connect.Response[pb.WOLResponse], error) {
+func (s *pcgordoServer) Poweron(ctx context.Context, req *connect.Request[pb.PoweronRequest]) (*connect.Response[pb.PoweronResponse], error) {
 	_, err := s.client.CallService(ctx, ha.DefaultServiceCmd{
 		Domain:   "button",
 		Service:  "press",
 		EntityId: "button.wake_on_lan_bc_fc_e7_b2_e1_f5",
 	})
 	if err != nil {
-		return connect.NewResponse(&pb.WOLResponse{Success: false, Message: err.Error()}), nil
+		return connect.NewResponse(&pb.PoweronResponse{Success: false, Message: err.Error()}), nil
 	}
-	return connect.NewResponse(&pb.WOLResponse{Success: true, Message: "WOL packet sent"}), nil
+	return connect.NewResponse(&pb.PoweronResponse{Success: true, Message: "WOL packet sent"}), nil
 }
 
 func (s *pcgordoServer) Shutdown(ctx context.Context, req *connect.Request[pb.Empty]) (*connect.Response[pb.ActionResult], error) {
@@ -242,10 +243,11 @@ func main() {
 	haURL := strings.TrimSuffix(host, "/api/mcp")
 	haURL = strings.TrimSuffix(haURL, "/")
 
+	httpClient := &http.Client{Timeout: 15 * time.Second}
 	client := ha.NewClient(ha.ClientConfig{
 		Token: token,
 		Host:  haURL,
-	}, http.DefaultClient)
+	}, httpClient)
 
 	svc := &pcgordoServer{client: client}
 	path, handler := pcgordoconnect.NewPcgordoServiceHandler(svc)
