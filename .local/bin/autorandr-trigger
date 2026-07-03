@@ -1,4 +1,7 @@
 #!/usr/bin/env sh
+# bail if X is unavailable (avoids blocking udev -> shutdown deadlock)
+timeout 2 xrandr &>/dev/null || exit 0
+
 sleep 1
 export DISPLAY=:0
 export XAUTHORITY=/home/manu343726/.Xauthority

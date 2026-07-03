@@ -25,11 +25,7 @@ import (
 func detectCapabilities() map[string]string {
 	caps := make(map[string]string)
 
-	// Elicitation capability: some MCP clients advertise elicitation in their
-	// initialize request. Others (like opencode) support it without advertising.
-	// We set the flag whenever we're in MCP mode, since the major clients
-	// (opencode, VS Code) all handle elicitation/create.
-	if clientCaps.hasElicitation || mcpBridge != nil {
+	if clientCaps.hasElicitation {
 		caps["_cap_elicitation"] = "true"
 	}
 
