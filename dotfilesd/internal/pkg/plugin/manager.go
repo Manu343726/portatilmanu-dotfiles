@@ -34,10 +34,6 @@ type PluginInfo struct {
 	SourceDir   string
 	CacheDir    string
 
-	// DocsCache holds documentation fetched from the plugin's
-	// DocumentationService.
-	DocsCache map[string]string
-
 	// PluginDocs holds the structured Documentation proto when the plugin
 	// serves embedded docs via protoc-gen-docs.
 	PluginDocs *dotfilesdv1.Documentation
@@ -347,7 +343,6 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 	}
 
 	// Step f2: DocumentationService — fetch structured docs and enrich schemas.
-	docsCache := fetchDocumentation(ctx, httpClient, hs.URL, services)
 	pluginDocs := fetchPluginDocs(ctx, httpClient, hs.URL)
 	enrichSchemasFromDocs(schemas, pluginDocs)
 
@@ -366,8 +361,7 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 		Description: hs.Description,
 		URL:         hs.URL,
 		Services:    services,
-		DocsCache:   docsCache,
-		PluginDocs:  pluginDocs,
+		PluginDocs: pluginDocs,
 		Schemas:     schemas,
 		Process:     procCmd.Process,
 		SourceDir:   sourceDir,
@@ -682,44 +676,6 @@ func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageD
 			}
 		}
 	}
-}
-
-// fetchDocumentation calls the plugin's DocumentationService for every
-// non-system service and returns a map of service name → markdown content.
-// The empty-string key holds plugin-level docs. Returns nil if all calls fail.
-// The DocumentationService is always mounted by the plugin SDK, so we always
-// attempt to fetch docs.
-func fetchDocumentation(ctx context.Context, httpClient *http.Client, pluginURL string, services []string) map[string]string {
-	docsClient := dotfilesdv1connect.NewDocumentationServiceClient(httpClient, pluginURL)
-	cache := make(map[string]string)
-
-	// Fetch plugin-level docs (empty service_name).
-	if resp, err := docsClient.GetDocumentation(ctx, connect.NewRequest(&dotfilesdv1.DocumentationRequest{})); err == nil {
-		if resp.Msg.Content != "" {
-			cache[""] = resp.Msg.Content
-		}
-	} else {
-		slog.Debug("GetDocumentation(plugin-level) failed", "url", pluginURL, "error", err)
-	}
-
-	// Fetch per-service docs.
-	for _, svc := range services {
-		if svc == "grpc.reflection.v1.ServerReflection" || svc == "grpc.reflection.v1alpha.ServerReflection" || svc == "dotfilesd.v1.DocumentationService" {
-			continue
-		}
-		if resp, err := docsClient.GetDocumentation(ctx, connect.NewRequest(&dotfilesdv1.DocumentationRequest{ServiceName: svc})); err == nil {
-			if resp.Msg.Content != "" {
-				cache[svc] = resp.Msg.Content
-			}
-		} else {
-			slog.Debug("GetDocumentation failed", "service", svc, "error", err)
-		}
-	}
-
-	if len(cache) == 0 {
-		return nil
-	}
-	return cache
 }
 
 // methodHintsResponse is the JSON structure returned by the plugin's
