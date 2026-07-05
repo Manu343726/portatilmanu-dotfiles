@@ -3,6 +3,8 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -262,7 +264,18 @@ func (c *Clients) Connect(ctx context.Context) error {
 		c.SessionID = DefaultSessionID
 	}
 
-	session := &dotfilesdv1.Session{Id: c.SessionID}
+	// Generate an ephemeral AES-256 key for encrypting the sudo password
+	// cache on the daemon side. The key is sent during Connect and zeroed
+	// on session finalize. Only used over localhost, never persisted.
+	sudoCacheKey := make([]byte, 32)
+	if _, err := rand.Read(sudoCacheKey); err != nil {
+		return fmt.Errorf("generate sudo cache key: %w", err)
+	}
+	defer zeroBytes(sudoCacheKey)
+
+	session := &dotfilesdv1.Session{Id: c.SessionID, Data: map[string]string{
+		"_sudo_cache_key": base64.StdEncoding.EncodeToString(sudoCacheKey),
+	}}
 	caps := detectCapabilities()
 	if caps == nil {
 		caps = make(map[string]string)

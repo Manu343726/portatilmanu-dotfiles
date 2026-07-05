@@ -3,6 +3,10 @@ package daemon
 import (
 	"bufio"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	cryptorand "crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log/slog"
@@ -311,8 +315,9 @@ type Session struct {
 	callbackURL  string
 	mu           sync.RWMutex
 
-	sudoPassword  []byte    // cached sudo password, zeroed after expiry/finalize
+	sudoPassword  []byte    // AES-256-GCM encrypted sudo password, zeroed after expiry/finalize
 	sudoExpiresAt time.Time // when the cached password expires
+	sudoCacheKey  []byte    // 32-byte AES-256 key negotiated with client, zeroed on finalize
 }
 
 func newSession(id string) *Session {
@@ -411,11 +416,15 @@ func (s *Session) ensureShell() (*shellSession, error) {
 }
 
 func (s *Session) closeShell() {
-	// Clear sudo password inline — no lock acquisition since the caller
+	// Clear sudo credentials inline — no lock acquisition since the caller
 	// (Finalize) already holds s.mu.Lock().
 	if s.sudoPassword != nil {
 		zeroBytes(s.sudoPassword)
 		s.sudoPassword = nil
+	}
+	if s.sudoCacheKey != nil {
+		zeroBytes(s.sudoCacheKey)
+		s.sudoCacheKey = nil
 	}
 	s.sudoExpiresAt = time.Time{}
 	if s.shell != nil {
@@ -510,28 +519,109 @@ func (s *Session) RequestChoose(ctx context.Context, prompt string, options []st
 	return int(resp.Msg.SelectedIndex), resp.Msg.SelectedOption, nil
 }
 
-// SetSudoCache stores the sudo password with a timeout. The password is
-// zeroed after the timeout or when FinalizeSession is called.
+// setSudoCacheKey stores the AES-256 key negotiated with the client.
+// The key is base64-encoded when sent over the wire.
+func (s *Session) setSudoCacheKey(encodedKey string) {
+	key, err := base64.StdEncoding.DecodeString(encodedKey)
+	if err != nil || len(key) != 32 {
+		slog.Warn("invalid sudo cache key from client", "session_id", s.id, "len", len(key), "error", err)
+		return
+	}
+	s.mu.Lock()
+	if s.sudoCacheKey != nil {
+		zeroBytes(s.sudoCacheKey)
+	}
+	s.sudoCacheKey = key
+	s.mu.Unlock()
+	slog.Debug("sudo cache key set", "session_id", s.id)
+}
+
+// encryptSudoPassword encrypts the plaintext password with AES-256-GCM using
+// the session's cache key. Returns nonce || ciphertext.
+func (s *Session) encryptSudoPassword(plaintext []byte) ([]byte, error) {
+	s.mu.RLock()
+	key := s.sudoCacheKey
+	s.mu.RUnlock()
+	if key == nil || len(key) != 32 {
+		return plaintext, nil // fallback: no key negotiated
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("aes new cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("aes gcm: %w", err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(cryptorand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("nonce: %w", err)
+	}
+
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+// decryptSudoPassword decrypts a nonce || ciphertext blob with AES-256-GCM.
+func (s *Session) decryptSudoPassword(ciphertext []byte) ([]byte, error) {
+	s.mu.RLock()
+	key := s.sudoCacheKey
+	s.mu.RUnlock()
+	if key == nil || len(key) != 32 {
+		// No key — assume legacy plaintext storage.
+		dec := make([]byte, len(ciphertext))
+		copy(dec, ciphertext)
+		return dec, nil
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("aes new cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("aes gcm: %w", err)
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+
+	nonce := ciphertext[:nonceSize]
+	enc := ciphertext[nonceSize:]
+	return gcm.Open(nil, nonce, enc, nil)
+}
+
+// SetSudoCache encrypts and stores the sudo password with a timeout.
+// The password is zeroed after the timeout or when FinalizeSession is called.
 // The timeout starts from the time of this call.
 func (s *Session) SetSudoCache(password string, timeout time.Duration) {
 	if password == "" {
 		return
 	}
 	expiresAt := time.Now().Add(timeout)
-	pwd := []byte(password)
+
+	encrypted, err := s.encryptSudoPassword([]byte(password))
+	if err != nil {
+		slog.Error("failed to encrypt sudo password", "session_id", s.id, "error", err)
+		return
+	}
+
 	s.mu.Lock()
 	// Clear any previous cache first.
 	if s.sudoPassword != nil {
 		zeroBytes(s.sudoPassword)
 	}
-	s.sudoPassword = pwd
+	s.sudoPassword = encrypted
 	s.sudoExpiresAt = expiresAt
 	s.mu.Unlock()
 	slog.Debug("sudo cache set", "session_id", s.id, "timeout", timeout, "expires_at", expiresAt.Format(time.RFC3339))
 }
 
-// GetSudoCache returns the cached sudo password if it hasn't expired.
-// The caller MUST zero the returned slice after use.
+// GetSudoCache decrypts and returns the cached sudo password if it hasn't
+// expired. The caller MUST zero the returned slice after use.
 func (s *Session) GetSudoCache() ([]byte, bool) {
 	s.mu.RLock()
 	pwd := s.sudoPassword
@@ -543,19 +633,27 @@ func (s *Session) GetSudoCache() ([]byte, bool) {
 		}
 		return nil, false
 	}
-	// Return a copy so the caller can zero it independently.
-	copyPwd := make([]byte, len(pwd))
-	copy(copyPwd, pwd)
-	return copyPwd, true
+
+	decrypted, err := s.decryptSudoPassword(pwd)
+	if err != nil {
+		slog.Error("failed to decrypt sudo password", "session_id", s.id, "error", err)
+		s.ClearSudoCache()
+		return nil, false
+	}
+	return decrypted, true
 }
 
-// ClearSudoCache zeros the cached sudo password.
+// ClearSudoCache zeros the cached sudo password and cache key.
 func (s *Session) ClearSudoCache() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.sudoPassword != nil {
 		zeroBytes(s.sudoPassword)
 		s.sudoPassword = nil
+	}
+	if s.sudoCacheKey != nil {
+		zeroBytes(s.sudoCacheKey)
+		s.sudoCacheKey = nil
 	}
 	s.sudoExpiresAt = time.Time{}
 	slog.Debug("sudo cache cleared", "session_id", s.id)
@@ -812,6 +910,11 @@ func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfil
 				session.data[k] = v
 			}
 			session.mu.Unlock()
+
+			// Extract negotiated sudo cache key from client data.
+			if keyStr := sessionMsg.GetData()["_sudo_cache_key"]; keyStr != "" {
+				session.setSudoCacheKey(keyStr)
+			}
 		}
 		if shellInfo := sessionMsg.GetShell(); shellInfo != nil {
 			session.SetShellInfo(shellInfo)
