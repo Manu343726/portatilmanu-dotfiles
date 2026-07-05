@@ -84,6 +84,14 @@ message SudoExecRequest {
   // Override the daemon's sudo credential cache timeout (seconds).
   // 0 or unset means use the daemon default.
   int32 sudo_timeout_seconds = 4;
+  // key_id from a prior KeyService.NegotiateKey call.
+  // When set alongside encrypted_password, the daemon decrypts
+  // encrypted_password using the negotiated key instead of using
+  // the password field directly.
+  string key_id = 5;
+  // AES-256-GCM ciphertext (nonce||ciphertext) of the sudo password,
+  // encrypted with the shared key identified by key_id.
+  bytes encrypted_password = 6;
 }
 
 message SudoExecResponse {

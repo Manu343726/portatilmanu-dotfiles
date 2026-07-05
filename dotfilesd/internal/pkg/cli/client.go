@@ -3,9 +3,13 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,6 +23,72 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/term"
 )
+
+// execCryptoKeyCache stores the derived shared secrets for encrypting
+// sensitive data sent to the daemon (e.g. sudo passwords). Keys are
+// identified by key_id (e.g. "sudo") and are derived via the ECDH
+// key negotiation in Connect().
+var execCryptoKeyCache struct {
+	mu   sync.Mutex
+	keys map[string][]byte // key_id → 32-byte AES-256-GCM key
+}
+
+func init() {
+	execCryptoKeyCache.keys = make(map[string][]byte)
+}
+
+// getCryptoKey returns a copy of the cached derived key for the given key_id.
+// The caller MUST zero the returned slice after use.
+func getCryptoKey(keyID string) []byte {
+	execCryptoKeyCache.mu.Lock()
+	defer execCryptoKeyCache.mu.Unlock()
+	key, ok := execCryptoKeyCache.keys[keyID]
+	if !ok || len(key) != 32 {
+		return nil
+	}
+	k := make([]byte, 32)
+	copy(k, key)
+	return k
+}
+
+// setCryptoKey stores the derived key for the given key_id, zeroing any old key.
+func setCryptoKey(keyID string, key []byte) {
+	execCryptoKeyCache.mu.Lock()
+	defer execCryptoKeyCache.mu.Unlock()
+	if old, ok := execCryptoKeyCache.keys[keyID]; ok {
+		zeroBytes(old)
+	}
+	k := make([]byte, 32)
+	copy(k, key)
+	execCryptoKeyCache.keys[keyID] = k
+}
+
+// encryptForDaemon encrypts plaintext with the shared key identified by key_id.
+// Returns (ciphertext, key_id) where ciphertext is nonce||ciphertext.
+func encryptForDaemon(plaintext []byte, keyID string) ([]byte, string, error) {
+	key := getCryptoKey(keyID)
+	if key == nil {
+		return plaintext, "", nil // fallback: no key negotiated
+	}
+	defer zeroBytes(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, "", fmt.Errorf("aes new cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, "", fmt.Errorf("aes gcm: %w", err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, "", fmt.Errorf("nonce: %w", err)
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+	return ciphertext, keyID, nil
+}
 
 // detectCapabilities returns a set of capability flags describing what
 // interactive authentication methods the client environment supports.
@@ -60,6 +130,7 @@ type Clients struct {
 	Sys       dotfilesdv1connect.SystemServiceClient
 	Dot       dotfilesdv1connect.DotfilesServiceClient
 	Exec      dotfilesdv1connect.ExecServiceClient
+	Key       dotfilesdv1connect.KeyServiceClient
 	Cfg       dotfilesdv1connect.ConfigServiceClient
 	Session   dotfilesdv1connect.SessionServiceClient
 	Script    dotfilesdv1connect.ScriptServiceClient
@@ -92,6 +163,7 @@ func NewClients(port string) *Clients {
 		Sys:       dotfilesdv1connect.NewSystemServiceClient(http.DefaultClient, baseURL),
 		Dot:       dotfilesdv1connect.NewDotfilesServiceClient(http.DefaultClient, baseURL),
 		Exec:      dotfilesdv1connect.NewExecServiceClient(http.DefaultClient, baseURL),
+		Key:       dotfilesdv1connect.NewKeyServiceClient(http.DefaultClient, baseURL),
 		Cfg:       dotfilesdv1connect.NewConfigServiceClient(http.DefaultClient, baseURL),
 		Session:   dotfilesdv1connect.NewSessionServiceClient(http.DefaultClient, baseURL),
 		Script:    dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL),
@@ -343,6 +415,50 @@ func (c *Clients) Connect(ctx context.Context) error {
 	c.mu.Unlock()
 
 	slog.Debug("client connected", "session_id", c.SessionID, "own_session", c.ownSession, "feedback_url", fb.URL())
+
+	// Negotiate an ephemeral ECDH key for encrypting sudo passwords.
+	// This is best-effort — if the daemon doesn't support it (old version),
+	// we fall back to the legacy plaintext approach.
+	if err := c.negotiateKey(ctx, "sudo"); err != nil {
+		slog.Debug("sudo key negotiation skipped (continuing with unencrypted passwords)", "error", err)
+	}
+	return nil
+}
+
+// negotiateKey performs an ECDH X25519 key exchange with the daemon for the
+// given key_id. The derived shared secret is stored in the local key cache
+// and can be used to encrypt data before sending to the daemon.
+func (c *Clients) negotiateKey(ctx context.Context, keyID string) error {
+	curve := ecdh.X25519()
+	clientKey, err := curve.GenerateKey(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate client ecdh key: %w", err)
+	}
+	defer zeroBytes(clientKey.Bytes()) // zero private key bytes after use
+
+	clientPublic := clientKey.PublicKey().Bytes()
+
+	resp, err := c.Key.NegotiateKey(ctx, connect.NewRequest(&dotfilesdv1.NegotiateKeyRequest{
+		Session:          &dotfilesdv1.Session{Id: c.SessionID},
+		KeyId:            keyID,
+		ClientPublicKey:  clientPublic,
+	}))
+	if err != nil {
+		return fmt.Errorf("key negotiation: %w", err)
+	}
+
+	serverPub, err := curve.NewPublicKey(resp.Msg.ServerPublicKey)
+	if err != nil {
+		return fmt.Errorf("invalid server public key: %w", err)
+	}
+
+	secret, err := clientKey.ECDH(serverPub)
+	if err != nil {
+		return fmt.Errorf("ecdh: %w", err)
+	}
+
+	setCryptoKey(keyID, secret)
+	slog.Debug("key negotiated", "key_id", keyID, "session_id", c.SessionID)
 	return nil
 }
 

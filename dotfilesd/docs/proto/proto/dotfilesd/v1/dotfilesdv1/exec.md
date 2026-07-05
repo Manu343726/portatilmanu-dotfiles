@@ -115,6 +115,8 @@ or the client cancels. Only one BackgroundExec per stream.
 | `password` | string |  |
 | `preferred_method` | dotfilesd.v1.SudoMethod |  |
 | `sudo_timeout_seconds` | int32 | Override the daemon's sudo credential cache timeout (seconds). 0 or unset means use the daemon default. |
+| `key_id` | string | key_id from a prior KeyService.NegotiateKey call. When set alongside encrypted_password, the daemon decrypts encrypted_password using the negotiated key instead of using the password field directly. |
+| `encrypted_password` | bytes | AES-256-GCM ciphertext (nonce||ciphertext) of the sudo password, encrypted with the shared key identified by key_id. |
 
 ### SudoExecResponse
 

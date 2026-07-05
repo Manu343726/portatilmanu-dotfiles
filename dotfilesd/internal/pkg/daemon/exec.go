@@ -526,7 +526,29 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 
 	timeout := s.resolveSudoTimeout(r.SudoTimeoutSeconds)
 
-	if hasPassword {
+	// Decrypt encrypted_password if key_id is set.
+	passwordToUse := password
+	if r.KeyId != "" && len(r.EncryptedPassword) > 0 {
+		key, ok := session.GetSharedKey(r.KeyId)
+		if !ok {
+			slog.Warn("SudoExec: shared key not found or expired", "session_id", session.id, "key_id", r.KeyId)
+			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "encryption key not found or expired — re-negotiate key"},
+			}}), nil
+		}
+		dec, err := decryptWithKey(r.EncryptedPassword, key)
+		zeroBytes(key)
+		if err != nil {
+			slog.Error("SudoExec: failed to decrypt password", "session_id", session.id, "error", err)
+			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "failed to decrypt password"},
+			}}), nil
+		}
+		passwordToUse = string(dec)
+		zeroBytes(dec)
+	}
+
+	if hasPassword || (r.KeyId != "" && len(r.EncryptedPassword) > 0) {
 		if !hasSudo() {
 			slog.Warn("SudoExec: sudo not available for password auth", "session_id", session.id)
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
@@ -535,7 +557,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		}
 		var stdout, stderr strings.Builder
 		cmd := exec.Command("sudo", "-S", "sh", "-c", r.Command)
-		cmd.Stdin = strings.NewReader(password + "\n")
+		cmd.Stdin = strings.NewReader(passwordToUse + "\n")
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err := cmd.Run()
@@ -551,7 +573,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 			slog.Warn("SudoExec password auth failed", "session_id", session.id, "command", r.Command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
 		} else {
 			// Cache the password on success.
-			session.SetSudoCache(password, timeout)
+			session.SetSudoCache(passwordToUse, timeout)
 			slog.Debug("SudoExec cached", "session_id", session.id)
 		}
 		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{

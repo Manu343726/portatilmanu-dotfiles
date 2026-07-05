@@ -782,11 +782,24 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 				return mcpErr(id, -32602, "sudo password request timed out")
 			}
 
-			// Execute sudo via daemon's SudoExec RPC with the password.
+			// Encrypt the password with the negotiated key if available.
+			encPwd := []byte(password)
+			keyID := ""
+			ciphertext, kid, encErr := encryptForDaemon(encPwd, "sudo")
+			if encErr == nil && kid != "" {
+				encPwd = nil // don't send plaintext
+				keyID = kid
+			}
+
 			resp, err := clients.Exec.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
-				Command:  p.Command,
-				Password: password,
+				Command:           p.Command,
+				Password:          password,
+				KeyId:             keyID,
+				EncryptedPassword: ciphertext,
 			}))
+			if len(encPwd) > 0 {
+				zeroBytes(encPwd)
+			}
 			if err != nil {
 				return mcpErr(id, -32603, fmt.Sprintf("sudo exec failed: %v", err))
 			}

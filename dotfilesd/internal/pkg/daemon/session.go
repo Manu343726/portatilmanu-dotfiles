@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	cryptorand "crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -301,6 +302,16 @@ func (sh *shellSession) Close() error {
 	return nil
 }
 
+// sharedKeyEntry holds an ephemeral ECDH-negotiated shared secret.
+type sharedKeyEntry struct {
+	secret    []byte    // 32-byte X25519 shared secret
+	createdAt time.Time
+	expiresAt time.Time
+}
+
+// defaultSharedKeyTTL is the default lifetime for negotiated shared keys.
+const defaultSharedKeyTTL = 15 * time.Minute
+
 type Session struct {
 	id           string
 	parent       string // parent resource ID for diagnostics tree
@@ -318,15 +329,18 @@ type Session struct {
 	sudoPassword  []byte    // AES-256-GCM encrypted sudo password, zeroed after expiry/finalize
 	sudoExpiresAt time.Time // when the cached password expires
 	sudoCacheKey  []byte    // 32-byte AES-256 key negotiated with client, zeroed on finalize
+
+	sharedKeyCache map[string]*sharedKeyEntry // key_id → ECDH-negotiated shared secret
 }
 
 func newSession(id string) *Session {
 	now := time.Now()
 	return &Session{
-		id:         id,
-		createdAt:  now,
-		lastActive: now,
-		data:       make(map[string]string),
+		id:             id,
+		createdAt:      now,
+		lastActive:     now,
+		data:           make(map[string]string),
+		sharedKeyCache: make(map[string]*sharedKeyEntry),
 	}
 }
 
@@ -427,6 +441,7 @@ func (s *Session) closeShell() {
 		s.sudoCacheKey = nil
 	}
 	s.sudoExpiresAt = time.Time{}
+	s.clearSharedKeys()
 	if s.shell != nil {
 		if err := s.shell.Close(); err != nil {
 			slog.Warn("error closing session shell", "session_id", s.id, "error", err)
@@ -536,15 +551,34 @@ func (s *Session) setSudoCacheKey(encodedKey string) {
 	slog.Debug("sudo cache key set", "session_id", s.id)
 }
 
+// getEncryptionKey returns the best available AES-256 key for encrypting/
+// decrypting the sudo password. It checks the dedicated sudoCacheKey first,
+// then falls back to the "sudo" shared key from ECDH negotiation.
+// The caller MUST zero the returned slice and the internal copy.
+func (s *Session) getEncryptionKey() []byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.sudoCacheKey != nil && len(s.sudoCacheKey) == 32 {
+		key := make([]byte, 32)
+		copy(key, s.sudoCacheKey)
+		return key
+	}
+	if entry, ok := s.sharedKeyCache["sudo"]; ok && entry.secret != nil && len(entry.secret) == 32 {
+		key := make([]byte, 32)
+		copy(key, entry.secret)
+		return key
+	}
+	return nil
+}
+
 // encryptSudoPassword encrypts the plaintext password with AES-256-GCM using
 // the session's cache key. Returns nonce || ciphertext.
 func (s *Session) encryptSudoPassword(plaintext []byte) ([]byte, error) {
-	s.mu.RLock()
-	key := s.sudoCacheKey
-	s.mu.RUnlock()
-	if key == nil || len(key) != 32 {
+	key := s.getEncryptionKey()
+	if key == nil {
 		return plaintext, nil // fallback: no key negotiated
 	}
+	defer zeroBytes(key)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -565,15 +599,14 @@ func (s *Session) encryptSudoPassword(plaintext []byte) ([]byte, error) {
 
 // decryptSudoPassword decrypts a nonce || ciphertext blob with AES-256-GCM.
 func (s *Session) decryptSudoPassword(ciphertext []byte) ([]byte, error) {
-	s.mu.RLock()
-	key := s.sudoCacheKey
-	s.mu.RUnlock()
-	if key == nil || len(key) != 32 {
+	key := s.getEncryptionKey()
+	if key == nil {
 		// No key — assume legacy plaintext storage.
 		dec := make([]byte, len(ciphertext))
 		copy(dec, ciphertext)
 		return dec, nil
 	}
+	defer zeroBytes(key)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -589,6 +622,29 @@ func (s *Session) decryptSudoPassword(ciphertext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("ciphertext too short")
 	}
 
+	nonce := ciphertext[:nonceSize]
+	enc := ciphertext[nonceSize:]
+	return gcm.Open(nil, nonce, enc, nil)
+}
+
+// decryptWithKey decrypts an AES-256-GCM ciphertext using the given 32-byte key.
+// ciphertext must be nonce || ciphertext.
+func decryptWithKey(ciphertext, key []byte) ([]byte, error) {
+	if len(key) != 32 {
+		return nil, fmt.Errorf("invalid key length: %d", len(key))
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("aes new cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("aes gcm: %w", err)
+	}
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
 	nonce := ciphertext[:nonceSize]
 	enc := ciphertext[nonceSize:]
 	return gcm.Open(nil, nonce, enc, nil)
@@ -657,6 +713,104 @@ func (s *Session) ClearSudoCache() {
 	}
 	s.sudoExpiresAt = time.Time{}
 	slog.Debug("sudo cache cleared", "session_id", s.id)
+}
+
+// clearSharedKeys zeros all cached shared keys. The caller MUST hold s.mu.Lock().
+func (s *Session) clearSharedKeys() {
+	for _, entry := range s.sharedKeyCache {
+		zeroBytes(entry.secret)
+	}
+	s.sharedKeyCache = make(map[string]*sharedKeyEntry)
+}
+
+// NegotiateSharedKey performs an X25519 ECDH key exchange, storing the
+// derived shared secret associated with key_id. Returns the server's
+// public key that the client needs to derive the same secret locally.
+// ttl controls the key lifetime (0 = defaultSharedKeyTTL).
+func (s *Session) NegotiateSharedKey(keyID string, clientPublicKey []byte, ttl time.Duration) (serverPublic []byte, err error) {
+	curve := ecdh.X25519()
+	serverKey, err := curve.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("generate server ecdh key: %w", err)
+	}
+
+	// Decode the client's public key.
+	clientPub, err := curve.NewPublicKey(clientPublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid client public key: %w", err)
+	}
+
+	// Derive shared secret.
+	secret, err := serverKey.ECDH(clientPub)
+	if err != nil {
+		return nil, fmt.Errorf("ecdh: %w", err)
+	}
+
+	if ttl <= 0 {
+		ttl = defaultSharedKeyTTL
+	}
+	now := time.Now()
+
+	s.mu.Lock()
+	// Clear any existing key for this ID.
+	if old, ok := s.sharedKeyCache[keyID]; ok {
+		zeroBytes(old.secret)
+	}
+	s.sharedKeyCache[keyID] = &sharedKeyEntry{
+		secret:    secret,
+		createdAt: now,
+		expiresAt: now.Add(ttl),
+	}
+	s.mu.Unlock()
+
+	slog.Debug("shared key negotiated", "session_id", s.id, "key_id", keyID, "ttl", ttl)
+
+	// If this is the "sudo" key, also populate sudoCacheKey so the existing
+	// encrypt/decrypt mechanism works transparently.
+	if keyID == "sudo" {
+		s.mu.Lock()
+		if s.sudoCacheKey != nil {
+			zeroBytes(s.sudoCacheKey)
+		}
+		s.sudoCacheKey = make([]byte, len(secret))
+		copy(s.sudoCacheKey, secret)
+		s.mu.Unlock()
+		slog.Debug("sudo cache key set from negotiated shared key", "session_id", s.id)
+	}
+
+	return serverKey.PublicKey().Bytes(), nil
+}
+
+// GetSharedKey returns the shared secret for the given key_id, or nil if
+// not found or expired. The caller MUST zero the returned slice after use.
+func (s *Session) GetSharedKey(keyID string) ([]byte, bool) {
+	s.mu.RLock()
+	entry, ok := s.sharedKeyCache[keyID]
+	s.mu.RUnlock()
+	if !ok || time.Now().After(entry.expiresAt) {
+		if ok {
+			s.mu.Lock()
+			delete(s.sharedKeyCache, keyID)
+			zeroBytes(entry.secret)
+			s.mu.Unlock()
+		}
+		return nil, false
+	}
+	// Return a copy so the caller can zero it after use.
+	key := make([]byte, len(entry.secret))
+	copy(key, entry.secret)
+	return key, true
+}
+
+// HasSharedKey returns true if the given key_id exists and has not expired.
+func (s *Session) HasSharedKey(keyID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.sharedKeyCache[keyID]
+	if !ok || time.Now().After(entry.expiresAt) {
+		return false
+	}
+	return true
 }
 
 type SessionStore struct {

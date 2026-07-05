@@ -101,6 +101,7 @@ func (d *Daemon) Start() error {
 		sudoTimeout = 15 * time.Minute
 	}
 	execSvc := &execServer{sessions: d.sessions, bgTasks: bgTasks, diag: d.diag, sudoTimeout: sudoTimeout}
+	keySvc := &keyServer{sessions: d.sessions}
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)
@@ -147,6 +148,10 @@ func (d *Daemon) Start() error {
 	}
 	{
 		p, h := dotfilesdv1connect.NewExecServiceHandler(execSvc)
+		mux.Handle(p, h)
+	}
+	{
+		p, h := dotfilesdv1connect.NewKeyServiceHandler(keySvc)
 		mux.Handle(p, h)
 	}
 
