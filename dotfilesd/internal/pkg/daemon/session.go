@@ -751,6 +751,11 @@ func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfil
 
 	session.SetCallbackURL(req.Msg.CallbackUrl)
 
+	// Store callback URL in session data so it's visible via ListSessions.
+	session.mu.Lock()
+	session.data["_callback_url"] = req.Msg.CallbackUrl
+	session.mu.Unlock()
+
 	resp := connect.NewResponse(&dotfilesdv1.ConnectResponse{
 		Session: session.toProto(),
 	})

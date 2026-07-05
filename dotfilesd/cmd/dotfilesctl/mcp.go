@@ -6,13 +6,24 @@ import (
 )
 
 func newMCPCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "mcp",
-		Short: "start MCP stdio server",
-		Args:  cobra.NoArgs,
+	cmd := &cobra.Command{
+		Use:   "mcp [subcommand]",
+		Short: "MCP stdio server and client management",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// No subcommand: start MCP server (original behavior).
 			cli.RunMCP(clients)
 			return nil
 		},
 	}
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "clients",
+		Short: "list connected MCP clients",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.RunListClients(clients)
+		},
+	})
+
+	return cmd
 }
