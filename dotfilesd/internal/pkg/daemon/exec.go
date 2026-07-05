@@ -19,9 +19,10 @@ import (
 )
 
 type execServer struct {
-	sessions *SessionStore
-	bgTasks  *backgroundTaskManager
-	diag     *diagnostics.Engine
+	sessions    *SessionStore
+	bgTasks     *backgroundTaskManager
+	diag        *diagnostics.Engine
+	sudoTimeout time.Duration
 }
 
 func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.ExecRequest]) (*connect.Response[dotfilesdv1.ExecResponse], error) {
@@ -76,12 +77,26 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	// --- start of original function body ---
 
 	if req.Msg.Sudo {
+		var timeout time.Duration
+		if req.Msg.SudoTimeoutSeconds > 0 {
+			timeout = time.Duration(req.Msg.SudoTimeoutSeconds) * time.Second
+		}
+
+		// Try cached sudo first (sudo -n probe, then session cache).
+		if stdout, stderr, code, ok := s.tryCachedSudo(req.Msg.Command, session); ok {
+			return connect.NewResponse(&dotfilesdv1.ExecResponse{
+				ExitCode: int32(code),
+				Stdout:   stdout,
+				Stderr:   stderr,
+			}), nil
+		}
+
 		vars := session.Variables()
 
 		// 1. Elicitation — password prompt inside the MCP client's own UI
 		//    (e.g. opencode form). The agent never sees the value.
 		if vars["_cap_elicitation"] == "true" && session.HasCallbackURL() {
-			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
+			return s.execSudoWithPassword(ctx, req.Msg.Command, session, timeout)
 		}
 
 		// 2. Graphical auth (pkexec) — desktop password dialog, no
@@ -92,7 +107,7 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 
 		// 3. Terminal callback — fallback for headless terminal sessions.
 		if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
-			return s.execSudoWithPassword(ctx, req.Msg.Command, session)
+			return s.execSudoWithPassword(ctx, req.Msg.Command, session, timeout)
 		}
 
 		// No viable auth method — return a clear error.
@@ -186,6 +201,22 @@ func (s *execServer) ExecStream(
 	}
 
 	if req.Msg.Sudo {
+		var timeout time.Duration
+		if req.Msg.SudoTimeoutSeconds > 0 {
+			timeout = time.Duration(req.Msg.SudoTimeoutSeconds) * time.Second
+		}
+
+		// Try cached sudo first.
+		if stdout, stderr, code, ok := s.tryCachedSudo(req.Msg.Command, session); ok {
+			pushStart()
+			_ = stream.Send(&dotfilesdv1.ExecStreamResponse{StdoutChunk: []byte(stdout)})
+			if stderr != "" {
+				_ = stream.Send(&dotfilesdv1.ExecStreamResponse{StderrChunk: []byte(stderr)})
+			}
+			pushStop(int32(code))
+			return stream.Send(&dotfilesdv1.ExecStreamResponse{Done: true, ExitCode: int32(code)})
+		}
+
 		vars := session.Variables()
 
 		if vars["_cap_graphical"] == "true" && hasPkexec() {
@@ -201,7 +232,7 @@ func (s *execServer) ExecStream(
 
 		if (vars["_cap_elicitation"] == "true" || vars["_cap_terminal"] == "true") && session.HasCallbackURL() {
 			pushStart()
-			err := s.execStreamSudoWithPassword(ctx, req.Msg.Command, session, stream)
+			err := s.execStreamSudoWithPassword(ctx, req.Msg.Command, session, stream, timeout)
 			ec := int32(-1)
 			if err == nil {
 				ec = 0
@@ -253,6 +284,55 @@ func (s *execServer) ExecStream(
 	return err
 }
 
+// resolveSudoTimeout returns the effective sudo cache timeout, preferring
+// a per-call override over the daemon default.
+func (s *execServer) resolveSudoTimeout(reqTimeoutSec int32) time.Duration {
+	if reqTimeoutSec > 0 {
+		return time.Duration(reqTimeoutSec) * time.Second
+	}
+	return s.sudoTimeout
+}
+
+// cacheSudoAfterSuccess stores the password in the session cache on success.
+// pwd is the raw password bytes (will be zeroed after use).
+func (s *execServer) cacheSudoAfterSuccess(session *Session, pwd []byte, timeout time.Duration, command string, exitCode int) {
+	if exitCode == 0 && len(pwd) > 0 {
+		session.SetSudoCache(string(pwd), timeout)
+		slog.Debug("sudo password cached", "session_id", session.id, "command", command)
+	}
+}
+
+// tryCachedSudo attempts to run a command with sudo using cached credentials.
+// It returns (stdout, stderr, exitCode, ok). If ok is false, the caller
+// should fall through to the password prompt path.
+func (s *execServer) tryCachedSudo(command string, session *Session) (string, string, int, bool) {
+	// 1. Try sudo -n first (sudo's built-in credential cache, e.g. timestamp_timeout).
+	stdout, stderr, code := runCmdFull("sudo", "-n", "sh", "-c", command)
+	if code == 0 {
+		slog.Debug("sudo -n cache hit", "session_id", session.id, "command", command)
+		return stdout, stderr, code, true
+	}
+	slog.Log(context.TODO(), levelTrace, "sudo -n miss, trying session cache", "session_id", session.id)
+
+	// 2. Try our session-level cache.
+	cachedPwd, ok := session.GetSudoCache()
+	if !ok {
+		return "", "", -1, false
+	}
+	defer zeroBytes(cachedPwd)
+
+	stdout, stderr, code = runCmdFullWithStdin(string(cachedPwd)+"\n", "sudo", "-S", "sh", "-c", command)
+	if code == 0 {
+		slog.Debug("sudo session cache hit", "session_id", session.id, "command", command)
+		return stdout, stderr, code, true
+	}
+
+	// Cache entry is stale or wrong — clear it.
+	slog.Warn("sudo session cache miss (stale or wrong password)", "session_id", session.id, "exit_code", code, "stderr", truncate(stderr, 200))
+	session.ClearSudoCache()
+	return "", "", -1, false
+}
+
 // execStreamSudoWithPassword prompts for the sudo password, then runs the
 // command with sudo -S and streams output.
 func (s *execServer) execStreamSudoWithPassword(
@@ -260,7 +340,13 @@ func (s *execServer) execStreamSudoWithPassword(
 	command string,
 	session *Session,
 	stream *connect.ServerStream[dotfilesdv1.ExecStreamResponse],
+	timeout time.Duration,
 ) error {
+	// If timeout is zero, use daemon default.
+	if timeout <= 0 {
+		timeout = s.sudoTimeout
+	}
+
 	user := os.Getenv("USER")
 	if user == "" {
 		user = "unknown"
@@ -334,14 +420,25 @@ func (s *execServer) execStreamSudoWithPassword(
 		}
 	}
 
+	// Cache the password on success.
+	if exitCode == 0 {
+		session.SetSudoCache(password, timeout)
+		slog.Debug("ExecStream sudo cached", "session_id", session.id)
+	}
+
 	return stream.Send(&dotfilesdv1.ExecStreamResponse{
 		Done:     true,
 		ExitCode: exitCode,
 	})
 }
 
-func (s *execServer) execSudoWithPassword(ctx context.Context, command string, session *Session) (*connect.Response[dotfilesdv1.ExecResponse], error) {
-	slog.Log(ctx, levelTrace, "Exec sudo requesting password", "session_id", session.id)
+func (s *execServer) execSudoWithPassword(ctx context.Context, command string, session *Session, timeout time.Duration) (*connect.Response[dotfilesdv1.ExecResponse], error) {
+	// If timeout is zero, use daemon default.
+	if timeout <= 0 {
+		timeout = s.sudoTimeout
+	}
+
+	slog.Log(ctx, levelTrace, "Exec sudo requesting password", "session_id", session.id, "timeout", timeout)
 
 	user := os.Getenv("USER")
 	if user == "" {
@@ -379,6 +476,10 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 
 	if exitCode != 0 {
 		slog.Warn("Exec sudo command failed", "session_id", session.id, "command", command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
+	} else {
+		// Cache the password on success.
+		session.SetSudoCache(password, timeout)
+		slog.Debug("Exec sudo cached", "session_id", session.id)
 	}
 
 	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
@@ -423,6 +524,8 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	hasPassword := password != ""
 	slog.Log(ctx, levelTrace, "SudoExec", "session_id", session.id, "command", r.Command, "method", method, "has_password", hasPassword)
 
+	timeout := s.resolveSudoTimeout(r.SudoTimeoutSeconds)
+
 	if hasPassword {
 		if !hasSudo() {
 			slog.Warn("SudoExec: sudo not available for password auth", "session_id", session.id)
@@ -446,6 +549,10 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		}
 		if exitCode != 0 {
 			slog.Warn("SudoExec password auth failed", "session_id", session.id, "command", r.Command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
+		} else {
+			// Cache the password on success.
+			session.SetSudoCache(password, timeout)
+			slog.Debug("SudoExec cached", "session_id", session.id)
 		}
 		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(exitCode), Stdout: stdout.String(), Stderr: stderr.String()},
@@ -454,13 +561,21 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 		return resp, nil
 	}
 
-	// No password provided — try available methods based on session capabilities.
+	// No password provided — try cached sudo first.
+	if stdout, stderr, code, ok := s.tryCachedSudo(r.Command, session); ok {
+		slog.Debug("SudoExec cache hit", "session_id", session.id, "command", r.Command)
+		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
+		}}), nil
+	}
+
+	// Try available methods based on session capabilities.
 	vars := session.Variables()
 
 	// 1. Elicitation — MCP client UI prompt.
 	if vars["_cap_elicitation"] == "true" && session.HasCallbackURL() {
 		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (elicitation)", "session_id", session.id)
-		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
+		execResp, err := s.execSudoWithPassword(ctx, r.Command, session, timeout)
 		if err != nil {
 			return nil, err
 		}
@@ -485,7 +600,7 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	// 3. Terminal callback fallback.
 	if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
 		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (terminal)", "session_id", session.id)
-		execResp, err := s.execSudoWithPassword(ctx, r.Command, session)
+		execResp, err := s.execSudoWithPassword(ctx, r.Command, session, timeout)
 		if err != nil {
 			return nil, err
 		}
@@ -590,32 +705,50 @@ func (s *execServer) BackgroundExec(
 	var cmd *exec.Cmd
 
 	if sudo {
-		vars := session.Variables()
+		// Resolve timeout from per-call override.
+		var timeout time.Duration
+		if start.SudoTimeoutSeconds > 0 {
+			timeout = time.Duration(start.SudoTimeoutSeconds) * time.Second
+		}
+		if timeout <= 0 {
+			timeout = s.sudoTimeout
+		}
 
-		if vars["_cap_graphical"] == "true" && hasPkexec() {
-			cmd = exec.Command("pkexec", "sh", "-c", command)
-		} else if vars["_cap_elicitation"] == "true" || vars["_cap_terminal"] == "true" {
-			if !session.HasCallbackURL() {
-				return connect.NewError(connect.CodeFailedPrecondition,
-					fmt.Errorf("sudo requires callback URL for password prompt"))
-			}
-			user := os.Getenv("USER")
-			if user == "" {
-				user = "unknown"
-			}
-			prompt := fmt.Sprintf("[sudo] password for %s: ", user)
-			password, err := session.RequestInput(ctx, prompt, "", true)
-			if err != nil {
-				return connect.NewError(connect.CodeInternal,
-					fmt.Errorf("password prompt: %w", err))
-			}
-			pwd := []byte(password + "\n")
-			defer zeroBytes(pwd)
-			cmd = exec.Command("sudo", "-S", "sh", "-c", command)
-			cmd.Stdin = strings.NewReader(string(pwd))
+		// Try cached sudo first.
+		if _, _, _, ok := s.tryCachedSudo(command, session); ok {
+			slog.Debug("BackgroundExec cache hit", "session_id", session.id)
+			cmd = exec.Command("sudo", "-n", "sh", "-c", command)
 		} else {
-			return connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("no sudo method available"))
+			vars := session.Variables()
+
+			if vars["_cap_graphical"] == "true" && hasPkexec() {
+				cmd = exec.Command("pkexec", "sh", "-c", command)
+			} else if vars["_cap_elicitation"] == "true" || vars["_cap_terminal"] == "true" {
+				if !session.HasCallbackURL() {
+					return connect.NewError(connect.CodeFailedPrecondition,
+						fmt.Errorf("sudo requires callback URL for password prompt"))
+				}
+				user := os.Getenv("USER")
+				if user == "" {
+					user = "unknown"
+				}
+				prompt := fmt.Sprintf("[sudo] password for %s: ", user)
+				password, err := session.RequestInput(ctx, prompt, "", true)
+				if err != nil {
+					return connect.NewError(connect.CodeInternal,
+						fmt.Errorf("password prompt: %w", err))
+				}
+				pwd := []byte(password + "\n")
+				defer zeroBytes(pwd)
+				cmd = exec.Command("sudo", "-S", "sh", "-c", command)
+				cmd.Stdin = strings.NewReader(string(pwd))
+				// Cache optimistically — password was just accepted by sudo -S.
+				session.SetSudoCache(password, timeout)
+				slog.Debug("BackgroundExec sudo cached", "session_id", session.id)
+			} else {
+				return connect.NewError(connect.CodeFailedPrecondition,
+					fmt.Errorf("no sudo method available"))
+			}
 		}
 	} else {
 		cmd = exec.Command("sh", "-c", command)

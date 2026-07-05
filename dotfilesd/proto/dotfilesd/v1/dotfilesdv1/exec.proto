@@ -39,6 +39,9 @@ message ExecRequest {
   Session session = 100;
   string command = 1;
   bool sudo = 2;
+  // Override the daemon's sudo credential cache timeout (seconds).
+  // 0 or unset means use the daemon default.
+  int32 sudo_timeout_seconds = 3;
 }
 
 message ExecResponse {
@@ -53,6 +56,9 @@ message ExecStreamRequest {
   Session session = 100;
   string command = 1;
   bool sudo = 2;
+  // Override the daemon's sudo credential cache timeout (seconds).
+  // 0 or unset means use the daemon default.
+  int32 sudo_timeout_seconds = 3;
 }
 
 message ExecStreamResponse {
@@ -75,6 +81,9 @@ message SudoExecRequest {
   string command = 1;
   string password = 2;
   SudoMethod preferred_method = 3;
+  // Override the daemon's sudo credential cache timeout (seconds).
+  // 0 or unset means use the daemon default.
+  int32 sudo_timeout_seconds = 4;
 }
 
 message SudoExecResponse {
@@ -114,6 +123,9 @@ message BackgroundExecRequest {
 message StartCommand {
   string command = 1;
   bool sudo = 2;
+  // Override the daemon's sudo credential cache timeout (seconds).
+  // 0 or unset means use the daemon default.
+  int32 sudo_timeout_seconds = 3;
 }
 
 // BackgroundExecResponse is a server→client message on a background exec

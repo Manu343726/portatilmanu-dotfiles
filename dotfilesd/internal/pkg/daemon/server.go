@@ -29,6 +29,7 @@ type Config struct {
 	ScriptsDir     string
 	PluginsDir     string `yaml:"plugins_dir"`
 	PluginCacheDir string `yaml:"plugin_cache_dir"`
+	SudoTimeout   time.Duration
 }
 
 type Daemon struct {
@@ -95,7 +96,11 @@ func (d *Daemon) Start() error {
 	dotSvc := &dotfilesServer{sessions: d.sessions}
 	bgTasks := newBackgroundTaskManager()
 	bgTasks.SetDiagEngine(d.diag)
-	execSvc := &execServer{sessions: d.sessions, bgTasks: bgTasks, diag: d.diag}
+	sudoTimeout := d.config.SudoTimeout
+	if sudoTimeout <= 0 {
+		sudoTimeout = 15 * time.Minute
+	}
+	execSvc := &execServer{sessions: d.sessions, bgTasks: bgTasks, diag: d.diag, sudoTimeout: sudoTimeout}
 	cfgSvc := &configServer{sessions: d.sessions}
 	sessionSvc := newSessionServer(d.sessions)
 	scriptSvc := newScriptServer(d.sessions, d.scripts)

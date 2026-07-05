@@ -310,6 +310,9 @@ type Session struct {
 	shellInfo    *dotfilesdv1.Shell // CLI shell context (cwd, shell, env)
 	callbackURL  string
 	mu           sync.RWMutex
+
+	sudoPassword  []byte    // cached sudo password, zeroed after expiry/finalize
+	sudoExpiresAt time.Time // when the cached password expires
 }
 
 func newSession(id string) *Session {
@@ -408,6 +411,13 @@ func (s *Session) ensureShell() (*shellSession, error) {
 }
 
 func (s *Session) closeShell() {
+	// Clear sudo password inline — no lock acquisition since the caller
+	// (Finalize) already holds s.mu.Lock().
+	if s.sudoPassword != nil {
+		zeroBytes(s.sudoPassword)
+		s.sudoPassword = nil
+	}
+	s.sudoExpiresAt = time.Time{}
 	if s.shell != nil {
 		if err := s.shell.Close(); err != nil {
 			slog.Warn("error closing session shell", "session_id", s.id, "error", err)
@@ -498,6 +508,57 @@ func (s *Session) RequestChoose(ctx context.Context, prompt string, options []st
 		return -1, "", fmt.Errorf("request choose: %w", err)
 	}
 	return int(resp.Msg.SelectedIndex), resp.Msg.SelectedOption, nil
+}
+
+// SetSudoCache stores the sudo password with a timeout. The password is
+// zeroed after the timeout or when FinalizeSession is called.
+// The timeout starts from the time of this call.
+func (s *Session) SetSudoCache(password string, timeout time.Duration) {
+	if password == "" {
+		return
+	}
+	expiresAt := time.Now().Add(timeout)
+	pwd := []byte(password)
+	s.mu.Lock()
+	// Clear any previous cache first.
+	if s.sudoPassword != nil {
+		zeroBytes(s.sudoPassword)
+	}
+	s.sudoPassword = pwd
+	s.sudoExpiresAt = expiresAt
+	s.mu.Unlock()
+	slog.Debug("sudo cache set", "session_id", s.id, "timeout", timeout, "expires_at", expiresAt.Format(time.RFC3339))
+}
+
+// GetSudoCache returns the cached sudo password if it hasn't expired.
+// The caller MUST zero the returned slice after use.
+func (s *Session) GetSudoCache() ([]byte, bool) {
+	s.mu.RLock()
+	pwd := s.sudoPassword
+	expiresAt := s.sudoExpiresAt
+	s.mu.RUnlock()
+	if pwd == nil || time.Now().After(expiresAt) {
+		if pwd != nil {
+			s.ClearSudoCache()
+		}
+		return nil, false
+	}
+	// Return a copy so the caller can zero it independently.
+	copyPwd := make([]byte, len(pwd))
+	copy(copyPwd, pwd)
+	return copyPwd, true
+}
+
+// ClearSudoCache zeros the cached sudo password.
+func (s *Session) ClearSudoCache() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sudoPassword != nil {
+		zeroBytes(s.sudoPassword)
+		s.sudoPassword = nil
+	}
+	s.sudoExpiresAt = time.Time{}
+	slog.Debug("sudo cache cleared", "session_id", s.id)
 }
 
 type SessionStore struct {

@@ -55,6 +55,26 @@ func runCmdFull(name string, args ...string) (string, string, int) {
 	return stdout.String(), stderr.String(), exitCode
 }
 
+// runCmdFullWithStdin runs a command with a stdin string and returns
+// stdout, stderr, and exit code.
+func runCmdFullWithStdin(stdin, name string, args ...string) (string, string, int) {
+	var stdout, stderr strings.Builder
+	cmd := execCommand(name, args...)
+	cmd.Stdin = strings.NewReader(stdin)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+	return stdout.String(), stderr.String(), exitCode
+}
+
 // runCmdStream runs a command and streams stdout/stderr chunks to a
 // Connect server stream. Each chunk is sent as an ExecStreamResponse.
 // Stderr is merged with stdout (both go to stdout_chunk) since there's
