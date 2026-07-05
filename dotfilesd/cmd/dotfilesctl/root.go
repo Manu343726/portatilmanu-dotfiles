@@ -16,6 +16,84 @@ import (
 	"github.com/spf13/viper"
 )
 
+func init() {
+	cobra.AddTemplateFunc("indentLines", func(indent int, s string) string {
+		if s == "" {
+			return ""
+		}
+		pad := strings.Repeat(" ", indent)
+		lines := strings.Split(s, "\n")
+		for i, line := range lines {
+			if i == 0 {
+				continue
+			}
+			lines[i] = pad + line
+		}
+		return strings.Join(lines, "\n")
+	})
+	cobra.AddTemplateFunc("wrap", func(indent int, s string) string {
+		if s == "" {
+			return ""
+		}
+		pad := strings.Repeat(" ", indent)
+		width := 79 - indent
+		if width < 20 {
+			width = 20
+		}
+		var result strings.Builder
+		for len(s) > width {
+			// Find a break point at a space within the width.
+			cut := strings.LastIndex(s[:width], " ")
+			if cut < 1 {
+				cut = width
+			}
+			result.WriteString(s[:cut])
+			result.WriteByte('\n')
+			result.WriteString(pad)
+			s = s[cut+1:]
+		}
+		result.WriteString(s)
+		return result.String()
+	})
+	cobra.AddTemplateFunc("add", func(a, b int) int {
+		return a + b
+	})
+}
+
+const helpTemplate = `{{with or .Long .Short}}{{. | trimTrailingWhitespaces}}
+
+{{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}`
+
+const usageTemplate = `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}{{$cmds := .Commands}}{{if eq (len .Groups) 0}}
+
+Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding}} {{$indent := add .NamePadding 3}}{{wrap $indent (indentLines $indent .Short)}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
+
+{{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding}} {{$indent := add .NamePadding 3}}{{wrap $indent (indentLines $indent .Short)}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
+
+Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding}} {{$indent := add .NamePadding 3}}{{wrap $indent (indentLines $indent .Short)}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+
+Global Flags:
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}`
+
 var (
 	logLevel  string
 	verbose   bool
@@ -250,6 +328,9 @@ func newRootCmd() *cobra.Command {
 		c.GroupID = "core"
 		cmd.AddCommand(c)
 	}
+
+	cmd.SetHelpTemplate(helpTemplate)
+	cmd.SetUsageTemplate(usageTemplate)
 
 	return cmd
 }

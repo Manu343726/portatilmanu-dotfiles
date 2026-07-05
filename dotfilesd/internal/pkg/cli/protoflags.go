@@ -34,7 +34,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 
 	pluginCmd := &cobra.Command{
 		Use:     name,
-		Short:   descOr(p.Description, disp),
+		Short:   descOr(firstLine(p.Description), disp),
 		Long:    fmt.Sprintf("Plugin: %s (%s v%s)\n%s", p.Name, p.DisplayName, p.Version, p.Description),
 		GroupID: "plugins",
 		RunE:    func(cmd *cobra.Command, args []string) error { return cmd.Help() },
@@ -71,7 +71,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 			shortName := shortSvcName(svc.Name)
 			svcCmd = &cobra.Command{
 				Use:   shortName,
-				Short: descOr(svc.Description, svc.Name),
+				Short: descOr(firstLine(svc.Description), svc.Name),
 				Long:  fmt.Sprintf("%s\n\n%s", svc.Name, svc.Description),
 				RunE:  func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 			}
@@ -80,7 +80,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 
 		for _, m := range svc.Methods {
 			runE := makeRunEProtoFromSchema(p.URL, p.DaemonURL, svc.Name, m)
-			methodShort := descOr(m.Description, fmt.Sprintf("%s.%s", shortSvcName(svc.Name), m.Name))
+			methodShort := descOr(firstLine(m.Description), fmt.Sprintf("%s.%s", shortSvcName(svc.Name), m.Name))
 
 			if elideRPC {
 				addFlagsFromSchema(svcCmd, m.Request, "")
@@ -816,6 +816,14 @@ func camelToKebab(s string) string {
 		}
 	}
 	return result.String()
+}
+
+// firstLine returns the first line of s, or s itself if there's only one line.
+func firstLine(s string) string {
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		return s[:idx]
+	}
+	return s
 }
 
 // isStdinAvailable returns true if os.Stdin has data available to read

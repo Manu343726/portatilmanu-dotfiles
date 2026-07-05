@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -739,10 +740,17 @@ func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfil
 		}
 	}
 
-	// Apply session variables and shell context from the Connect request.
+	// Apply session variables, data, and shell context from the Connect request.
 	if sessionMsg != nil {
 		if len(sessionMsg.GetVariables()) > 0 {
 			session.SetVariables(sessionMsg.GetVariables())
+		}
+		if len(sessionMsg.GetData()) > 0 {
+			session.mu.Lock()
+			for k, v := range sessionMsg.GetData() {
+				session.data[k] = v
+			}
+			session.mu.Unlock()
 		}
 		if shellInfo := sessionMsg.GetShell(); shellInfo != nil {
 			session.SetShellInfo(shellInfo)
@@ -755,6 +763,20 @@ func (s *sessionServer) Connect(ctx context.Context, req *connect.Request[dotfil
 	session.mu.Lock()
 	session.data["_callback_url"] = req.Msg.CallbackUrl
 	session.mu.Unlock()
+
+	// Auto-generate display name for MCP clients (name-version-ip:port).
+	if name := session.variables["_cap_client_name"]; name != "" {
+		version := session.variables["_cap_client_version"]
+		cbHost, cbPort := parseCallbackAddr(req.Msg.CallbackUrl)
+		displayName := name
+		if version != "" {
+			displayName += "-" + version
+		}
+		displayName += "-" + cbHost + ":" + cbPort
+		session.mu.Lock()
+		session.data["_display_name"] = displayName
+		session.mu.Unlock()
+	}
 
 	resp := connect.NewResponse(&dotfilesdv1.ConnectResponse{
 		Session: session.toProto(),
@@ -814,4 +836,20 @@ func (s *sessionServer) ListSessions(ctx context.Context, req *connect.Request[d
 	return connect.NewResponse(&dotfilesdv1.ListSessionsResponse{
 		Sessions: protoSessions,
 	}), nil
+}
+
+// parseCallbackAddr extracts host and port from a callback URL
+// like "http://127.0.0.1:43291". Duplicated from cli package to
+// avoid a cross-package dependency on internal details.
+func parseCallbackAddr(callbackURL string) (host, port string) {
+	u, err := url.Parse(callbackURL)
+	if err != nil {
+		return callbackURL, "-"
+	}
+	host = u.Hostname()
+	port = u.Port()
+	if port == "" {
+		port = "-"
+	}
+	return host, port
 }

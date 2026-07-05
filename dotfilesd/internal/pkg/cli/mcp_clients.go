@@ -21,10 +21,15 @@ func RunListClients(clients *Clients) error {
 		return fmt.Errorf("list sessions failed: %w", err)
 	}
 
-	// Filter to sessions that have a callback URL (connected clients).
+	// Filter to MCP client sessions (have _display_name set by the daemon)
+	// and exclude our own CLI session.
+	mySessionID := clients.SessionID
 	var connected []*dotfilesdv1.Session
 	for _, s := range resp.Msg.Sessions {
-		if s.GetData()["_callback_url"] != "" {
+		if s.GetId() == mySessionID {
+			continue
+		}
+		if s.GetData()["_display_name"] != "" || s.GetData()["_callback_url"] != "" {
 			connected = append(connected, s)
 		}
 	}
@@ -35,21 +40,27 @@ func RunListClients(clients *Clients) error {
 	}
 
 	now := time.Now()
+	fmt.Printf("%-48s  %s  %s\n", "CLIENT", "CONNECTED", "DURATION")
 	for _, s := range connected {
-		host, port := parseCallbackAddr(s.GetData()["_callback_url"])
-		clientName := s.GetVariables()["_cap_client_name"]
-		if clientName == "" {
-			clientName = "-"
-		}
-		clientVersion := s.GetVariables()["_cap_client_version"]
-		if clientVersion == "" {
-			clientVersion = "-"
+		displayName := s.GetData()["_display_name"]
+		if displayName == "" {
+			// Fallback: construct from available fields.
+			host, port := parseCallbackAddr(s.GetData()["_callback_url"])
+			name := s.GetVariables()["_cap_client_name"]
+			if name == "" {
+				name = "-"
+			}
+			version := s.GetVariables()["_cap_client_version"]
+			if version == "" {
+				version = "-"
+			}
+			displayName = name + "-" + version + "-" + host + ":" + port
 		}
 		createdAt := time.Unix(s.GetCreatedAt(), 0)
 		duration := now.Sub(createdAt).Round(time.Second)
 
-		fmt.Printf("%-16s  %-5s  %-12s  %-8s  %s  (%s)\n",
-			host, port, clientName, clientVersion,
+		fmt.Printf("%-48s  %s  (%s)\n",
+			displayName,
 			createdAt.Format("2006-01-02 15:04:05"),
 			formatDuration(duration),
 		)

@@ -440,6 +440,12 @@ func writeJSONLine(w io.Writer, v any) {
 }
 
 func RunMCP(clients *Clients) {
+	// Apply the global session ID (set by --session flag) so that
+	// Connect() reuses the requested session instead of creating a new one.
+	if DefaultSessionID != "" {
+		clients.SessionID = DefaultSessionID
+	}
+
 	bridge := NewMCPBridge(os.Stdout)
 	mcpBridge = bridge
 
@@ -557,6 +563,16 @@ func dispatchMCP(clients *Clients, req mcpRequest) *mcpResponse {
 			clientCaps.hasElicitation = initParams.Capabilities != nil && initParams.Capabilities.Elicitation != nil
 			if clientCaps.hasElicitation {
 				slog.Debug("client supports elicitation")
+			}
+
+			// Eagerly connect to the daemon so the session is registered
+			// immediately with the MCP client identity. If this fails
+			// (daemon not ready yet), the lazy Connect on first tool call
+			// will retry.
+			if err := clients.Connect(context.Background()); err != nil {
+				slog.Warn("eager mcp connect failed (will retry)", "error", err)
+			} else {
+				slog.Debug("eager mcp connect succeeded", "session_id", clients.SessionID)
 			}
 			// Detect MCP Apps support: check both the spec-compliant
 			// extensions.io.modelcontextprotocol/ui field and the legacy

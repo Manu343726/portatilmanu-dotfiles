@@ -256,6 +256,12 @@ func (c *Clients) Connect(ctx context.Context) error {
 		c.ClientID = fmt.Sprintf("cli_%x_%x", time.Now().UnixNano(), os.Getpid())
 	}
 
+	// Apply the global DefaultSessionID (set by --session flag) if no
+	// explicit session was configured yet.
+	if c.SessionID == "" && DefaultSessionID != "" {
+		c.SessionID = DefaultSessionID
+	}
+
 	session := &dotfilesdv1.Session{Id: c.SessionID}
 	caps := detectCapabilities()
 	if caps == nil {
