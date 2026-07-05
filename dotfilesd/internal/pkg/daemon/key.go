@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -43,11 +42,9 @@ func (s *keyServer) NegotiateKey(ctx context.Context, req *connect.Request[dotfi
 
 	serverPub, err := session.NegotiateSharedKey(keyID, clientPub, ttlDuration)
 	if err != nil {
-		slog.Error("key negotiation failed", "session_id", session.id, "key_id", keyID, "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("key negotiation: %w", err))
 	}
 
-	slog.Log(ctx, levelTrace, "KeyService.NegotiateKey done", "session_id", session.id, "key_id", keyID)
 	return connect.NewResponse(&dotfilesdv1.NegotiateKeyResponse{
 		ServerPublicKey: serverPub,
 	}), nil

@@ -539,7 +539,6 @@ func (s *Session) RequestChoose(ctx context.Context, prompt string, options []st
 func (s *Session) setSudoCacheKey(encodedKey string) {
 	key, err := base64.StdEncoding.DecodeString(encodedKey)
 	if err != nil || len(key) != 32 {
-		slog.Warn("invalid sudo cache key from client", "session_id", s.id, "len", len(key), "error", err)
 		return
 	}
 	s.mu.Lock()
@@ -548,7 +547,6 @@ func (s *Session) setSudoCacheKey(encodedKey string) {
 	}
 	s.sudoCacheKey = key
 	s.mu.Unlock()
-	slog.Debug("sudo cache key set", "session_id", s.id)
 }
 
 // getEncryptionKey returns the best available AES-256 key for encrypting/
@@ -661,19 +659,16 @@ func (s *Session) SetSudoCache(password string, timeout time.Duration) {
 
 	encrypted, err := s.encryptSudoPassword([]byte(password))
 	if err != nil {
-		slog.Error("failed to encrypt sudo password", "session_id", s.id, "error", err)
 		return
 	}
 
 	s.mu.Lock()
-	// Clear any previous cache first.
 	if s.sudoPassword != nil {
 		zeroBytes(s.sudoPassword)
 	}
 	s.sudoPassword = encrypted
 	s.sudoExpiresAt = expiresAt
 	s.mu.Unlock()
-	slog.Debug("sudo cache set", "session_id", s.id, "timeout", timeout, "expires_at", expiresAt.Format(time.RFC3339))
 }
 
 // GetSudoCache decrypts and returns the cached sudo password if it hasn't
@@ -692,7 +687,6 @@ func (s *Session) GetSudoCache() ([]byte, bool) {
 
 	decrypted, err := s.decryptSudoPassword(pwd)
 	if err != nil {
-		slog.Error("failed to decrypt sudo password", "session_id", s.id, "error", err)
 		s.ClearSudoCache()
 		return nil, false
 	}
@@ -712,7 +706,6 @@ func (s *Session) ClearSudoCache() {
 		s.sudoCacheKey = nil
 	}
 	s.sudoExpiresAt = time.Time{}
-	slog.Debug("sudo cache cleared", "session_id", s.id)
 }
 
 // clearSharedKeys zeros all cached shared keys. The caller MUST hold s.mu.Lock().
@@ -763,10 +756,6 @@ func (s *Session) NegotiateSharedKey(keyID string, clientPublicKey []byte, ttl t
 	}
 	s.mu.Unlock()
 
-	slog.Debug("shared key negotiated", "session_id", s.id, "key_id", keyID, "ttl", ttl)
-
-	// If this is the "sudo" key, also populate sudoCacheKey so the existing
-	// encrypt/decrypt mechanism works transparently.
 	if keyID == "sudo" {
 		s.mu.Lock()
 		if s.sudoCacheKey != nil {
@@ -775,7 +764,6 @@ func (s *Session) NegotiateSharedKey(keyID string, clientPublicKey []byte, ttl t
 		s.sudoCacheKey = make([]byte, len(secret))
 		copy(s.sudoCacheKey, secret)
 		s.mu.Unlock()
-		slog.Debug("sudo cache key set from negotiated shared key", "session_id", s.id)
 	}
 
 	return serverKey.PublicKey().Bytes(), nil

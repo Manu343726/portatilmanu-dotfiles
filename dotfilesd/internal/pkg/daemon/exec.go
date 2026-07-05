@@ -298,7 +298,6 @@ func (s *execServer) resolveSudoTimeout(reqTimeoutSec int32) time.Duration {
 func (s *execServer) cacheSudoAfterSuccess(session *Session, pwd []byte, timeout time.Duration, command string, exitCode int) {
 	if exitCode == 0 && len(pwd) > 0 {
 		session.SetSudoCache(string(pwd), timeout)
-		slog.Debug("sudo password cached", "session_id", session.id, "command", command)
 	}
 }
 
@@ -306,15 +305,11 @@ func (s *execServer) cacheSudoAfterSuccess(session *Session, pwd []byte, timeout
 // It returns (stdout, stderr, exitCode, ok). If ok is false, the caller
 // should fall through to the password prompt path.
 func (s *execServer) tryCachedSudo(command string, session *Session) (string, string, int, bool) {
-	// 1. Try sudo -n first (sudo's built-in credential cache, e.g. timestamp_timeout).
 	stdout, stderr, code := runCmdFull("sudo", "-n", "sh", "-c", command)
 	if code == 0 {
-		slog.Debug("sudo -n cache hit", "session_id", session.id, "command", command)
 		return stdout, stderr, code, true
 	}
-	slog.Log(context.TODO(), levelTrace, "sudo -n miss, trying session cache", "session_id", session.id)
 
-	// 2. Try our session-level cache.
 	cachedPwd, ok := session.GetSudoCache()
 	if !ok {
 		return "", "", -1, false
@@ -323,12 +318,9 @@ func (s *execServer) tryCachedSudo(command string, session *Session) (string, st
 
 	stdout, stderr, code = runCmdFullWithStdin(string(cachedPwd)+"\n", "sudo", "-S", "sh", "-c", command)
 	if code == 0 {
-		slog.Debug("sudo session cache hit", "session_id", session.id, "command", command)
 		return stdout, stderr, code, true
 	}
 
-	// Cache entry is stale or wrong — clear it.
-	slog.Warn("sudo session cache miss (stale or wrong password)", "session_id", session.id, "exit_code", code, "stderr", truncate(stderr, 200))
 	session.ClearSudoCache()
 	return "", "", -1, false
 }
@@ -420,10 +412,8 @@ func (s *execServer) execStreamSudoWithPassword(
 		}
 	}
 
-	// Cache the password on success.
 	if exitCode == 0 {
 		session.SetSudoCache(password, timeout)
-		slog.Debug("ExecStream sudo cached", "session_id", session.id)
 	}
 
 	return stream.Send(&dotfilesdv1.ExecStreamResponse{
@@ -438,8 +428,6 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 		timeout = s.sudoTimeout
 	}
 
-	slog.Log(ctx, levelTrace, "Exec sudo requesting password", "session_id", session.id, "timeout", timeout)
-
 	user := os.Getenv("USER")
 	if user == "" {
 		user = "unknown"
@@ -448,7 +436,6 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 
 	password, err := session.RequestInput(ctx, prompt, "", true)
 	if err != nil {
-		slog.Warn("Exec sudo password request failed", "session_id", session.id, "error", err)
 		return connect.NewResponse(&dotfilesdv1.ExecResponse{
 			ExitCode: -1,
 			Stderr:   fmt.Sprintf("password prompt failed: %v", err),
@@ -477,9 +464,7 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 	if exitCode != 0 {
 		slog.Warn("Exec sudo command failed", "session_id", session.id, "command", command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
 	} else {
-		// Cache the password on success.
 		session.SetSudoCache(password, timeout)
-		slog.Debug("Exec sudo cached", "session_id", session.id)
 	}
 
 	resp := connect.NewResponse(&dotfilesdv1.ExecResponse{
@@ -522,8 +507,6 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	method := r.PreferredMethod
 
 	hasPassword := password != ""
-	slog.Log(ctx, levelTrace, "SudoExec", "session_id", session.id, "command", r.Command, "method", method, "has_password", hasPassword)
-
 	timeout := s.resolveSudoTimeout(r.SudoTimeoutSeconds)
 
 	// Decrypt encrypted_password if key_id is set.
@@ -531,15 +514,13 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	if r.KeyId != "" && len(r.EncryptedPassword) > 0 {
 		key, ok := session.GetSharedKey(r.KeyId)
 		if !ok {
-			slog.Warn("SudoExec: shared key not found or expired", "session_id", session.id, "key_id", r.KeyId)
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
-				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "encryption key not found or expired — re-negotiate key"},
+				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "encryption key not found or expired"},
 			}}), nil
 		}
 		dec, err := decryptWithKey(r.EncryptedPassword, key)
 		zeroBytes(key)
 		if err != nil {
-			slog.Error("SudoExec: failed to decrypt password", "session_id", session.id, "error", err)
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "failed to decrypt password"},
 			}}), nil
@@ -550,7 +531,6 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 
 	if hasPassword || (r.KeyId != "" && len(r.EncryptedPassword) > 0) {
 		if !hasSudo() {
-			slog.Warn("SudoExec: sudo not available for password auth", "session_id", session.id)
 			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 				Result: &dotfilesdv1.SudoResult{AuthCancelled: true, Stderr: "sudo not available"},
 			}}), nil
@@ -569,23 +549,17 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 				exitCode = -1
 			}
 		}
-		if exitCode != 0 {
-			slog.Warn("SudoExec password auth failed", "session_id", session.id, "command", r.Command, "exit_code", exitCode, "stderr", truncate(stderr.String(), 200))
-		} else {
-			// Cache the password on success.
+		if exitCode == 0 {
 			session.SetSudoCache(passwordToUse, timeout)
-			slog.Debug("SudoExec cached", "session_id", session.id)
 		}
 		resp := connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(exitCode), Stdout: stdout.String(), Stderr: stderr.String()},
 		}})
-		slog.Log(ctx, levelTrace, "SudoExec done", "session_id", session.id, "command", r.Command, "exit_code", exitCode)
 		return resp, nil
 	}
 
 	// No password provided — try cached sudo first.
 	if stdout, stderr, code, ok := s.tryCachedSudo(r.Command, session); ok {
-		slog.Debug("SudoExec cache hit", "session_id", session.id, "command", r.Command)
 		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
 			Result: &dotfilesdv1.SudoResult{ExitCode: int32(code), Stdout: stdout, Stderr: stderr},
 		}}), nil
@@ -738,7 +712,6 @@ func (s *execServer) BackgroundExec(
 
 		// Try cached sudo first.
 		if _, _, _, ok := s.tryCachedSudo(command, session); ok {
-			slog.Debug("BackgroundExec cache hit", "session_id", session.id)
 			cmd = exec.Command("sudo", "-n", "sh", "-c", command)
 		} else {
 			vars := session.Variables()
@@ -764,9 +737,7 @@ func (s *execServer) BackgroundExec(
 				defer zeroBytes(pwd)
 				cmd = exec.Command("sudo", "-S", "sh", "-c", command)
 				cmd.Stdin = strings.NewReader(string(pwd))
-				// Cache optimistically — password was just accepted by sudo -S.
 				session.SetSudoCache(password, timeout)
-				slog.Debug("BackgroundExec sudo cached", "session_id", session.id)
 			} else {
 				return connect.NewError(connect.CodeFailedPrecondition,
 					fmt.Errorf("no sudo method available"))

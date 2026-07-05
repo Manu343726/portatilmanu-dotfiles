@@ -419,9 +419,7 @@ func (c *Clients) Connect(ctx context.Context) error {
 	// Negotiate an ephemeral ECDH key for encrypting sudo passwords.
 	// This is best-effort — if the daemon doesn't support it (old version),
 	// we fall back to the legacy plaintext approach.
-	if err := c.negotiateKey(ctx, "sudo"); err != nil {
-		slog.Debug("sudo key negotiation skipped (continuing with unencrypted passwords)", "error", err)
-	}
+	_ = c.negotiateKey(ctx, "sudo")
 	return nil
 }
 
@@ -458,7 +456,6 @@ func (c *Clients) negotiateKey(ctx context.Context, keyID string) error {
 	}
 
 	setCryptoKey(keyID, secret)
-	slog.Debug("key negotiated", "key_id", keyID, "session_id", c.SessionID)
 	return nil
 }
 

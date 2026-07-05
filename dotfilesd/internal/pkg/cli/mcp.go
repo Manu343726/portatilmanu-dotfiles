@@ -756,7 +756,6 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 				passwordCh: passwordCh,
 			}
 			pendingRequests.Store(requestID, pending)
-			slog.Debug("blocking exec_run for sudo password", "request_id", requestID, "command", p.Command)
 
 			// Send a tool-input notification BEFORE blocking. This tells
 			// VS Code to show the webview and forward the tool arguments
