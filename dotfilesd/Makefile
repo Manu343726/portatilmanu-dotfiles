@@ -187,31 +187,22 @@ plugin-build: plugin-proto plugin-oapi-codegen
 	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
 	@echo "plugin '$(PLUGIN)' built."
 
-# Generate OpenAPI client for a specific plugin: make plugin-oapi-codegen PLUGIN=zerotier
+# Generate OpenAPI client for a specific plugin from api/*.yaml specs.
+# Output goes to api/gen/client.gen.go (package gen).
 plugin-oapi-codegen:
 	@if [ -z "$(PLUGIN)" ]; then \
 		echo "Usage: make plugin-oapi-codegen PLUGIN=<name>"; \
 		exit 1; \
 	fi
-	@if [ -f "$(PLUGIN_DIR)/$(PLUGIN)/api/zerotier-central.yaml" ]; then \
+	@spec=$$(ls "$(PLUGIN_DIR)/$(PLUGIN)/api"/*.yaml 2>/dev/null | head -1); \
+	if [ -n "$$spec" ]; then \
+		mkdir -p "$(PLUGIN_DIR)/$(PLUGIN)/api/gen"; \
 		PATH="$(HOME)/go/bin:$(PATH)" oapi-codegen \
-			-package ztcentral \
+			-package gen \
 			-generate types,client,spec \
-			-o "$(PLUGIN_DIR)/$(PLUGIN)/api/ztcentral/client.gen.go" \
-			"$(PLUGIN_DIR)/$(PLUGIN)/api/zerotier-central.yaml"; \
+			-o "$(PLUGIN_DIR)/$(PLUGIN)/api/gen/client.gen.go" \
+			"$$spec"; \
 		echo "  oapi-codegen for '$(PLUGIN)' done."; \
-	else \
-		if [ -d "$(PLUGIN_DIR)/$(PLUGIN)/api" ]; then \
-			spec=$$(ls "$(PLUGIN_DIR)/$(PLUGIN)/api"/*.yaml 2>/dev/null | head -1); \
-			if [ -n "$$spec" ]; then \
-				PATH="$(HOME)/go/bin:$(PATH)" oapi-codegen \
-					-package ztcentral \
-					-generate types,client,spec \
-					-o "$(PLUGIN_DIR)/$(PLUGIN)/api/ztcentral/client.gen.go" \
-					"$$spec"; \
-				echo "  oapi-codegen for '$(PLUGIN)' done."; \
-			fi; \
-		fi; \
 	fi
 
 # Compile proto files for a specific plugin: make plugin-proto PLUGIN=weather

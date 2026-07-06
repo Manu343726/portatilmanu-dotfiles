@@ -80,7 +80,8 @@ type handshake struct {
 	Description string `json:"description,omitempty"`
 }
 
-// stepAPIClient generates an OpenAPI client if the plugin has an api/*.yaml spec.
+// stepAPIClient generates OpenAPI clients from api/*.yaml specs.
+// Each spec generates code into api/gen/client.gen.go (package gen).
 func stepAPIClient(sourceDir string) error {
 	specMatches, err := filepath.Glob(filepath.Join(sourceDir, "api", "*.yaml"))
 	if err != nil || len(specMatches) == 0 {
@@ -90,14 +91,14 @@ func stepAPIClient(sourceDir string) error {
 	goBin := filepath.Join(home, "go", "bin")
 
 	for _, specFile := range specMatches {
-		outDir := filepath.Join(sourceDir, "api", "ztcentral")
+		outDir := filepath.Join(sourceDir, "api", "gen")
 		outFile := filepath.Join(outDir, "client.gen.go")
 		if err := os.MkdirAll(outDir, 0o755); err != nil {
-			return fmt.Errorf("mkdir api/ztcentral: %w", err)
+			return fmt.Errorf("mkdir api/gen: %w", err)
 		}
 
 		cmd := exec.Command(filepath.Join(goBin, "oapi-codegen"),
-			"--package=ztcentral",
+			"--package=gen",
 			"--generate=types,client,spec",
 			"-o", outFile,
 			specFile,
