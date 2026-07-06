@@ -690,6 +690,14 @@ func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv
 	if doc == nil {
 		return
 	}
+
+	// Build a map of top-level enum docs by FQN for quick lookup.
+	enumDocs := map[string]*dotfilesdv1.EnumDoc{}
+	for _, ed := range doc.Enums {
+		fqn := doc.Package + "." + ed.Name
+		enumDocs[fqn] = ed
+	}
+
 	for _, svc := range schemas {
 		for _, sd := range doc.Services {
 			if sd.Name == svc.Name {
@@ -698,8 +706,8 @@ func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv
 					for _, md := range sd.Methods {
 						if md.Name == m.Name {
 							m.Description = md.Description
-							enrichMessageSchema(m.Request, md.Request)
-							enrichMessageSchema(m.Response, md.Response)
+							enrichMessageSchema(m.Request, md.Request, enumDocs)
+							enrichMessageSchema(m.Response, md.Response, enumDocs)
 							break
 						}
 					}
@@ -711,8 +719,9 @@ func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv
 }
 
 // enrichMessageSchema recursively propagates MessageDoc descriptions
-// (message, fields, nested messages) into a MessageSchema.
-func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageDoc) {
+// (message, fields, nested messages, nested enums) into a MessageSchema.
+// enumDocs is a map of top-level enum docs by FQN (may be empty).
+func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageDoc, enumDocs map[string]*dotfilesdv1.EnumDoc) {
 	if ms == nil || md == nil {
 		return
 	}
@@ -725,12 +734,51 @@ func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageD
 			}
 		}
 	}
+	// Enrich enum value descriptions — from nested enum docs first,
+	// then top-level enum docs, then inline field-level EnumSchema.
+	for _, es := range ms.Enums {
+		enrichEnumValues(es, md.NestedEnums, enumDocs)
+	}
+	// Also enrich inline EnumSchema on fields (e.g. MemberStatus used by
+	// a field that references a top-level enum type).
+	for _, f := range ms.Fields {
+		if f.EnumSchema != nil {
+			enrichEnumValues(f.EnumSchema, md.NestedEnums, enumDocs)
+		}
+	}
 	for _, nested := range ms.Messages {
 		for _, nd := range md.NestedMessages {
 			if nd.Name == nested.Name {
-				enrichMessageSchema(nested, nd)
+				enrichMessageSchema(nested, nd, enumDocs)
 				break
 			}
+		}
+	}
+}
+
+// enrichEnumValues propagates EnumValueDoc descriptions into an
+// EnumSchema's Values, looking up docs from nested or top-level sources.
+func enrichEnumValues(es *dotfilesdv1.EnumSchema, nestedEnums []*dotfilesdv1.EnumDoc, enumDocs map[string]*dotfilesdv1.EnumDoc) {
+	var ed *dotfilesdv1.EnumDoc
+	for _, ned := range nestedEnums {
+		if ned.Name == es.Name {
+			ed = ned
+			break
+		}
+	}
+	if ed == nil {
+		ed = enumDocs[es.Name]
+	}
+	if ed == nil {
+		return
+	}
+	byName := map[string]*dotfilesdv1.EnumValueDoc{}
+	for _, vd := range ed.Values {
+		byName[vd.Name] = vd
+	}
+	for _, ev := range es.Values {
+		if vd, ok := byName[ev.Name]; ok {
+			ev.Description = vd.Description
 		}
 	}
 }

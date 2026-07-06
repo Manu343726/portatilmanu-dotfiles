@@ -5,12 +5,15 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -84,13 +87,17 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 			runE := makeRunEProtoFromSchema(p.URL, p.DaemonURL, svc.Name, m)
 			methodShort := descOr(firstLine(m.Description), fmt.Sprintf("%s.%s", shortSvcName(svc.Name), m.Name))
 
+			enums := make(map[string]*dotfilesdv1.EnumSchema)
 			if elideRPC {
-				addFlagsFromSchema(svcCmd, m.Request, "")
+				addFlagsFromSchema(svcCmd, m.Request, "", enums)
 				svcCmd.RunE = runE
 				if !elideSvc {
 					svcCmd.Use = fmt.Sprintf("%s [flags]", svcCmd.Use)
 					svcCmd.Short = methodShort
 					svcCmd.Long = fmt.Sprintf("%s/%s\n\n%s", svc.Name, m.Name, m.Description)
+				}
+				if appendix := enumAppendix(enums); appendix != "" {
+					svcCmd.Long += "\n\n" + appendix
 				}
 			} else {
 				rpcCmd := &cobra.Command{
@@ -99,7 +106,10 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 					Long:  fmt.Sprintf("%s/%s\n\n%s", svc.Name, m.Name, m.Description),
 					RunE:  runE,
 				}
-				addFlagsFromSchema(rpcCmd, m.Request, "")
+				addFlagsFromSchema(rpcCmd, m.Request, "", enums)
+				if appendix := enumAppendix(enums); appendix != "" {
+					rpcCmd.Long += "\n\n" + appendix
+				}
 				svcCmd.AddCommand(rpcCmd)
 			}
 		}
@@ -158,15 +168,54 @@ func buildStaticPluginCommand(p PluginRegistryInfo) *cobra.Command {
 // Schema-based cobra flag generation
 // ─────────────────────────────────────────────
 
+// enumRefSuffix returns a "see <shortName> enum below" suffix for a type name.
+func enumRefSuffix(typeName string) string {
+	if typeName == "" {
+		return ""
+	}
+	short := typeName
+	if idx := strings.LastIndex(typeName, "."); idx >= 0 {
+		short = typeName[idx+1:]
+	}
+	return fmt.Sprintf(" (see %s enum below)", short)
+}
+
+// enumAppendix formats all collected enums as a help appendix block.
+func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
+	if len(enums) == 0 {
+		return ""
+	}
+	// Sort for deterministic output.
+	names := make([]string, 0, len(enums))
+	for name := range enums {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var b strings.Builder
+	b.WriteString("Enum details:\n")
+	for _, name := range names {
+		es := enums[name]
+		short := name
+		if idx := strings.LastIndex(name, "."); idx >= 0 {
+			short = name[idx+1:]
+		}
+		fmt.Fprintf(&b, "  %s\n", short)
+		for _, v := range es.Values {
+			fmt.Fprintf(&b, "    %s = %d\n", v.Name, v.Number)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
 // addFlagsFromSchema recursively adds cobra flags from a registry MessageSchema.
-func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, prefix string) {
+// enums collects referenced enum schemas keyed by fully-qualified type name.
+func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, prefix string, enums map[string]*dotfilesdv1.EnumSchema) {
 	for _, fs := range msg.Fields {
 		flagName := camelToKebab(prefix + fs.Name)
 		desc := flagDescription(fs)
 
 		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
-			// Repeated message fields use StringToString with the pattern
-			// --field [<index>].<subfield-path>=<value>, e.g. --a [0].b.c=1 --a [1].b.c=2
 			cmd.Flags().StringToString(flagName, nil,
 				"Repeated "+fs.TypeName+". Usage: --"+flagName+" [<idx>].<field>=<value>")
 			continue
@@ -174,16 +223,16 @@ func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pref
 
 		switch fs.Label {
 		case dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED:
-			addRepeatedFlag(cmd, flagName, fs, desc)
+			addRepeatedFlag(cmd, flagName, fs, desc, enums)
 
 		default:
-			addScalarFlag(cmd, flagName, fs, desc, msg)
+			addScalarFlag(cmd, flagName, fs, desc, msg, enums)
 		}
 	}
 }
 
 // addScalarFlag registers a single cobra flag from a FieldSchema.
-func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string, parentMsg *dotfilesdv1.MessageSchema) {
+func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string, parentMsg *dotfilesdv1.MessageSchema, enums map[string]*dotfilesdv1.EnumSchema) {
 	fullDesc := desc
 	if fs.TypeName != "" {
 		fullDesc = desc + " (" + fs.TypeName + ")"
@@ -228,7 +277,7 @@ func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSch
 	case dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE:
 		nested := findNestedMessageInSchema(parentMsg, fs.TypeName)
 		if nested != nil {
-			addFlagsFromSchema(cmd, nested, flagName+".")
+			addFlagsFromSchema(cmd, nested, flagName+".", enums)
 		} else {
 			cmd.Flags().String(flagName, "", fullDesc+" (unknown message)")
 		}
@@ -239,7 +288,13 @@ func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSch
 }
 
 // addRepeatedFlag registers a repeated cobra flag from a FieldSchema.
-func addRepeatedFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string) {
+func addRepeatedFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string, enums map[string]*dotfilesdv1.EnumSchema) {
+	// Collect enum schemas from repeated enum fields.
+	if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM && fs.EnumSchema != nil {
+		enums[fs.TypeName] = fs.EnumSchema
+		desc += enumRefSuffix(fs.TypeName)
+	}
+
 	switch fs.Kind {
 	case dotfilesdv1.FieldKind_FIELD_KIND_STRING:
 		cmd.Flags().StringSlice(flagName, nil, desc+" (repeated)")
@@ -415,13 +470,21 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 		}
 
 		// Receive streaming response.
+		var streamErr error
+	loop:
 		for {
 			msg, err := stream.Receive()
 			if err != nil {
-				break
+				// EOF is normal — the plugin's RPC returned successfully
+				// and closed the stream. Treat it as a clean exit.
+				if !errors.Is(err, io.EOF) {
+					streamErr = err
+				}
+				break loop
 			}
 			if msg.Error != "" {
-				return fmt.Errorf("plugin error: %s", msg.Error)
+				streamErr = fmt.Errorf("plugin error: %s", msg.Error)
+				break loop
 			}
 			if len(msg.StdoutChunk) > 0 {
 				// No \n→\r\n conversion — PTY output from tview already
@@ -450,24 +513,34 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			// is not printed — it's only used for JSON/programmatic access.
 		}
 
-		// Clean up: close the stream request side, restore terminal state,
-		// then unblock the stdin goroutine and wait for it to finish.
+		// Clean up: close the stream, restore terminal, kill stdin goroutine.
 		_ = stream.CloseRequest()
 
 		// Restore terminal BEFORE closing stdin (needs a valid fd).
+		// Also print a newline to separate error output from the TUI content.
 		if oldTermState != nil {
 			_ = term.Restore(int(os.Stdin.Fd()), oldTermState)
+			fmt.Fprintln(os.Stderr)
 			oldTermState = nil // prevent defer from running again
 		}
 
+		// Immediately kill the stdin goroutine by closing stdin.
+		// Without this, the goroutine blocks on os.Stdin.Read() and the
+		// CLI won't exit until the user presses keys that drain through.
 		if stdinDone != nil {
-			select {
-			case <-stdinDone:
-			case <-time.After(50 * time.Millisecond):
-				os.Stdin.Close()
-				<-stdinDone
-			}
+			os.Stdin.Close()
+			<-stdinDone
 		}
+
+		// Log a detailed error if the stream failed, so the user sees
+		// what happened (e.g. daemon restart, connection lost) instead
+		// of a broken TUI display with mixed error text.
+		if streamErr != nil {
+			slog.Error("plugin call failed", "plugin", svcName, "method", m.Name, "error", streamErr)
+			fmt.Fprintf(os.Stderr, "error: %v\n", streamErr)
+			return streamErr
+		}
+
 		return nil
 	}
 }
