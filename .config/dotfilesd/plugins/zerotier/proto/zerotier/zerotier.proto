@@ -13,8 +13,79 @@ service ZeroTierService {
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
 }
 
+// ── Enums ───────────────────────────────────────────────────────────────────
+
+// Connection status filter for network members.
+enum MemberStatus {
+  MEMBER_STATUS_UNSPECIFIED = 0;  // no filter
+  MEMBER_STATUS_ONLINE = 1;
+  MEMBER_STATUS_OFFLINE = 2;
+  MEMBER_STATUS_AUTHORIZED = 3;   // online or offline, but authorized
+  MEMBER_STATUS_UNAUTHORIZED = 4;
+}
+
+// Columns available for table display output.
+enum Column {
+  COLUMN_UNSPECIFIED = 0;
+  COLUMN_NODE_ID = 1;
+  COLUMN_NAME = 2;
+  COLUMN_IP = 3;
+  COLUMN_STATUS = 4;
+  COLUMN_DESCRIPTION = 5;
+  COLUMN_VERSION = 6;
+  COLUMN_PHYSICAL_ADDRESS = 7;
+}
+
+// Output format for human-readable display output.
+enum OutputFormat {
+  OUTPUT_FORMAT_UNSPECIFIED = 0;  // default (table)
+  OUTPUT_FORMAT_TABLE = 1;
+  OUTPUT_FORMAT_RAW = 2;          // key: value lines per member
+}
+
+// ── Requests / Responses ─────────────────────────────────────────────────────
+
 message ListNetworksRequest {}
 
+message ListMembersRequest {
+  // Network ID to list members for (e.g. "8056c2e21c000001").
+  // If empty and the account has exactly one network, it is auto-detected.
+  string network_id = 1;
+
+  // Optional filters to narrow the member list.
+  MemberFilter filter = 2;
+
+  // Optional display options for human-readable output.
+  // When absent, defaults to table format with standard columns.
+  DisplayOptions display = 3;
+}
+
+// Filters applied to the member list before returning.
+message MemberFilter {
+  // Only include members matching this connection status.
+  // Unset means no status filter.
+  MemberStatus status = 1;
+  // Case-insensitive substring match against the member name.
+  // Empty means no name filter.
+  string name_substring = 2;
+}
+
+// Controls how members are rendered in human-readable output.
+message DisplayOptions {
+  // Columns to include. Empty or unspecified means the server default:
+  // node_id, name, ip, status.
+  repeated Column fields = 1;
+  // Output rendering format. Unset means table.
+  OutputFormat format = 2;
+}
+
+// ── Data types ───────────────────────────────────────────────────────────────
+
+message ListNetworksResponse {
+  repeated Network networks = 1;
+}
+
+// A ZeroTier network.
 message Network {
   // ZeroTier network ID (e.g. "8056c2e21c000001").
   string id = 1;
@@ -28,42 +99,23 @@ message Network {
   int64 creation_time = 5;
 }
 
-message ListNetworksResponse {
-  repeated Network networks = 1;
-}
-
-message ListMembersRequest {
-  // Network ID to list members for (e.g. "8056c2e21c000001").
-  // If empty and the account has exactly one network, it is auto-detected.
-  string network_id = 1;
-  // Filter by connection status: "online", "offline", "authorized",
-  // "unauthorized", or empty for all.
-  string status = 2;
-  // Filter by name substring (case-insensitive).
-  string name_filter = 3;
-  // Comma-separated columns for table output. Supported values:
-  // node_id, name, ip, status, description, version, physical_address.
-  // Use "all" for every column. Default: "node_id,name,ip,status".
-  string fields = 4;
-  // Output format for human-readable stdout: "table" (default) or "raw"
-  // (key: value lines per member).
-  string output = 5;
-}
-
+// A member (peer) of a ZeroTier network.
 message Member {
-  // ZeroTier member/peer ID (same as node_id).
+  // ZeroTier member/peer ID (10 hex characters, e.g. "3eb9637a20").
   string id = 1;
   string node_id = 2;
   // Human-readable name assigned in ZeroTier Central.
   string name = 3;
+  // Optional description for this member.
   string description = 4;
   // Whether this member is authorized on the network.
   bool authorized = 5;
   // Assigned IP addresses (e.g. ["10.147.20.1"]).
+  // Empty if the member has no IP assignment or is not authorized.
   repeated string ip_assignments = 6;
-  // Unix timestamp of last online time.
+  // Unix timestamp (seconds) of last online time. 0 if never seen.
   int64 last_online = 7;
-  // Whether the member is currently online (based on lastOnline recency).
+  // Whether the member is currently online (heuristic: lastOnline < 5 min ago).
   bool online = 8;
   // Physical internet address (e.g. "1.2.3.4:9993").
   string physical_address = 9;

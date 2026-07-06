@@ -6,6 +6,8 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
 
 ## Rules
 
+0. **Follow protobuf RPC design patterns.** Before designing or modifying any `.proto` file, read `~/dotfilesd/docs/proto-design.md`. Use enums for option sets, `repeated` for multi-value fields (never comma-separated strings), and sub-messages for grouping. Load the `proto-design` skill when working on proto files.
+
 1. **Always commit and push changes to both remotes.** After modifying any tracked file (dotfiles, daemon source, CLI source, docs, etc.), stage and commit with a descriptive message, then push. The `origin` remote has two push URLs — GitHub (`git@github.com:Manu343726/portatilmanu-dotfiles`) and the internal LAN server. A plain `git push` pushes to **both**. Always verify the push succeeds.
 
 2. **Read docs first.** Before doing any work, read `~/dotfilesd/README.md` and `~/dotfilesd/docs/` for context. Follow the development guide in `docs/development.md`.

@@ -10,7 +10,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -267,6 +269,21 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 		if err != nil {
 			return fmt.Errorf("build request body: %w", err)
 		}
+
+		// Inject terminal dimensions into the request body for interactive
+		// TUI methods (e.g. tuidiag's Watch). The plugin uses these to
+		// size the PTY correctly from the start.
+		if m.NeedsInteractiveStdin && term.IsTerminal(int(os.Stdin.Fd())) {
+			if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil {
+				if _, ok := body["terminalWidth"]; !ok {
+					body["terminalWidth"] = int32(w)
+				}
+				if _, ok := body["terminalHeight"]; !ok {
+					body["terminalHeight"] = int32(h)
+				}
+			}
+		}
+
 		jsonBytes, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("marshal request: %w", err)
@@ -318,9 +335,9 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 		}
 
 		// Set terminal to raw mode for interactive input when the method
-		// needs it (e.g. TUI games). For non-interactive methods (the common
-		// case), stdin forwarding is skipped entirely so the command exits
-		// cleanly when the plugin response arrives.
+		// needs it (e.g. TUI games, TUI diagnostics). For non-interactive
+		// methods (the common case), stdin forwarding is skipped entirely
+		// so the command exits cleanly when the plugin response arrives.
 		var (
 			oldTermState *term.State
 			stdinDone    chan struct{}
@@ -339,8 +356,32 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 			}
 		}()
 
-		if oldTermState != nil {
+		// Forward SIGWINCH (terminal resize) to the plugin's PTY.
+		sigwinch := make(chan os.Signal, 1)
+		if m.NeedsInteractiveStdin && oldTermState != nil {
+			signal.Notify(sigwinch, syscall.SIGWINCH)
+		}
+		defer signal.Stop(sigwinch)
+		go func() {
+			for range sigwinch {
+				w, h, err := term.GetSize(int(os.Stdin.Fd()))
+				if err != nil {
+					continue
+				}
+				_ = stream.Send(&dotfilesdv1.CallPluginMessage{
+					WindowSize: &dotfilesdv1.WindowSize{
+						Width:  int32(w),
+						Height: int32(h),
+					},
+				})
+			}
+		}()
+
+		if m.NeedsInteractiveStdin {
 			// Forward local stdin to the plugin in a background goroutine.
+			// No \r→\n conversion — TUI plugins (tview) need raw bytes,
+			// and line-based plugins (games) handle this via the plugin
+			// SDK's ReadStdin path which converts \r→\n internally.
 			stdinDone = make(chan struct{}, 1)
 			go func() {
 				defer func() { stdinDone <- struct{}{} }()
@@ -360,9 +401,6 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 							os.Exit(130)
 						}
 
-						// In raw mode the terminal sends \r instead of \n on Enter.
-						// Convert to \n so the plugin's ReadString('\n') works.
-						data = bytes.ReplaceAll(data, []byte{'\r'}, []byte{'\n'})
 						if err := stream.Send(&dotfilesdv1.CallPluginMessage{
 							StdinChunk: data,
 						}); err != nil {
@@ -386,11 +424,9 @@ func makeRunEProtoFromSchema(pluginURL, daemonURL, svcName string, m *dotfilesdv
 				return fmt.Errorf("plugin error: %s", msg.Error)
 			}
 			if len(msg.StdoutChunk) > 0 {
-				out := msg.StdoutChunk
-				if oldTermState != nil {
-					out = bytes.ReplaceAll(out, []byte{'\n'}, []byte{'\r', '\n'})
-				}
-				fmt.Print(string(out))
+				// No \n→\r\n conversion — PTY output from tview already
+				// uses proper line endings for raw terminal mode.
+				fmt.Print(string(msg.StdoutChunk))
 			}
 			if len(msg.StderrChunk) > 0 {
 				out := msg.StderrChunk
@@ -449,11 +485,29 @@ func buildJSONFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pre
 	result := make(map[string]any)
 	for _, fs := range msg.Fields {
 		flagName := camelToKebab(prefix + fs.Name)
-		if !cmd.Flags().Changed(flagName) {
+		fieldName := fs.Name
+
+		if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE && fs.Label != dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED {
+			// For message fields, recurse even if the parent flag wasn't
+			// directly set — nested flags (e.g. --filter.status) set the
+			// child flags, not the parent. The recursive call checks each
+			// nested flag individually.
+			nested := findNestedMessageInSchema(msg, fs.TypeName)
+			if nested != nil {
+				sub, err := buildJSONFromSchema(cmd, nested, flagName+".")
+				if err != nil {
+					return nil, fmt.Errorf("field %q: %w", fieldName, err)
+				}
+				if len(sub) > 0 {
+					result[fieldName] = sub
+				}
+			}
 			continue
 		}
 
-		fieldName := fs.Name
+		if !cmd.Flags().Changed(flagName) {
+			continue
+		}
 
 		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
 			arr, err := buildRepeatedMessageFromSchema(cmd, flagName, fs, msg)
@@ -714,12 +768,6 @@ func buildScalarFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.
 	case dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
 		v, _ := cmd.Flags().GetString(flagName)
 		return v, nil
-	case dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE:
-		nested := findNestedMessageInSchema(parentMsg, fs.TypeName)
-		if nested != nil {
-			return buildJSONFromSchema(cmd, nested, flagName+".")
-		}
-		return nil, nil
 	default:
 		return nil, nil
 	}

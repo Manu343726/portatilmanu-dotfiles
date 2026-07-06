@@ -2,47 +2,18 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"dotfilesd/plugin"
+	"plugins/zerotier/api/ztcentral"
 	pb "plugins/zerotier/proto/zerotier"
 	"plugins/zerotier/proto/zerotier/zerotierconnect"
 
 	"connectrpc.com/connect"
 )
-
-const centralAPI = "https://api.zerotier.com/api/v1"
-
-// ztNetwork is the relevant portion of ZeroTier Central's /network response.
-type ztNetwork struct {
-	ID               string `json:"id"`
-	TotalMemberCount int    `json:"totalMemberCount"`
-	CreationTime     int64  `json:"creationTime"`
-	Config           struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	} `json:"config"`
-}
-
-// ztMember is the relevant portion of ZeroTier Central's /network/{id}/member response.
-type ztMember struct {
-	ID              string `json:"id"`
-	NodeID          string `json:"nodeId"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	PhysicalAddress string `json:"physicalAddress"`
-	ClientVersion   string `json:"clientVersion"`
-	LastOnline      int64  `json:"lastOnline"`
-	Config          struct {
-		Authorized    bool     `json:"authorized"`
-		IPAssignments []string `json:"ipAssignments"`
-	} `json:"config"`
-}
 
 // zeroTierService implements the ZeroTierService RPCs.
 type zeroTierService struct{}
@@ -56,27 +27,32 @@ func (s *zeroTierService) ListNetworks(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("no daemon context"))
 	}
 
-	token, err := pc.GetSecret("api_token")
+	api, token, err := newZTClient(pc)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("zerotier api_token not configured: %w.\n\n  Run: echo 'zerotier:\n  api_token: \"<token>\"' >> ~/.config/dotfilesd/secrets.yaml\n  Then: systemctl --user restart dotfilesd", err))
+		return nil, err
 	}
 	defer zeroBytes(token)
 
-	raw, err := ztGet[[]ztNetwork](ctx, "/network", string(token))
+	resp, err := api.GetNetworkListWithResponse(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("zerotier api error: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("zerotier api error: %w", err))
+	}
+	if resp.JSON200 == nil {
+		return nil, apiError(resp.HTTPResponse)
 	}
 
-	networks := make([]*pb.Network, 0, len(raw))
-	for _, n := range raw {
+	networks := make([]*pb.Network, 0, len(*resp.JSON200))
+	for _, n := range *resp.JSON200 {
+		name := ""
+		if n.Config != nil && n.Config.Name != nil {
+			name = *n.Config.Name
+		}
 		networks = append(networks, &pb.Network{
-			Id:          n.ID,
-			Name:        n.Config.Name,
-			Description: n.Config.Description,
-			MemberCount: int32(n.TotalMemberCount),
-			CreationTime: n.CreationTime,
+			Id:           safeStr(n.Id),
+			Name:         name,
+			Description:  safeStr(n.Description),
+			MemberCount:  int32(safeInt(n.TotalMemberCount)),
+			CreationTime: safeInt64(n.Clock),
 		})
 	}
 
@@ -112,47 +88,60 @@ func (s *zeroTierService) ListMembers(
 		networkID = id
 	}
 
-	token, err := pc.GetSecret("api_token")
+	api, token, err := newZTClient(pc)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("zerotier api_token not configured: %w.\n\n  Run: echo 'zerotier:\n  api_token: \"<token>\"' >> ~/.config/dotfilesd/secrets.yaml\n  Then: systemctl --user restart dotfilesd", err))
+		return nil, err
 	}
 	defer zeroBytes(token)
 
-	path := fmt.Sprintf("/network/%s/member", networkID)
-	raw, err := ztGet[[]ztMember](ctx, path, string(token))
+	resp, err := api.GetNetworkMemberListWithResponse(ctx, networkID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("zerotier api error: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("zerotier api error: %w", err))
+	}
+	if resp.JSON200 == nil {
+		return nil, apiError(resp.HTTPResponse)
 	}
 
-	now := time.Now().Unix()
-	members := make([]*pb.Member, 0, len(raw))
-	for _, m := range raw {
-		online := m.LastOnline > 0 && (now-m.LastOnline) < 300
+	nowMs := time.Now().UnixMilli()
+	members := make([]*pb.Member, 0, len(*resp.JSON200))
+	for _, m := range *resp.JSON200 {
+		lastOnline := safeInt64(m.LastOnline)
+		online := lastOnline > 0 && (nowMs-lastOnline) < 300_000 // 5 min in ms
+		authorized := false
+		var ipAssignments []string
+		if m.Config != nil {
+			if m.Config.Authorized != nil {
+				authorized = *m.Config.Authorized
+			}
+			if m.Config.IpAssignments != nil {
+				ipAssignments = *m.Config.IpAssignments
+			}
+		}
 		members = append(members, &pb.Member{
-			Id:              m.ID,
-			NodeId:          m.NodeID,
-			Name:            m.Name,
-			Description:     m.Description,
-			Authorized:      m.Config.Authorized,
-			IpAssignments:   m.Config.IPAssignments,
-			LastOnline:      m.LastOnline,
+			Id:              safeStr(m.Id),
+			NodeId:          safeStr(m.NodeId),
+			Name:            safeStr(m.Name),
+			Description:     safeStr(m.Description),
+			Authorized:      authorized,
+			IpAssignments:   ipAssignments,
+			LastOnline:      lastOnline,
 			Online:          online,
-			PhysicalAddress: m.PhysicalAddress,
-			ClientVersion:   m.ClientVersion,
+			PhysicalAddress: safeStr(m.PhysicalAddress),
+			ClientVersion:   safeStr(m.ClientVersion),
 		})
 	}
 
-	members = filterMembers(members, req.Msg.Status, req.Msg.NameFilter)
+	filter := req.Msg.GetFilter()
+	members = filterMembers(members, filter.GetStatus(), filter.GetNameSubstring())
 
 	if pc.RenderOutput() {
 		if len(members) == 0 {
 			fmt.Fprintln(pc.Stdout(), "No members match the current filters.")
 		} else {
-			cols := parseColumns(req.Msg.Fields)
-			switch req.Msg.Output {
-			case "raw":
+			display := req.Msg.GetDisplay()
+			cols := resolveColumns(display.GetFields())
+			switch display.GetFormat() {
+			case pb.OutputFormat_OUTPUT_FORMAT_RAW:
 				printMembersRaw(pc, members, networkID, cols)
 			default:
 				printMembersTable(pc, members, networkID, cols)
@@ -163,29 +152,85 @@ func (s *zeroTierService) ListMembers(
 	return connect.NewResponse(&pb.ListMembersResponse{Members: members}), nil
 }
 
-// filterMembers applies status and name filters to the member list.
-func filterMembers(members []*pb.Member, status, nameFilter string) []*pb.Member {
+// ── ZeroTier API client ─────────────────────────────────────────────────────
+
+func newZTClient(pc plugin.Context) (*ztcentral.ClientWithResponses, []byte, error) {
+	token, err := pc.GetSecret("api_token")
+	if err != nil {
+		return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("zerotier api_token not configured: %w.\n\n  Run: echo 'zerotier:\n  api_token: \"<token>\"' >> ~/.config/dotfilesd/secrets.yaml\n  Then: systemctl --user restart dotfilesd", err))
+	}
+
+	ztAPI, err := ztcentral.NewClientWithResponses(
+		"https://api.zerotier.com/api/v1",
+		ztcentral.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
+			req.Header.Set("Authorization", "bearer "+string(token))
+			return nil
+		}),
+	)
+	if err != nil {
+		zeroBytes(token)
+		return nil, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create api client: %w", err))
+	}
+
+	return ztAPI, token, nil
+}
+
+func apiError(resp *http.Response) error {
+	if resp == nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("empty response from ZeroTier API"))
+	}
+	return connect.NewError(connect.CodeInternal,
+		fmt.Errorf("zerotier api error (HTTP %d)", resp.StatusCode))
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+func safeStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func safeInt64(i *int64) int64 {
+	if i == nil {
+		return 0
+	}
+	return *i
+}
+
+func safeInt(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
+}
+
+// ── Filter ───────────────────────────────────────────────────────────────────
+
+func filterMembers(members []*pb.Member, status pb.MemberStatus, nameSubstring string) []*pb.Member {
 	out := make([]*pb.Member, 0, len(members))
 	for _, m := range members {
-		switch strings.ToLower(status) {
-		case "online":
-			if !m.Online || !m.Authorized {
+		switch status {
+		case pb.MemberStatus_MEMBER_STATUS_ONLINE:
+			if !m.Online {
 				continue
 			}
-		case "offline":
-			if m.Online || !m.Authorized {
+		case pb.MemberStatus_MEMBER_STATUS_OFFLINE:
+			if m.Online {
 				continue
 			}
-		case "authorized":
+		case pb.MemberStatus_MEMBER_STATUS_AUTHORIZED:
 			if !m.Authorized {
 				continue
 			}
-		case "unauthorized":
+		case pb.MemberStatus_MEMBER_STATUS_UNAUTHORIZED:
 			if m.Authorized {
 				continue
 			}
 		}
-		if nameFilter != "" && !strings.Contains(strings.ToLower(m.Name), strings.ToLower(nameFilter)) {
+		if nameSubstring != "" && !strings.Contains(strings.ToLower(m.Name), strings.ToLower(nameSubstring)) {
 			continue
 		}
 		out = append(out, m)
@@ -193,47 +238,43 @@ func filterMembers(members []*pb.Member, status, nameFilter string) []*pb.Member
 	return out
 }
 
-// colHints defines column metadata for table output.
+// ── Column resolution ────────────────────────────────────────────────────────
+
 type colHint struct {
 	Label string
 	Width int
 	Value func(m *pb.Member) string
 }
 
-var allColumns = map[string]colHint{
-	"node_id":          {"Node ID", 16, func(m *pb.Member) string { return m.NodeId }},
-	"name":             {"Name", 22, func(m *pb.Member) string { return m.Name }},
-	"ip":               {"IPs", 18, func(m *pb.Member) string { return strings.Join(m.IpAssignments, ", ") }},
-	"status":           {"Status", 12, nil},
-	"description":      {"Description", 30, func(m *pb.Member) string { return m.Description }},
-	"version":          {"Version", 10, func(m *pb.Member) string { return m.ClientVersion }},
-	"physical_address": {"Address", 22, func(m *pb.Member) string { return m.PhysicalAddress }},
+var allColumns = map[pb.Column]colHint{
+	pb.Column_COLUMN_NODE_ID:          {"Node ID", 16, func(m *pb.Member) string { return m.NodeId }},
+	pb.Column_COLUMN_NAME:             {"Name", 22, func(m *pb.Member) string { return m.Name }},
+	pb.Column_COLUMN_IP:               {"IPs", 18, func(m *pb.Member) string { return strings.Join(m.IpAssignments, ", ") }},
+	pb.Column_COLUMN_STATUS:           {"Status", 12, nil},
+	pb.Column_COLUMN_DESCRIPTION:      {"Description", 30, func(m *pb.Member) string { return m.Description }},
+	pb.Column_COLUMN_VERSION:          {"Version", 10, func(m *pb.Member) string { return m.ClientVersion }},
+	pb.Column_COLUMN_PHYSICAL_ADDRESS: {"Address", 22, func(m *pb.Member) string { return m.PhysicalAddress }},
 }
 
-var defaultCols = []string{"node_id", "name", "ip", "status"}
-
-// parseColumns parses the comma-separated fields parameter into column names.
-func parseColumns(fields string) []string {
-	if fields == "" {
-		return defaultCols
-	}
-	if fields == "all" {
-		return []string{"node_id", "name", "ip", "status", "description", "version", "physical_address"}
-	}
-	var cols []string
-	for _, f := range strings.Split(fields, ",") {
-		f = strings.TrimSpace(f)
-		if _, ok := allColumns[f]; ok {
-			cols = append(cols, f)
-		}
-	}
-	if len(cols) == 0 {
-		return defaultCols
-	}
-	return cols
+var defaultColumns = []pb.Column{
+	pb.Column_COLUMN_NODE_ID,
+	pb.Column_COLUMN_NAME,
+	pb.Column_COLUMN_IP,
+	pb.Column_COLUMN_STATUS,
 }
 
-// statusLabel returns the colored status label for a member.
+func resolveColumns(fields []pb.Column) []pb.Column {
+	if len(fields) == 0 {
+		return defaultColumns
+	}
+	if len(fields) == 1 && fields[0] == pb.Column_COLUMN_UNSPECIFIED {
+		return defaultColumns
+	}
+	return fields
+}
+
+// ── Output helpers ───────────────────────────────────────────────────────────
+
 func statusLabel(pc plugin.Context, m *pb.Member) string {
 	if !m.Authorized {
 		return pc.Dimf("unauthorized")
@@ -244,8 +285,7 @@ func statusLabel(pc plugin.Context, m *pb.Member) string {
 	return pc.Redf("offline")
 }
 
-// printMembersTable prints members as a formatted table.
-func printMembersTable(pc plugin.Context, members []*pb.Member, networkID string, cols []string) {
+func printMembersTable(pc plugin.Context, members []*pb.Member, networkID string, cols []pb.Column) {
 	onlineCount := 0
 	for _, m := range members {
 		if m.Online {
@@ -275,11 +315,10 @@ func printMembersTable(pc plugin.Context, members []*pb.Member, networkID string
 	for _, m := range members {
 		row := make([]any, len(cols))
 		for i, c := range cols {
-			h := allColumns[c]
-			if c == "status" {
+			if c == pb.Column_COLUMN_STATUS {
 				row[i] = statusLabel(pc, m)
 			} else {
-				row[i] = h.Value(m)
+				row[i] = allColumns[c].Value(m)
 			}
 		}
 		fmt.Fprintf(&buf, colFmt, row...)
@@ -289,13 +328,12 @@ func printMembersTable(pc plugin.Context, members []*pb.Member, networkID string
 	fmt.Fprint(pc.Stdout(), buf.String())
 }
 
-// printMembersRaw prints members as key:value blocks.
-func printMembersRaw(pc plugin.Context, members []*pb.Member, networkID string, cols []string) {
+func printMembersRaw(pc plugin.Context, members []*pb.Member, networkID string, cols []pb.Column) {
 	fmt.Fprintf(pc.Stdout(), "network_id: %s  members: %d\n\n", networkID, len(members))
 	for _, m := range members {
 		for _, c := range cols {
 			h := allColumns[c]
-			if c == "status" {
+			if c == pb.Column_COLUMN_STATUS {
 				fmt.Fprintf(pc.Stdout(), "%s: %s\n", h.Label, statusLabel(pc, m))
 			} else {
 				fmt.Fprintf(pc.Stdout(), "%s: %s\n", h.Label, h.Value(m))
@@ -305,67 +343,35 @@ func printMembersRaw(pc plugin.Context, members []*pb.Member, networkID string, 
 	}
 }
 
-// resolveSingleNetwork fetches the network list and returns the single network ID.
-// Returns an error if there are zero or multiple networks.
 func resolveSingleNetwork(ctx context.Context, pc plugin.Context) (string, error) {
-	token, err := pc.GetSecret("api_token")
+	api, token, err := newZTClient(pc)
 	if err != nil {
-		return "", connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("zerotier api_token not configured: %w", err))
+		return "", err
 	}
 	defer zeroBytes(token)
 
-	raw, err := ztGet[[]ztNetwork](ctx, "/network", string(token))
+	resp, err := api.GetNetworkListWithResponse(ctx)
 	if err != nil {
 		return "", connect.NewError(connect.CodeInternal,
 			fmt.Errorf("zerotier api error: %w", err))
 	}
+	if resp.JSON200 == nil {
+		return "", apiError(resp.HTTPResponse)
+	}
 
-	switch len(raw) {
+	switch len(*resp.JSON200) {
 	case 0:
 		return "", connect.NewError(connect.CodeNotFound,
 			fmt.Errorf("no ZeroTier networks found"))
 	case 1:
-		return raw[0].ID, nil
+		n := (*resp.JSON200)[0]
+		return safeStr(n.Id), nil
 	default:
 		return "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("multiple networks found (%d); specify --network-id", len(raw)))
+			fmt.Errorf("multiple networks found (%d); specify --network-id", len(*resp.JSON200)))
 	}
 }
 
-// ztGet performs an authenticated GET request to the ZeroTier Central API.
-func ztGet[T any](ctx context.Context, path, token string) (T, error) {
-	var zero T
-	url := centralAPI + path
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return zero, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Authorization", "bearer "+token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return zero, fmt.Errorf("http get: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return zero, fmt.Errorf("read body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return zero, fmt.Errorf("api error (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	var result T
-	if err := json.Unmarshal(body, &result); err != nil {
-		return zero, fmt.Errorf("parse response: %w", err)
-	}
-	return result, nil
-}
-
-// zeroBytes clears a byte slice.
 func zeroBytes(b []byte) {
 	for i := range b {
 		b[i] = 0
