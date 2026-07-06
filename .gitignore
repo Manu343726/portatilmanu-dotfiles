@@ -99,6 +99,6 @@
 !/.config/autorandr/laptop-only/setup
 *.cache/dotfilesd/plugins/**/games
 /.config/dotfilesd/plugins/*/games
-# Generated OpenAPI clients (oapi-codegen -> api/gen/)
-/.config/dotfilesd/plugins/*/api/gen/
+# Generated OpenAPI clients (oapi-codegen -> api/<name>/)
+/.config/dotfilesd/plugins/*/api/*/
 *.local/bin/*

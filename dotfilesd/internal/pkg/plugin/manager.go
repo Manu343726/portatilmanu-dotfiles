@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -81,7 +82,8 @@ type handshake struct {
 }
 
 // stepAPIClient generates OpenAPI clients from api/*.yaml specs.
-// Each spec generates code into api/gen/client.gen.go (package gen).
+// For each spec file api/<name>.yaml the generated code goes into
+// api/<name>/client.gen.go with package <name> (hyphens/dots stripped).
 func stepAPIClient(sourceDir string) error {
 	specMatches, err := filepath.Glob(filepath.Join(sourceDir, "api", "*.yaml"))
 	if err != nil || len(specMatches) == 0 {
@@ -89,16 +91,22 @@ func stepAPIClient(sourceDir string) error {
 	}
 	home, _ := os.UserHomeDir()
 	goBin := filepath.Join(home, "go", "bin")
+	reInvalid := regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 	for _, specFile := range specMatches {
-		outDir := filepath.Join(sourceDir, "api", "gen")
+		stem := strings.TrimSuffix(filepath.Base(specFile), ".yaml")
+		pkgName := reInvalid.ReplaceAllString(stem, "")
+		if pkgName == "" {
+			continue
+		}
+		outDir := filepath.Join(sourceDir, "api", pkgName)
 		outFile := filepath.Join(outDir, "client.gen.go")
 		if err := os.MkdirAll(outDir, 0o755); err != nil {
-			return fmt.Errorf("mkdir api/gen: %w", err)
+			return fmt.Errorf("mkdir api/%s: %w", pkgName, err)
 		}
 
 		cmd := exec.Command(filepath.Join(goBin, "oapi-codegen"),
-			"--package=gen",
+			"--package="+pkgName,
 			"--generate=types,client,spec",
 			"-o", outFile,
 			specFile,

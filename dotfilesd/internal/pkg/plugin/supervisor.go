@@ -234,15 +234,31 @@ func (s *supervisor) rebuild() error {
 	// Step 1: Recompile protos (best-effort — skip if no proto dir).
 	if err := stepProto(s.sourceDir, s.name); err != nil {
 		slog.Debug("proto recompilation failed during rebuild", "plugin", s.name, "error", err)
-		// Non-fatal: the plugin may not have protos.
 	}
 
-	// Step 2: Build the plugin binary.
+	// Step 1a: Regenerate OpenAPI clients (best-effort).
+	if err := stepAPIClient(s.sourceDir); err != nil {
+		slog.Debug("api client regeneration failed during rebuild", "plugin", s.name, "error", err)
+	}
+
+	// Step 2: Resolve transitive dependencies (e.g. creack/pty from plugin SDK).
+	slog.Info("resolving plugin dependencies (rebuild)", "plugin", s.name)
+	tidyCmd := exec.Command("go", "mod", "tidy")
+	tidyCmd.Dir = s.sourceDir
+	if out, err := tidyCmd.CombinedOutput(); err != nil {
+		slog.Error("plugin dependency resolution failed (rebuild)",
+			"plugin", s.name, "error", err, "output", string(out))
+	}
+
+	// Step 3: Build the plugin binary.
+	slog.Info("rebuilding plugin", "plugin", s.name)
 	cmd := exec.Command("go", "build", "-o", s.binaryPath, ".")
 	cmd.Dir = s.sourceDir
 	if out, err := cmd.CombinedOutput(); err != nil {
+		slog.Error("plugin rebuild failed", "plugin", s.name, "error", err, "output", string(out))
 		return fmt.Errorf("go build: %w\n%s", err, string(out))
 	}
+	slog.Info("plugin rebuilt successfully", "plugin", s.name)
 	return nil
 }
 

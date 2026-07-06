@@ -187,23 +187,26 @@ plugin-build: plugin-proto plugin-oapi-codegen
 	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
 	@echo "plugin '$(PLUGIN)' built."
 
-# Generate OpenAPI client for a specific plugin from api/*.yaml specs.
-# Output goes to api/gen/client.gen.go (package gen).
+# Generate OpenAPI clients from api/*.yaml specs.
+# For each spec api/<name>.yaml output goes to api/<name>/client.gen.go (package <name>).
 plugin-oapi-codegen:
 	@if [ -z "$(PLUGIN)" ]; then \
 		echo "Usage: make plugin-oapi-codegen PLUGIN=<name>"; \
 		exit 1; \
 	fi
-	@spec=$$(ls "$(PLUGIN_DIR)/$(PLUGIN)/api"/*.yaml 2>/dev/null | head -1); \
-	if [ -n "$$spec" ]; then \
-		mkdir -p "$(PLUGIN_DIR)/$(PLUGIN)/api/gen"; \
-		PATH="$(HOME)/go/bin:$(PATH)" oapi-codegen \
-			-package gen \
-			-generate types,client,spec \
-			-o "$(PLUGIN_DIR)/$(PLUGIN)/api/gen/client.gen.go" \
-			"$$spec"; \
-		echo "  oapi-codegen for '$(PLUGIN)' done."; \
-	fi
+	@for spec in "$(PLUGIN_DIR)/$(PLUGIN)/api"/*.yaml; do \
+		if [ -f "$$spec" ]; then \
+			stem=$$(basename "$$spec" .yaml); \
+			pkg=$$(echo "$$stem" | tr -d '[:punct:]'); \
+			mkdir -p "$(PLUGIN_DIR)/$(PLUGIN)/api/$$pkg"; \
+			PATH="$(HOME)/go/bin:$(PATH)" oapi-codegen \
+				-package "$$pkg" \
+				-generate types,client,spec \
+				-o "$(PLUGIN_DIR)/$(PLUGIN)/api/$$pkg/client.gen.go" \
+				"$$spec"; \
+			echo "  oapi-codegen '$(PLUGIN)/$$stem' -> api/$$pkg/"; \
+		fi; \
+	done
 
 # Compile proto files for a specific plugin: make plugin-proto PLUGIN=weather
 plugin-proto:

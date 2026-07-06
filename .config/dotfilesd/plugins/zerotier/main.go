@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"dotfilesd/plugin"
-	"plugins/zerotier/api/gen"
+	"plugins/zerotier/api/zerotiercentral"
 	pb "plugins/zerotier/proto/zerotier"
 	"plugins/zerotier/proto/zerotier/zerotierconnect"
 
@@ -154,16 +154,16 @@ func (s *zeroTierService) ListMembers(
 
 // ── ZeroTier API client ─────────────────────────────────────────────────────
 
-func newZTClient(pc plugin.Context) (*gen.ClientWithResponses, []byte, error) {
+func newZTClient(pc plugin.Context) (*zerotiercentral.ClientWithResponses, []byte, error) {
 	token, err := pc.GetSecret("api_token")
 	if err != nil {
 		return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("zerotier api_token not configured: %w.\n\n  Run: echo 'zerotier:\n  api_token: \"<token>\"' >> ~/.config/dotfilesd/secrets.yaml\n  Then: systemctl --user restart dotfilesd", err))
 	}
 
-	ztAPI, err := gen.NewClientWithResponses(
+	ztAPI, err := zerotiercentral.NewClientWithResponses(
 		"https://api.zerotier.com/api/v1",
-		gen.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
+		zerotiercentral.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
 			req.Header.Set("Authorization", "bearer "+string(token))
 			return nil
 		}),
