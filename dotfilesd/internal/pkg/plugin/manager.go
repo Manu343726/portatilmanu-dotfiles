@@ -691,11 +691,30 @@ func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv
 		return
 	}
 
-	// Build a map of top-level enum docs by FQN for quick lookup.
+	// Build a flat map of all enum docs by FQN for quick lookup.
 	enumDocs := map[string]*dotfilesdv1.EnumDoc{}
 	for _, ed := range doc.Enums {
 		fqn := doc.Package + "." + ed.Name
 		enumDocs[fqn] = ed
+	}
+
+	// Build a flat map of all message docs by FQN, including top-level
+	// messages and service method request/response messages recursively.
+	messageDocs := map[string]*dotfilesdv1.MessageDoc{}
+	for _, md := range doc.Messages {
+		indexMessageDocs(md, messageDocs)
+	}
+	for _, sd := range doc.Services {
+		for _, m := range sd.Methods {
+			if m.Request != nil {
+				messageDocs[m.Request.Name] = m.Request
+				indexMessageDocs(m.Request, messageDocs)
+			}
+			if m.Response != nil {
+				messageDocs[m.Response.Name] = m.Response
+				indexMessageDocs(m.Response, messageDocs)
+			}
+		}
 	}
 
 	for _, svc := range schemas {
@@ -706,8 +725,8 @@ func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv
 					for _, md := range sd.Methods {
 						if md.Name == m.Name {
 							m.Description = md.Description
-							enrichMessageSchema(m.Request, md.Request, enumDocs)
-							enrichMessageSchema(m.Response, md.Response, enumDocs)
+							enrichMessageSchema(m.Request, md.Request, enumDocs, messageDocs)
+							enrichMessageSchema(m.Response, md.Response, enumDocs, messageDocs)
 							break
 						}
 					}
@@ -721,7 +740,8 @@ func enrichSchemasFromDocs(schemas []*dotfilesdv1.ServiceSchema, doc *dotfilesdv
 // enrichMessageSchema recursively propagates MessageDoc descriptions
 // (message, fields, nested messages, nested enums) into a MessageSchema.
 // enumDocs is a map of top-level enum docs by FQN (may be empty).
-func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageDoc, enumDocs map[string]*dotfilesdv1.EnumDoc) {
+// messageDocs is a flat map of ALL message docs by FQN.
+func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageDoc, enumDocs map[string]*dotfilesdv1.EnumDoc, messageDocs map[string]*dotfilesdv1.MessageDoc) {
 	if ms == nil || md == nil {
 		return
 	}
@@ -746,11 +766,22 @@ func enrichMessageSchema(ms *dotfilesdv1.MessageSchema, md *dotfilesdv1.MessageD
 			enrichEnumValues(f.EnumSchema, md.NestedEnums, enumDocs)
 		}
 	}
+	// Recurse into nested/contained messages. If the doc doesn't have a
+	// lexically nested match (e.g. MemberFilter is a top-level message
+	// referenced by field, not nested inside its parent in the .proto),
+	// fall back to the flat messageDocs map by FQN.
 	for _, nested := range ms.Messages {
+		found := false
 		for _, nd := range md.NestedMessages {
 			if nd.Name == nested.Name {
-				enrichMessageSchema(nested, nd, enumDocs)
+				enrichMessageSchema(nested, nd, enumDocs, messageDocs)
+				found = true
 				break
+			}
+		}
+		if !found {
+			if mdfqn, ok := messageDocs[nested.Name]; ok {
+				enrichMessageSchema(nested, mdfqn, enumDocs, messageDocs)
 			}
 		}
 	}
@@ -770,6 +801,11 @@ func enrichEnumValues(es *dotfilesdv1.EnumSchema, nestedEnums []*dotfilesdv1.Enu
 		ed = enumDocs[es.Name]
 	}
 	if ed == nil {
+		slog.Debug("enrichEnumValues: no doc found",
+			"schema_name", es.Name,
+			"nested_count", len(nestedEnums),
+			"doc_count", len(enumDocs),
+		)
 		return
 	}
 	byName := map[string]*dotfilesdv1.EnumValueDoc{}
@@ -834,4 +870,13 @@ func fetchMethodHints(ctx context.Context, httpClient *http.Client, pluginURL st
 		return nil
 	}
 	return result
+}
+
+// indexMessageDocs recursively indexes a MessageDoc and all its nested
+// messages into the provided flat map by fully-qualified name.
+func indexMessageDocs(md *dotfilesdv1.MessageDoc, flat map[string]*dotfilesdv1.MessageDoc) {
+	flat[md.Name] = md
+	for _, nested := range md.NestedMessages {
+		indexMessageDocs(nested, flat)
+	}
 }

@@ -119,6 +119,7 @@ type Context interface {
 type TTYConn interface {
 	io.ReadWriteCloser
 	Resize(width, height int) error
+	Getsize() (width, height int, err error)
 }
 type ExecResult struct {
 	ExitCode int
@@ -576,10 +577,18 @@ func (r *stdinReader) Read(p []byte) (int, error) {
 	if len(resp.Msg.Data) == 0 && resp.Msg.Eof {
 		return 0, io.EOF
 	}
-	n := copy(p, resp.Msg.Data)
-	if n < len(resp.Msg.Data) {
-		r.buf = make([]byte, len(resp.Msg.Data)-n)
-		copy(r.buf, resp.Msg.Data[n:])
+
+	// Convert \r (carriage return, Enter key in raw mode) to \n
+	// for line-based plugins (games) that use bufio.ReadString('\n').
+	// This conversion is intentionally NOT done for TTYConn — TUI plugins
+	// that need raw terminal bytes use the PTY-backed path which bypasses
+	// this reader entirely.
+	data := bytes.ReplaceAll(resp.Msg.Data, []byte{'\r'}, []byte{'\n'})
+
+	n := copy(p, data)
+	if n < len(data) {
+		r.buf = make([]byte, len(data)-n)
+		copy(r.buf, data[n:])
 	}
 	return n, nil
 }
@@ -835,12 +844,13 @@ func zeroBytes(b []byte) {
 
 // ttyConn implements TTYConn by wrapping the daemon's TtySession bidi stream.
 type ttyConn struct {
-	clientID   string
-	client     *contextClient
-	stream     *connect.BidiStreamForClient[dotfilesdv1.TtyPacket, dotfilesdv1.TtyPacket]
-	readMu     sync.Mutex
-	readBuf    []byte
-	closed     bool
+	clientID      string
+	client        *contextClient
+	stream        *connect.BidiStreamForClient[dotfilesdv1.TtyPacket, dotfilesdv1.TtyPacket]
+	readMu        sync.Mutex
+	readBuf       []byte
+	closed        bool
+	resizeHandler func(width, height int)
 }
 
 func (c *contextClient) TtyConn() (TTYConn, error) {
@@ -859,6 +869,15 @@ func (c *contextClient) TtyConn() (TTYConn, error) {
 		client:   c,
 		stream:   stream,
 	}, nil
+}
+
+// OnResize registers a callback that fires when a TtyPacket with
+// WindowWidth/WindowHeight arrives from the daemon (triggered by
+// SIGWINCH on the CLI side).
+func (t *ttyConn) OnResize(fn func(width, height int)) {
+	t.readMu.Lock()
+	defer t.readMu.Unlock()
+	t.resizeHandler = fn
 }
 
 func (t *ttyConn) Read(p []byte) (int, error) {
@@ -882,6 +901,13 @@ func (t *ttyConn) Read(p []byte) (int, error) {
 		}
 		if pkt.Eof {
 			return 0, io.EOF
+		}
+		// Handle resize notification (WindowWidth/WindowHeight without Data).
+		if pkt.WindowWidth > 0 && pkt.WindowHeight > 0 && len(pkt.Data) == 0 {
+			if t.resizeHandler != nil {
+				t.resizeHandler(int(pkt.WindowWidth), int(pkt.WindowHeight))
+			}
+			continue
 		}
 		if len(pkt.Data) == 0 {
 			continue
@@ -917,6 +943,10 @@ func (t *ttyConn) Close() error {
 	t.stream.CloseResponse()
 	return nil
 }
+
+// Getsize returns 0, 0 for the base TTYConn — only the PTY-backed
+// variant (ptyTtyConn) knows its actual terminal dimensions.
+func (t *ttyConn) Getsize() (int, int, error) { return 0, 0, nil }
 
 func (t *ttyConn) Resize(width, height int) error {
 	if t.closed {

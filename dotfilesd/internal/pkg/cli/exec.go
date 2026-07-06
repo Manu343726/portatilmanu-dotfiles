@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -11,7 +12,7 @@ import (
 	"connectrpc.com/connect"
 )
 
-func execCommand(clients *Clients, sessionID, command string, sudo bool) error {
+func execCommand(clients *Clients, sessionID, command string, sudo, noNewline bool) error {
 	slog.Info("exec", "command", command, "sudo", sudo, "session_id", sessionID)
 	req := connect.NewRequest(&dotfilesdv1.ExecStreamRequest{
 		Command: command,
@@ -24,15 +25,25 @@ func execCommand(clients *Clients, sessionID, command string, sudo bool) error {
 		return fmt.Errorf("exec failed: %w", err)
 	}
 
+	var lastChunk []byte
 	for stream.Receive() {
 		chunk := stream.Msg()
 		if len(chunk.StdoutChunk) > 0 {
-			fmt.Print(string(chunk.StdoutChunk))
+			if noNewline {
+				lastChunk = chunk.StdoutChunk
+			} else {
+				fmt.Print(string(chunk.StdoutChunk))
+			}
 		}
 		if chunk.Done {
 			if chunk.ErrorMessage != "" {
 				fmt.Fprintln(os.Stderr, chunk.ErrorMessage)
 				os.Exit(1)
+			}
+			if noNewline && len(lastChunk) > 0 {
+				// Strip trailing newline from the last chunk.
+				lastChunk = bytes.TrimRight(lastChunk, "\n\r")
+				fmt.Print(string(lastChunk))
 			}
 			if chunk.ExitCode != 0 {
 				os.Exit(int(chunk.ExitCode))
@@ -46,10 +57,10 @@ func execCommand(clients *Clients, sessionID, command string, sudo bool) error {
 	return nil
 }
 
-func RunExec(clients *Clients, sessionID, command string) error {
-	return execCommand(clients, sessionID, command, false)
+func RunExec(clients *Clients, sessionID, command string, noNewline bool) error {
+	return execCommand(clients, sessionID, command, false, noNewline)
 }
 
-func RunSudoExec(clients *Clients, sessionID, command string) error {
-	return execCommand(clients, sessionID, command, true)
+func RunSudoExec(clients *Clients, sessionID, command string, noNewline bool) error {
+	return execCommand(clients, sessionID, command, true, noNewline)
 }

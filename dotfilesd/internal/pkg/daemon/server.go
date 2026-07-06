@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -194,9 +195,29 @@ func (d *Daemon) Start() error {
 	}
 
 	rpcAddr := fmt.Sprintf("127.0.0.1:%s", d.config.Port)
+
+	// Wrap the mux to log panics with full stack trace before crashing.
+	// The panic is logged then re-panicked so the daemon crashes with
+	// the original value and full goroutine dump from the runtime.
+	recoveryMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				buf := make([]byte, 1<<20)
+				n := runtime.Stack(buf, false)
+				slog.Error("panic in HTTP handler",
+					"path", r.URL.Path,
+					"panic", rec,
+					"stack", string(buf[:n]),
+				)
+				panic(rec)
+			}
+		}()
+		mux.ServeHTTP(w, r)
+	})
+
 	d.server = &http.Server{
 		Addr:    rpcAddr,
-		Handler: h2c.NewHandler(mux, &http2.Server{}),
+		Handler: h2c.NewHandler(recoveryMux, &http2.Server{}),
 	}
 
 	// Start the HTTP server in a goroutine BEFORE loading plugins so that

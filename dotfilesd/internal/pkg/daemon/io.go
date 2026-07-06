@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"strings"
 
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -92,4 +93,119 @@ func (s *ioServer) ReadStdin(
 		Data: data,
 		Eof:  eof,
 	}), nil
+}
+
+// TtySession opens a raw bidirectional TTY stream between a plugin and the
+// CLI's terminal via the executor bidi stream. Unlike Log (line-buffered),
+// every byte is delivered immediately — suitable for tview/tcell.
+//
+// Protocol:
+//  1. Plugin sends the first TtyPacket containing its client_id.
+//  2. Daemon reads stdin from the executor buffer and sends TtyPacket.Data
+//     to the plugin.
+//  3. Plugin sends stdout TtyPacket.Data to the daemon, which forwards to
+//     the executor's stdout channel (reaching the CLI's terminal).
+//  4. Either side signals EOF to close.
+func (s *ioServer) TtySession(
+	ctx context.Context,
+	stream *connect.BidiStream[dotfilesdv1.TtyPacket, dotfilesdv1.TtyPacket],
+) error {
+	first, err := stream.Receive()
+	if err != nil {
+		return fmt.Errorf("receive first tty packet: %w", err)
+	}
+	clientID := first.ClientId
+	if clientID == "" {
+		return fmt.Errorf("client_id is required in first TtyPacket")
+	}
+
+	// Use a done channel to signal the stdin goroutine when the handler
+	// returns. Without this, the goroutine may call stream.Send() after
+	// the Connect handler has finished, causing a panic.
+	done := make(chan struct{})
+
+	// Forward stdin from executor buffer → plugin via stream.
+	// Also forward pending resize events (sent by CLI via executor WindowSize).
+	go func() {
+		// Log panics with full stack trace before crashing. The recover
+		// captures the value, logs it with a stack trace, then re-panics
+		// so the daemon crashes with the original panic value.
+		defer func() {
+			if rec := recover(); rec != nil {
+				buf := make([]byte, 1<<20)
+				n := runtime.Stack(buf, false)
+				slog.Error("panic in TtySession stdin goroutine",
+					"client_id", clientID,
+					"panic", rec,
+					"stack", string(buf[:n]),
+				)
+				panic(rec)
+			}
+		}()
+
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			// Check for pending resize first; the CLI's SIGWINCH handler
+			// sends WindowSize through the executor, which is stored via
+			// StoreResize. We pick it up here and forward as TtyPacket.
+			if w, h, ok := ReadResizeFromCall(clientID); ok {
+				if err := stream.Send(&dotfilesdv1.TtyPacket{
+					Data:         nil,
+					WindowWidth:  w,
+					WindowHeight: h,
+				}); err != nil {
+					return
+				}
+				continue
+			}
+
+			data, eof := ReadStdinFromCall(clientID, 4096)
+			if len(data) > 0 {
+				if err := stream.Send(&dotfilesdv1.TtyPacket{Data: data}); err != nil {
+					return
+				}
+			}
+			if eof {
+				return
+			}
+		}
+	}()
+
+	// Forward stdout from plugin → executor stdout channel → CLI.
+	defer close(done)
+	for {
+		pkt, err := stream.Receive()
+		if err != nil {
+			return err
+		}
+		if pkt.Eof {
+			return nil
+		}
+		if len(pkt.Data) == 0 {
+			continue
+		}
+
+		activeCallsMu.RLock()
+		call := activeCallsByClient[clientID]
+		activeCallsMu.RUnlock()
+		if call != nil {
+			select {
+			case call.stdoutChan <- pkt.Data:
+			default:
+				select {
+				case <-call.stdoutChan:
+				default:
+				}
+				select {
+				case call.stdoutChan <- pkt.Data:
+				default:
+				}
+			}
+		}
+	}
 }

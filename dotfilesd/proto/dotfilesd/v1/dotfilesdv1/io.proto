@@ -10,6 +10,11 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 // IOService — plugins submit structured log entries to the daemon's logging
 // system. The daemon also uses this to forward stdout/stderr from plugins
 // back to the active CallPlugin bidi stream for real-time output relay.
+//
+// The TtySession RPC provides raw bidirectional byte streaming for plugins
+// that need full terminal control (e.g. tview/tcell). Unlike Log+ReadStdin
+// which are line-buffered, TtySession gives the plugin a real-time TTY
+// connection to the CLI's terminal through the executor bidi stream.
 service IOService {
   // Log submits a log entry. The daemon routes it through its logging system.
   rpc Log(LogRequest) returns (LogResponse);
@@ -18,6 +23,28 @@ service IOService {
   // this from its Stdin() reader to get stdin forwarded from the CLI through
   // the executor's bidi stream.
   rpc ReadStdin(StdinRequest) returns (StdinResponse);
+
+  // TtySession opens a raw bidirectional TTY stream. The plugin sends an
+  // initial TtyPacket with its client_id, then raw bytes flow in both
+  // directions between the plugin and the CLI's terminal via the executor's
+  // stdin buffer and stdout channel. Unlike Log (line-buffered), this stream
+  // delivers every byte immediately — suitable for tview/tcell and other
+  // full-screen terminal libraries.
+  rpc TtySession(stream TtyPacket) returns (stream TtyPacket);
+}
+
+message TtyPacket {
+  // Raw terminal bytes (stdin from CLI → plugin, stdout from plugin → CLI).
+  bytes data = 1;
+  // True when the sending side has closed its stream.
+  bool eof = 2;
+  // Client ID identifying the active executor stream. Set on the first
+  // packet sent from the plugin to the daemon, ignored thereafter.
+  string client_id = 3;
+  // Terminal window size (optional). When set, the daemon forwards a
+  // SIGWINCH-like resize notification to the plugin.
+  int32 window_width = 4;
+  int32 window_height = 5;
 }
 
 message StdinRequest {

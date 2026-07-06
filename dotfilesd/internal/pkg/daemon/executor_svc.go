@@ -16,17 +16,20 @@ import (
 )
 
 type activePluginCall struct {
-	clientID   string
-	pluginName string
-	service    string
-	method     string
-	stdoutChan chan []byte
-	stderrChan chan []byte
-	stdinBuf   bytes.Buffer
-	stdinEOF   bool
-	mu         sync.Mutex
-	stdinCond  *sync.Cond
-	done       chan struct{}
+	clientID     string
+	pluginName   string
+	service      string
+	method       string
+	stdoutChan   chan []byte
+	stderrChan   chan []byte
+	stdinBuf     bytes.Buffer
+	stdinEOF     bool
+	mu           sync.Mutex
+	stdinCond    *sync.Cond
+	done         chan struct{}
+	resizeWidth  int32
+	resizeHeight int32
+	resizePending bool
 }
 
 var (
@@ -130,6 +133,40 @@ func CloseStdin(clientID string) {
 	call.stdinEOF = true
 	call.mu.Unlock()
 	call.stdinCond.Broadcast()
+}
+
+// StoreResize stores a terminal resize notification for a call.
+func StoreResize(clientID string, width, height int32) {
+	activeCallsMu.RLock()
+	call := activeCallsByClient[clientID]
+	activeCallsMu.RUnlock()
+	if call == nil {
+		return
+	}
+	call.mu.Lock()
+	call.resizeWidth = width
+	call.resizeHeight = height
+	call.resizePending = true
+	call.mu.Unlock()
+	call.stdinCond.Broadcast()
+}
+
+// ReadResizeFromCall reads a pending resize notification for a call.
+// Returns (width, height, ok). If no resize is pending, ok is false.
+func ReadResizeFromCall(clientID string) (int32, int32, bool) {
+	activeCallsMu.RLock()
+	call := activeCallsByClient[clientID]
+	activeCallsMu.RUnlock()
+	if call == nil {
+		return 0, 0, false
+	}
+	call.mu.Lock()
+	defer call.mu.Unlock()
+	if call.resizePending {
+		call.resizePending = false
+		return call.resizeWidth, call.resizeHeight, true
+	}
+	return 0, 0, false
 }
 
 // ReadStdinFromCall reads buffered stdin data for a call.
@@ -237,6 +274,9 @@ func (s *executorServer) CallPlugin(
 			}
 			if len(m.StdinChunk) > 0 {
 				StoreStdin(clientID, m.StdinChunk)
+			}
+			if ws := m.GetWindowSize(); ws != nil {
+				StoreResize(clientID, ws.Width, ws.Height)
 			}
 		}
 	}()

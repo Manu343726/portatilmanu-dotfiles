@@ -398,8 +398,8 @@ func buildDocumentationProto(fdp *descriptorpb.FileDescriptorProto) *dotfilesdv1
 				Description:  src.commentAt(pathKey(methodPath)),
 				RequestType:  reqType,
 				ResponseType: respType,
-				Request:      buildMessageDoc(reqMsg, findMsgPath(fdp, reqType), src, msgLookup, enumLookup, fdp, map[string]bool{}),
-				Response:     buildMessageDoc(respMsg, findMsgPath(fdp, respType), src, msgLookup, enumLookup, fdp, map[string]bool{}),
+				Request:      buildMessageDoc(reqMsg, reqType, findMsgPath(fdp, reqType), src, msgLookup, enumLookup, fdp, map[string]bool{}),
+				Response:     buildMessageDoc(respMsg, respType, findMsgPath(fdp, respType), src, msgLookup, enumLookup, fdp, map[string]bool{}),
 			})
 		}
 		doc.Services = append(doc.Services, svcDoc)
@@ -412,7 +412,7 @@ func buildDocumentationProto(fdp *descriptorpb.FileDescriptorProto) *dotfilesdv1
 			continue
 		}
 		path := []int32{fieldMessage, int32(i)}
-		doc.Messages = append(doc.Messages, buildMessageDoc(msg, path, src, msgLookup, enumLookup, fdp, map[string]bool{}))
+		doc.Messages = append(doc.Messages, buildMessageDoc(msg, fqn, path, src, msgLookup, enumLookup, fdp, map[string]bool{}))
 	}
 
 	// Top-level enums not referenced by service messages.
@@ -524,20 +524,22 @@ func findMsgPathRecursive(msgs []*descriptorpb.DescriptorProto, parts []string, 
 
 // buildMessageDoc recursively builds a MessageDoc from a DescriptorProto.
 // path is the numeric path within the file descriptor for comment extraction.
+// fqn is the fully-qualified name used as the MessageDoc.Name (matching the
+// registry schema's naming so enrichment lookups work by FQN).
 // visited prevents infinite recursion on circular self-referencing messages.
-func buildMessageDoc(msg *descriptorpb.DescriptorProto, path []int32, src *sourceInfo, msgLookup map[string]*descriptorpb.DescriptorProto, enumLookup map[string]*descriptorpb.EnumDescriptorProto, fdp *descriptorpb.FileDescriptorProto, visited map[string]bool) *dotfilesdv1.MessageDoc {
+func buildMessageDoc(msg *descriptorpb.DescriptorProto, fqn string, path []int32, src *sourceInfo, msgLookup map[string]*descriptorpb.DescriptorProto, enumLookup map[string]*descriptorpb.EnumDescriptorProto, fdp *descriptorpb.FileDescriptorProto, visited map[string]bool) *dotfilesdv1.MessageDoc {
 	if msg == nil || path == nil {
 		return nil
 	}
 	key := pathKey(path)
 	if visited[key] {
-		return &dotfilesdv1.MessageDoc{Name: msg.GetName()}
+		return &dotfilesdv1.MessageDoc{Name: fqn}
 	}
 	visited[key] = true
 	defer func() { visited[key] = false }()
 
 	doc := &dotfilesdv1.MessageDoc{
-		Name:        msg.GetName(),
+		Name:        fqn,
 		Description: src.commentAt(key),
 	}
 
@@ -567,7 +569,7 @@ func buildMessageDoc(msg *descriptorpb.DescriptorProto, path []int32, src *sourc
 			typeName := trimPrefixDot(f.GetTypeName())
 			if subMsg := msgLookup[typeName]; subMsg != nil {
 				subPath := findMsgPath(fdp, typeName)
-				fd.TypeDetail = &dotfilesdv1.FieldDoc_MessageDoc{MessageDoc: buildMessageDoc(subMsg, subPath, src, msgLookup, enumLookup, fdp, visited)}
+				fd.TypeDetail = &dotfilesdv1.FieldDoc_MessageDoc{MessageDoc: buildMessageDoc(subMsg, typeName, subPath, src, msgLookup, enumLookup, fdp, visited)}
 			}
 		}
 		if f.GetType() == descriptorpb.FieldDescriptorProto_TYPE_ENUM {
@@ -583,7 +585,8 @@ func buildMessageDoc(msg *descriptorpb.DescriptorProto, path []int32, src *sourc
 
 	for i, nested := range msg.GetNestedType() {
 		nestedPath := append(path, fieldNestedMsg, int32(i))
-		doc.NestedMessages = append(doc.NestedMessages, buildMessageDoc(nested, nestedPath, src, msgLookup, enumLookup, fdp, visited))
+		nestedFQN := fqn + "." + nested.GetName()
+		doc.NestedMessages = append(doc.NestedMessages, buildMessageDoc(nested, nestedFQN, nestedPath, src, msgLookup, enumLookup, fdp, visited))
 	}
 	for i, e := range msg.GetEnumType() {
 		enumPath := append(path, fieldNestedEnum, int32(i))

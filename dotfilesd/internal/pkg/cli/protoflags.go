@@ -97,7 +97,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 					svcCmd.Long = fmt.Sprintf("%s/%s\n\n%s", svc.Name, m.Name, m.Description)
 				}
 				if appendix := enumAppendix(enums); appendix != "" {
-					svcCmd.Long += "\n\n" + appendix
+					svcCmd.Example = appendix
 				}
 			} else {
 				rpcCmd := &cobra.Command{
@@ -108,7 +108,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 				}
 				addFlagsFromSchema(rpcCmd, m.Request, "", enums)
 				if appendix := enumAppendix(enums); appendix != "" {
-					rpcCmd.Long += "\n\n" + appendix
+					rpcCmd.Example = appendix
 				}
 				svcCmd.AddCommand(rpcCmd)
 			}
@@ -168,16 +168,16 @@ func buildStaticPluginCommand(p PluginRegistryInfo) *cobra.Command {
 // Schema-based cobra flag generation
 // ─────────────────────────────────────────────
 
-// enumRefSuffix returns a "see <shortName> enum below" suffix for a type name.
-func enumRefSuffix(typeName string) string {
-	if typeName == "" {
+// seeEnumSuffix returns " (see <shortName>)" for an enum type.
+func seeEnumSuffix(enumSchema *dotfilesdv1.EnumSchema) string {
+	if enumSchema == nil {
 		return ""
 	}
-	short := typeName
-	if idx := strings.LastIndex(typeName, "."); idx >= 0 {
-		short = typeName[idx+1:]
+	short := enumSchema.Name
+	if idx := strings.LastIndex(short, "."); idx >= 0 {
+		short = short[idx+1:]
 	}
-	return fmt.Sprintf(" (see %s enum below)", short)
+	return fmt.Sprintf(" (see %s)", short)
 }
 
 // enumAppendix formats all collected enums as a help appendix block.
@@ -185,7 +185,6 @@ func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 	if len(enums) == 0 {
 		return ""
 	}
-	// Sort for deterministic output.
 	names := make([]string, 0, len(enums))
 	for name := range enums {
 		names = append(names, name)
@@ -193,16 +192,24 @@ func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 	sort.Strings(names)
 
 	var b strings.Builder
-	b.WriteString("Enum details:\n")
+	b.WriteString("Enums referenced by the flags above:\n")
 	for _, name := range names {
 		es := enums[name]
 		short := name
 		if idx := strings.LastIndex(name, "."); idx >= 0 {
 			short = name[idx+1:]
 		}
-		fmt.Fprintf(&b, "  %s\n", short)
+		desc := ""
+		if es.Description != "" {
+			desc = ": " + es.Description
+		}
+		fmt.Fprintf(&b, "  %s%s\n", short, desc)
 		for _, v := range es.Values {
-			fmt.Fprintf(&b, "    %s = %d\n", v.Name, v.Number)
+			if v.Description != "" {
+				fmt.Fprintf(&b, "    %s  %s\n", v.Name, v.Description)
+			} else {
+				fmt.Fprintf(&b, "    %s\n", v.Name)
+			}
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -215,6 +222,11 @@ func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pref
 		flagName := camelToKebab(prefix + fs.Name)
 		desc := flagDescription(fs)
 
+		// Track enum schemas for the help appendix.
+		if fs.EnumSchema != nil && enums != nil {
+			enums[fs.TypeName] = fs.EnumSchema
+		}
+
 		if fs.Label == dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED && fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE {
 			cmd.Flags().StringToString(flagName, nil,
 				"Repeated "+fs.TypeName+". Usage: --"+flagName+" [<idx>].<field>=<value>")
@@ -223,7 +235,7 @@ func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pref
 
 		switch fs.Label {
 		case dotfilesdv1.FieldLabel_FIELD_LABEL_REPEATED:
-			addRepeatedFlag(cmd, flagName, fs, desc, enums)
+			addRepeatedFlag(cmd, flagName, fs, desc)
 
 		default:
 			addScalarFlag(cmd, flagName, fs, desc, msg, enums)
@@ -234,8 +246,11 @@ func addFlagsFromSchema(cmd *cobra.Command, msg *dotfilesdv1.MessageSchema, pref
 // addScalarFlag registers a single cobra flag from a FieldSchema.
 func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string, parentMsg *dotfilesdv1.MessageSchema, enums map[string]*dotfilesdv1.EnumSchema) {
 	fullDesc := desc
-	if fs.TypeName != "" {
+	if fs.Kind != dotfilesdv1.FieldKind_FIELD_KIND_ENUM && fs.TypeName != "" {
 		fullDesc = desc + " (" + fs.TypeName + ")"
+	}
+	if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM {
+		fullDesc = desc + seeEnumSuffix(fs.EnumSchema)
 	}
 
 	switch fs.Kind {
@@ -288,26 +303,25 @@ func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSch
 }
 
 // addRepeatedFlag registers a repeated cobra flag from a FieldSchema.
-func addRepeatedFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string, enums map[string]*dotfilesdv1.EnumSchema) {
-	// Collect enum schemas from repeated enum fields.
-	if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM && fs.EnumSchema != nil {
-		enums[fs.TypeName] = fs.EnumSchema
-		desc += enumRefSuffix(fs.TypeName)
+func addRepeatedFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSchema, desc string) {
+	suffix := " (repeated)"
+	if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM {
+		// For enums, show " (see X)" instead of a bare type name.
+		suffix = seeEnumSuffix(fs.EnumSchema) + " (repeated)"
 	}
-
 	switch fs.Kind {
 	case dotfilesdv1.FieldKind_FIELD_KIND_STRING:
-		cmd.Flags().StringSlice(flagName, nil, desc+" (repeated)")
+		cmd.Flags().StringSlice(flagName, nil, desc+suffix)
 	case dotfilesdv1.FieldKind_FIELD_KIND_INT32, dotfilesdv1.FieldKind_FIELD_KIND_INT64,
 		dotfilesdv1.FieldKind_FIELD_KIND_SINT32, dotfilesdv1.FieldKind_FIELD_KIND_SINT64,
 		dotfilesdv1.FieldKind_FIELD_KIND_UINT32, dotfilesdv1.FieldKind_FIELD_KIND_UINT64,
 		dotfilesdv1.FieldKind_FIELD_KIND_FIXED32, dotfilesdv1.FieldKind_FIELD_KIND_FIXED64,
 		dotfilesdv1.FieldKind_FIELD_KIND_SFIXED32, dotfilesdv1.FieldKind_FIELD_KIND_SFIXED64:
-		cmd.Flags().Int64Slice(flagName, nil, desc+" (repeated ints)")
+		cmd.Flags().Int64Slice(flagName, nil, desc+suffix)
 	case dotfilesdv1.FieldKind_FIELD_KIND_DOUBLE, dotfilesdv1.FieldKind_FIELD_KIND_FLOAT:
-		cmd.Flags().Float64Slice(flagName, nil, desc+" (repeated floats)")
+		cmd.Flags().Float64Slice(flagName, nil, desc+suffix)
 	default:
-		cmd.Flags().StringSlice(flagName, nil, desc+" (repeated)")
+		cmd.Flags().StringSlice(flagName, nil, desc+suffix)
 	}
 }
 
@@ -969,6 +983,14 @@ func descOr(desc, fallback string) string {
 // flagDescription builds a human-readable description for a field schema flag.
 // Uses the field's description when available, with the type name appended.
 func flagDescription(fs *dotfilesdv1.FieldSchema) string {
+	// For enum fields the type info is conveyed by the "see X enum below"
+	// suffix added by addScalarFlag/addRepeatedFlag — never show it here.
+	if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM {
+		if fs.Description != "" {
+			return fs.Description
+		}
+		return fs.Name
+	}
 	if fs.Description != "" {
 		if fs.TypeName != "" {
 			return fs.Description + " (" + fs.TypeName + ")"

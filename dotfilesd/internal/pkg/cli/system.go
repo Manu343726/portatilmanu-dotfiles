@@ -112,11 +112,12 @@ func RunDiagnostics(clients *Clients, sessionID string, params DiagParams) error
 		return fmt.Errorf("diagnostics failed: %w", err)
 	}
 
-	printTree(resp.Msg.Root, "", true, params.Fields)
+	selfClientID := "client:" + clients.ClientID
+	printTree(resp.Msg.Root, "", true, params.Fields, selfClientID)
 	return nil
 }
 
-func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []string) {
+func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []string, selfClientID string) {
 	branch := "├── "
 	if isLast {
 		branch = "└── "
@@ -131,6 +132,13 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []str
 		statusLabel = n.Status
 	}
 
+	// Mark this client as "yourself" if it matches the current CLI client ID.
+	selfMarker := ""
+	if n.Type == "client" && selfClientID != "" && n.Label == stripClientPrefix(selfClientID) {
+		selfMarker = " " + color.Greenf("← you")
+		selfMarker = " " + color.Greenf("← you")
+	}
+
 	// Colour the branch lines dim.
 	coloredBranch := color.Styled(branch, color.Dim)
 
@@ -143,7 +151,7 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []str
 		coloredStatus = color.Styled("("+statusLabel+")", color.StatusColor(statusLabel))
 	}
 
-	header := fmt.Sprintf("%s%s %s %s %s", color.Styled(prefix, color.Dim), coloredBranch, coloredType, label, coloredStatus)
+	header := fmt.Sprintf("%s%s %s %s %s%s", color.Styled(prefix, color.Dim), coloredBranch, coloredType, label, coloredStatus, selfMarker)
 
 	// Build per-node summary when no --fields are given.
 	if len(fields) == 0 {
@@ -176,7 +184,7 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []str
 		childPrefix += "│  "
 	}
 	for i, child := range n.Children {
-		printTree(child, childPrefix, i == len(n.Children)-1, fields)
+		printTree(child, childPrefix, i == len(n.Children)-1, fields, selfClientID)
 	}
 }
 
@@ -240,6 +248,14 @@ func nullget(m map[string]string, key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// stripClientPrefix strips the "client:" prefix from a resource ID.
+func stripClientPrefix(id string) string {
+	if len(id) > 7 && id[:7] == "client:" {
+		return id[7:]
+	}
+	return id
 }
 
 // typeLabel returns a human-readable label for a node type.
