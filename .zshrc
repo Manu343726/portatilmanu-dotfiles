@@ -136,6 +136,7 @@ eval "$(zoxide init zsh)"
 
 # opencode
 export PATH=/home/manu343726/.opencode/bin:$PATH
+alias oc='opencode'
 
 # Generate MCP configs from .env + templates
 [ -f "$HOME/.config/opencode/generate-configs.sh" ] && source "$HOME/.config/opencode/generate-configs.sh"
