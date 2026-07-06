@@ -105,8 +105,11 @@ func (s *zeroTierService) ListMembers(
 
 	networkID := req.Msg.NetworkId
 	if networkID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("network_id is required"))
+		id, err := resolveSingleNetwork(ctx, pc)
+		if err != nil {
+			return nil, err
+		}
+		networkID = id
 	}
 
 	token, err := pc.GetSecret("api_token")
@@ -168,6 +171,34 @@ func (s *zeroTierService) ListMembers(
 	}
 
 	return connect.NewResponse(&pb.ListMembersResponse{Members: members}), nil
+}
+
+// resolveSingleNetwork fetches the network list and returns the single network ID.
+// Returns an error if there are zero or multiple networks.
+func resolveSingleNetwork(ctx context.Context, pc plugin.Context) (string, error) {
+	token, err := pc.GetSecret("api_token")
+	if err != nil {
+		return "", connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("zerotier api_token not configured: %w", err))
+	}
+	defer zeroBytes(token)
+
+	raw, err := ztGet[[]ztNetwork](ctx, "/network", string(token))
+	if err != nil {
+		return "", connect.NewError(connect.CodeInternal,
+			fmt.Errorf("zerotier api error: %w", err))
+	}
+
+	switch len(raw) {
+	case 0:
+		return "", connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("no ZeroTier networks found"))
+	case 1:
+		return raw[0].ID, nil
+	default:
+		return "", connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("multiple networks found (%d); specify --network-id", len(raw)))
+	}
 }
 
 // ztGet performs an authenticated GET request to the ZeroTier Central API.
