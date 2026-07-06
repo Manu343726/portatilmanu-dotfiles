@@ -128,6 +128,9 @@ func (s *zeroTierService) ListMembers(
 			Online:          online,
 			PhysicalAddress: safeStr(m.PhysicalAddress),
 			ClientVersion:   safeStr(m.ClientVersion),
+			NetworkId:       safeStr(m.NetworkId),
+			ProtocolVersion: int32(safeInt(m.ProtocolVersion)),
+			LastSeen:        safeInt64(m.LastSeen),
 		})
 	}
 
@@ -254,6 +257,9 @@ var allColumns = map[pb.Column]colHint{
 	pb.Column_COLUMN_DESCRIPTION:      {"Description", 30, func(m *pb.Member) string { return m.Description }},
 	pb.Column_COLUMN_VERSION:          {"Version", 10, func(m *pb.Member) string { return m.ClientVersion }},
 	pb.Column_COLUMN_PHYSICAL_ADDRESS: {"Address", 22, func(m *pb.Member) string { return m.PhysicalAddress }},
+	pb.Column_COLUMN_AUTHORIZED:       {"Auth", 6, func(m *pb.Member) string { return fmt.Sprintf("%t", m.Authorized) }},
+	pb.Column_COLUMN_NETWORK_ID:       {"Network ID", 22, func(m *pb.Member) string { return m.NetworkId }},
+	pb.Column_COLUMN_PROTOCOL_VERSION: {"Proto", 6, func(m *pb.Member) string { return fmt.Sprintf("v%d", m.ProtocolVersion) }},
 }
 
 var defaultColumns = []pb.Column{
@@ -261,6 +267,20 @@ var defaultColumns = []pb.Column{
 	pb.Column_COLUMN_NAME,
 	pb.Column_COLUMN_IP,
 	pb.Column_COLUMN_STATUS,
+	pb.Column_COLUMN_AUTHORIZED,
+}
+
+var allColumnList = []pb.Column{
+	pb.Column_COLUMN_NODE_ID,
+	pb.Column_COLUMN_NAME,
+	pb.Column_COLUMN_IP,
+	pb.Column_COLUMN_STATUS,
+	pb.Column_COLUMN_DESCRIPTION,
+	pb.Column_COLUMN_VERSION,
+	pb.Column_COLUMN_PHYSICAL_ADDRESS,
+	pb.Column_COLUMN_AUTHORIZED,
+	pb.Column_COLUMN_NETWORK_ID,
+	pb.Column_COLUMN_PROTOCOL_VERSION,
 }
 
 func resolveColumns(fields []pb.Column) []pb.Column {

@@ -34,6 +34,9 @@ enum Column {
   COLUMN_DESCRIPTION = 5;
   COLUMN_VERSION = 6;
   COLUMN_PHYSICAL_ADDRESS = 7;
+  COLUMN_AUTHORIZED = 8;
+  COLUMN_NETWORK_ID = 9;
+  COLUMN_PROTOCOL_VERSION = 10;
 }
 
 // Output format for human-readable display output.
@@ -121,6 +124,12 @@ message Member {
   string physical_address = 9;
   // ZeroTier client version (e.g. "1.16.0").
   string client_version = 10;
+  // The ZeroTier network ID this member belongs to.
+  string network_id = 11;
+  // ZeroTier protocol version number.
+  int32 protocol_version = 12;
+  // Timestamp (milliseconds) of last check-in with controller.
+  int64 last_seen = 13;
 }
 
 message ListMembersResponse {
