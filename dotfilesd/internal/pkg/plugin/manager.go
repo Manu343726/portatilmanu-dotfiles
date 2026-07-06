@@ -80,6 +80,36 @@ type handshake struct {
 	Description string `json:"description,omitempty"`
 }
 
+// stepAPIClient generates an OpenAPI client if the plugin has an api/*.yaml spec.
+func stepAPIClient(sourceDir string) error {
+	specMatches, err := filepath.Glob(filepath.Join(sourceDir, "api", "*.yaml"))
+	if err != nil || len(specMatches) == 0 {
+		return nil // no spec to generate from
+	}
+	home, _ := os.UserHomeDir()
+	goBin := filepath.Join(home, "go", "bin")
+
+	for _, specFile := range specMatches {
+		outDir := filepath.Join(sourceDir, "api", "ztcentral")
+		outFile := filepath.Join(outDir, "client.gen.go")
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
+			return fmt.Errorf("mkdir api/ztcentral: %w", err)
+		}
+
+		cmd := exec.Command(filepath.Join(goBin, "oapi-codegen"),
+			"--package=ztcentral",
+			"--generate=types,client,spec",
+			"-o", outFile,
+			specFile,
+		)
+		cmd.Env = os.Environ()
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("oapi-codegen: %w\n%s", err, string(out))
+		}
+	}
+	return nil
+}
+
 // stepProto compiles proto files for a plugin if it has a proto/<name>/ directory.
 func stepProto(sourceDir, name string) error {
 	protoDir := filepath.Join(sourceDir, "proto", name)
@@ -266,16 +296,34 @@ func (m *Manager) loadPlugin(ctx context.Context, name, sourceDir, cacheDir stri
 		return fmt.Errorf("proto compile: %w", err)
 	}
 
+	// Step a': OpenAPI client generation (if plugin has api/zerotier-central.yaml).
+	if err := stepAPIClient(sourceDir); err != nil {
+		return fmt.Errorf("api client: %w", err)
+	}
+
 	// Step b: Go build.
 	binaryPath := filepath.Join(cacheDir, name, name)
 	if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
+
+	// Resolve transitive dependencies so plugins don't need manual go.sum entries.
+	slog.Info("resolving plugin dependencies", "plugin", name)
+	tidyCmd := exec.Command("go", "mod", "tidy")
+	tidyCmd.Dir = sourceDir
+	if out, err := tidyCmd.CombinedOutput(); err != nil {
+		slog.Error("plugin dependency resolution failed",
+			"plugin", name, "error", err, "output", string(out))
+	}
+
+	slog.Info("building plugin", "plugin", name, "binary", binaryPath)
 	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
 	cmd.Dir = sourceDir
 	if out, err := cmd.CombinedOutput(); err != nil {
+		slog.Error("plugin build failed", "plugin", name, "error", err, "output", string(out))
 		return fmt.Errorf("go build: %w\n%s", err, string(out))
 	}
+	slog.Info("plugin built successfully", "plugin", name)
 
 	// Step c: Launch subprocess.
 	sessionID := fmt.Sprintf("plugin-%s", name)

@@ -99,4 +99,6 @@
 !/.config/autorandr/laptop-only/setup
 *.cache/dotfilesd/plugins/**/games
 /.config/dotfilesd/plugins/*/games
+# Generated API clients (oapi-codegen)
+/.config/dotfilesd/plugins/*/api/ztcentral/
 *.local/bin/*

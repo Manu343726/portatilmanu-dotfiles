@@ -20,6 +20,7 @@
 BINARY_DIR  := $(HOME)/.local/bin
 DAEMON_BIN  := $(BINARY_DIR)/dotfilesd
 CLI_BIN     := $(BINARY_DIR)/dotfilesctl
+TUIDIAG_BIN := $(BINARY_DIR)/tui-diag
 SERVICE_DIR := $(HOME)/.config/systemd/user
 SERVICE_FILE := $(SERVICE_DIR)/dotfilesd.service
 CMD_DIR     := ./cmd
@@ -51,20 +52,22 @@ build: proto
 	@mkdir -p $(BINARY_DIR)
 	$(GO) build $(GOFLAGS) -o $(DAEMON_BIN) $(CMD_DIR)/dotfilesd
 	$(GO) build $(GOFLAGS) -o $(CLI_BIN) $(CMD_DIR)/dotfilesctl
+	$(GO) build $(GOFLAGS) -o $(TUIDIAG_BIN) $(CMD_DIR)/tui-diag
 	@mkdir -p $(dir $(HASH_FILE))
 	@echo "$(BUILD_HASH)" > $(HASH_FILE)
-	@echo "  built (hash: $(BUILD_HASH))"
+	@echo "  built daemon cli tui-diag (hash: $(BUILD_HASH))"
 
 # -- Install (fast: skip if hash unchanged, auto-restarts daemon) ------------
 
 install:
 	@h=$$(git rev-parse HEAD 2>/dev/null || echo "dev"); \
-	if [ -f $(HASH_FILE) ] && [ "$$(cat $(HASH_FILE))" = "$$h" ] && [ -x $(DAEMON_BIN) ] && [ -x $(CLI_BIN) ]; then \
+	if [ -f $(HASH_FILE) ] && [ "$$(cat $(HASH_FILE))" = "$$h" ] && [ -x $(DAEMON_BIN) ] && [ -x $(CLI_BIN) ] && [ -x $(TUIDIAG_BIN) ]; then \
 		echo "  binaries up to date (hash: $$h)"; \
 	else \
 		echo "  building (hash: $$h)..."; \
 		$(GO) build $(GOFLAGS) -o $(DAEMON_BIN) $(CMD_DIR)/dotfilesd; \
 		$(GO) build $(GOFLAGS) -o $(CLI_BIN) $(CMD_DIR)/dotfilesctl; \
+		$(GO) build $(GOFLAGS) -o $(TUIDIAG_BIN) $(CMD_DIR)/tui-diag; \
 		echo "$$h" > $(HASH_FILE); \
 		$(MAKE) service-restart; \
 	fi
@@ -158,7 +161,7 @@ test-short:
 # -- Clean ------------------------------------------------------------------
 
 clean:
-	rm -f $(DAEMON_BIN) $(CLI_BIN) $(HASH_FILE)
+	rm -f $(DAEMON_BIN) $(CLI_BIN) $(TUIDIAG_BIN) $(HASH_FILE)
 	@echo "binaries removed."
 
 plugin-clean:
@@ -175,7 +178,7 @@ PLUGIN_DIR ?= $(HOME)/.config/dotfilesd/plugins
 PLUGIN_CACHE_DIR ?= $(HOME)/.cache/dotfilesd/plugins
 
 # Build a specific plugin: make plugin-build PLUGIN=weather
-plugin-build: plugin-proto
+plugin-build: plugin-proto plugin-oapi-codegen
 	@if [ -z "$(PLUGIN)" ]; then \
 		echo "Usage: make plugin-build PLUGIN=<name>"; \
 		exit 1; \
@@ -183,6 +186,33 @@ plugin-build: plugin-proto
 	@mkdir -p $(PLUGIN_CACHE_DIR)/$(PLUGIN)
 	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
 	@echo "plugin '$(PLUGIN)' built."
+
+# Generate OpenAPI client for a specific plugin: make plugin-oapi-codegen PLUGIN=zerotier
+plugin-oapi-codegen:
+	@if [ -z "$(PLUGIN)" ]; then \
+		echo "Usage: make plugin-oapi-codegen PLUGIN=<name>"; \
+		exit 1; \
+	fi
+	@if [ -f "$(PLUGIN_DIR)/$(PLUGIN)/api/zerotier-central.yaml" ]; then \
+		PATH="$(HOME)/go/bin:$(PATH)" oapi-codegen \
+			-package ztcentral \
+			-generate types,client,spec \
+			-o "$(PLUGIN_DIR)/$(PLUGIN)/api/ztcentral/client.gen.go" \
+			"$(PLUGIN_DIR)/$(PLUGIN)/api/zerotier-central.yaml"; \
+		echo "  oapi-codegen for '$(PLUGIN)' done."; \
+	else \
+		if [ -d "$(PLUGIN_DIR)/$(PLUGIN)/api" ]; then \
+			spec=$$(ls "$(PLUGIN_DIR)/$(PLUGIN)/api"/*.yaml 2>/dev/null | head -1); \
+			if [ -n "$$spec" ]; then \
+				PATH="$(HOME)/go/bin:$(PATH)" oapi-codegen \
+					-package ztcentral \
+					-generate types,client,spec \
+					-o "$(PLUGIN_DIR)/$(PLUGIN)/api/ztcentral/client.gen.go" \
+					"$$spec"; \
+				echo "  oapi-codegen for '$(PLUGIN)' done."; \
+			fi; \
+		fi; \
+	fi
 
 # Compile proto files for a specific plugin: make plugin-proto PLUGIN=weather
 plugin-proto:
