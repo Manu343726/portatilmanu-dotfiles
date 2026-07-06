@@ -3,8 +3,14 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
+	cryptorand "crypto/rand"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -16,7 +22,10 @@ import (
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
+	"golang.org/x/net/http2"
 )
+
+// contextClient implements Context by calling daemon usage services.
 
 // Context is the interface plugins use to interact with the daemon.
 // Plugins call each other DIRECTLY via generated Connect clients,
@@ -67,9 +76,50 @@ type Context interface {
 
 	// Scripts
 	RunScript(name string) (ScriptResult, error)
+
+	// TtyConn opens a raw bidirectional TTY stream to the CLI's terminal.
+	// Use this instead of Stdin()/Stdout() when you need raw byte-level
+	// terminal I/O (e.g. for tview/tcell). The stream bypasses the
+	// line-buffered log system and delivers every byte immediately.
+	// Returns an error if no interactive executor stream is available.
+	TtyConn() (TTYConn, error)
+
+	// PtyTtyConn returns a TTYConn backed by a real OS-level PTY pair.
+	// Unlike TtyConn() which is a raw byte tunnel, PtyTtyConn gives the
+	// caller a real pseudo-terminal. This is useful for tcell/tview
+	// because the screen library can query terminfo, handle SIGWINCH,
+	// and use proper terminal semantics. The PTY slave is used for I/O
+	// with the TUI library; the PTY master is bridged to the CLI
+	// terminal through the daemon.
+	PtyTtyConn() (TTYConn, error)
+
+	// DaemonClient returns an authenticated HTTP client for calling daemon
+	// services. Use this with Connect RPC clients that need the plugin token
+	// (e.g. DiagnosticsQueryService).
+	DaemonClient() *http.Client
+	DaemonURL() string
+
+	// GetSecret retrieves a secret value for this plugin from the daemon's
+	// secrets store. The value is encrypted in transit using an ECDH-negotiated
+	// AES-256-GCM key and decrypted locally. The caller MUST zero the
+	// returned byte slice after use to avoid plaintext lingering in memory.
+	// Returns an error if no shared key has been negotiated or the secret
+	// does not exist.
+	// Example: token, err := ctx.GetSecret("api_token"); defer zeroBytes(token)
+	GetSecret(key string) ([]byte, error)
 }
 
-// ExecResult is the result of a shell command.
+// TTYConn is a bidirectional byte stream connected to the CLI's terminal
+// through the executor bidi stream. It implements io.ReadWriteCloser and
+// also provides Resize to notify the daemon of terminal dimension changes.
+//
+// Unlike Stdin()/Stdout() which go through the line-buffered Log RPC,
+// TTYConn delivers every byte immediately — suitable for full-screen
+// terminal libraries like tview/tcell.
+type TTYConn interface {
+	io.ReadWriteCloser
+	Resize(width, height int) error
+}
 type ExecResult struct {
 	ExitCode int
 	Stdout   string
@@ -102,16 +152,53 @@ type contextClient struct {
 	scriptClient   dotfilesdv1connect.ScriptServiceClient
 	sessionClient  dotfilesdv1connect.SessionServiceClient
 	diagPostClient dotfilesdv1connect.DiagnosticsPostServiceClient
+	secretsClient  dotfilesdv1connect.SecretsServiceClient
+	keyClient      dotfilesdv1connect.KeyServiceClient
 
-	token, sessionID, pluginName string
+	token, sessionID, pluginName, daemonURL string
 	renderOutput                 bool
 	clientID                     string
-	diagParent                   string // set by incoming request X-Dotfiles-Diag-Parent
+	diagParent                   string
 	log                          logging.Logger
+
+	daemonHTTPClient *http.Client
+
+	// ECDH key negotiation for secrets.
+	secretsKey      []byte // 32-byte shared secret, derived after NegotiateKey("secrets")
+	secretsKeyReady bool
+	secretsPriv     *ecdh.PrivateKey // ephemeral X25519 private key, kept until secretsKey is derived
+}
+
+// authRoundTripper injects X-Dotfiles-Context-Token into every outgoing request.
+type authRoundTripper struct {
+	base  http.RoundTripper
+	token string
+}
+
+func (a *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if a.token != "" {
+		req.Header.Set("X-Dotfiles-Context-Token", a.token)
+	}
+	return a.base.RoundTrip(req)
 }
 
 func newContextClient(url, token, sessionID, pluginName, clientID string) *contextClient {
-	httpClient := &http.Client{}
+	h2cTransport := &http2.Transport{
+		AllowHTTP: true,
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		},
+	}
+	baseTransport := h2cTransport
+
+	// Wrap transport to inject auth token on every request.
+	var authTransport http.RoundTripper = baseTransport
+	if token != "" {
+		authTransport = &authRoundTripper{base: baseTransport, token: token}
+	}
+
+	httpClient := &http.Client{Transport: authTransport}
 	c := &contextClient{
 		execClient:     dotfilesdv1connect.NewExecServiceClient(httpClient, url),
 		feedbackClient: dotfilesdv1connect.NewFeedbackServiceClient(httpClient, url),
@@ -119,10 +206,14 @@ func newContextClient(url, token, sessionID, pluginName, clientID string) *conte
 		scriptClient:   dotfilesdv1connect.NewScriptServiceClient(httpClient, url),
 		sessionClient:  dotfilesdv1connect.NewSessionServiceClient(httpClient, url),
 		diagPostClient: dotfilesdv1connect.NewDiagnosticsPostServiceClient(httpClient, url),
+		secretsClient:  dotfilesdv1connect.NewSecretsServiceClient(httpClient, url),
+		keyClient:      dotfilesdv1connect.NewKeyServiceClient(httpClient, url),
 		token:          token,
 		sessionID:      sessionID,
 		pluginName:     pluginName,
 		clientID:       clientID,
+		daemonURL:      url,
+		daemonHTTPClient: httpClient,
 	}
 	c.log = &pluginLogger{client: c, pluginName: pluginName}
 
@@ -627,4 +718,212 @@ func (l *pluginLogger) Enabled(level logging.Level) bool { return true }
 
 func (c *contextClient) BackgroundExec(cmd string, sudo bool) (BackgroundTask, error) {
 	return startBackgroundTask(c.execClient, c.token, c.buildSession(), c.Stdout(), c.Stderr(), cmd, sudo)
+}
+
+func (c *contextClient) DaemonClient() *http.Client { return c.daemonHTTPClient }
+func (c *contextClient) DaemonURL() string          { return c.daemonURL }
+
+// GetSecret retrieves a secret for this plugin, encrypted with an ECDH-negotiated
+// AES-256-GCM key. The caller MUST zero the returned slice after use.
+func (c *contextClient) GetSecret(key string) ([]byte, error) {
+	// Step 1: Negotiate shared key if not yet done.
+	if !c.secretsKeyReady {
+		if err := c.negotiateSecretsKey(); err != nil {
+			return nil, fmt.Errorf("negotiate secrets key: %w", err)
+		}
+	}
+
+	// Step 2: Request encrypted secret from daemon.
+	req := connect.NewRequest(&dotfilesdv1.GetSecretRequest{
+		Session:    c.buildSession(),
+		PluginName: c.pluginName,
+		Key:        key,
+	})
+	c.setTokenHeader(req)
+
+	resp, err := c.secretsClient.GetSecret(context.Background(), req)
+	if err != nil {
+		return nil, fmt.Errorf("get secret: %w", err)
+	}
+
+	// Step 3: Decrypt using shared key.
+	keyCopy := make([]byte, 32)
+	copy(keyCopy, c.secretsKey)
+	defer zeroBytes(keyCopy)
+
+	plaintext, err := decryptSecretsValue(resp.Msg.EncryptedValue, keyCopy)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt secret: %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// negotiateSecretsKey performs an ephemeral X25519 ECDH exchange with the
+// daemon for key_id="secrets", storing the derived shared secret.
+func (c *contextClient) negotiateSecretsKey() error {
+	curve := ecdh.X25519()
+	priv, err := curve.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate key: %w", err)
+	}
+
+	req := connect.NewRequest(&dotfilesdv1.NegotiateKeyRequest{
+		Session:         c.buildSession(),
+		KeyId:           "secrets",
+		ClientPublicKey: priv.PublicKey().Bytes(),
+	})
+	c.setTokenHeader(req)
+
+	resp, err := c.keyClient.NegotiateKey(context.Background(), req)
+	if err != nil {
+		return fmt.Errorf("negotiate key: %w", err)
+	}
+
+	// Build the peer's public key from the daemon's response.
+	peerPub, err := curve.NewPublicKey(resp.Msg.ServerPublicKey)
+	if err != nil {
+		return fmt.Errorf("invalid server public key: %w", err)
+	}
+
+	secret, err := priv.ECDH(peerPub)
+	if err != nil {
+		return fmt.Errorf("ecdh: %w", err)
+	}
+
+	if len(secret) != 32 {
+		return fmt.Errorf("unexpected shared key length: %d", len(secret))
+	}
+
+	c.secretsKey = secret
+	c.secretsKeyReady = true
+	c.secretsPriv = priv
+	return nil
+}
+
+// decryptSecretsValue decrypts an AES-256-GCM encrypted blob (nonce || ciphertext)
+// using the given 32-byte key. The caller should zero the key after use.
+func decryptSecretsValue(ciphertext, key []byte) ([]byte, error) {
+	if len(key) != 32 {
+		return nil, fmt.Errorf("invalid key length: %d", len(key))
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("aes new cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("aes gcm: %w", err)
+	}
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+	nonce := ciphertext[:nonceSize]
+	enc := ciphertext[nonceSize:]
+	return gcm.Open(nil, nonce, enc, nil)
+}
+
+// zeroBytes overwrites the backing array with zeros.
+func zeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
+// ─── TTY stream ────────────────────────────────────────────────────────────
+
+// ttyConn implements TTYConn by wrapping the daemon's TtySession bidi stream.
+type ttyConn struct {
+	clientID   string
+	client     *contextClient
+	stream     *connect.BidiStreamForClient[dotfilesdv1.TtyPacket, dotfilesdv1.TtyPacket]
+	readMu     sync.Mutex
+	readBuf    []byte
+	closed     bool
+}
+
+func (c *contextClient) TtyConn() (TTYConn, error) {
+	clientID := c.clientID
+	if clientID == "" {
+		return nil, fmt.Errorf("no client ID available (not in an interactive method call)")
+	}
+
+	stream := c.ioClient.TtySession(context.Background())
+	if err := stream.Send(&dotfilesdv1.TtyPacket{ClientId: clientID}); err != nil {
+		return nil, fmt.Errorf("send initial tty packet: %w", err)
+	}
+
+	return &ttyConn{
+		clientID: clientID,
+		client:   c,
+		stream:   stream,
+	}, nil
+}
+
+func (t *ttyConn) Read(p []byte) (int, error) {
+	t.readMu.Lock()
+	defer t.readMu.Unlock()
+
+	if t.closed {
+		return 0, fmt.Errorf("tty connection closed")
+	}
+
+	if len(t.readBuf) > 0 {
+		n := copy(p, t.readBuf)
+		t.readBuf = t.readBuf[n:]
+		return n, nil
+	}
+
+	for {
+		pkt, err := t.stream.Receive()
+		if err != nil {
+			return 0, err
+		}
+		if pkt.Eof {
+			return 0, io.EOF
+		}
+		if len(pkt.Data) == 0 {
+			continue
+		}
+		n := copy(p, pkt.Data)
+		if n < len(pkt.Data) {
+			t.readBuf = make([]byte, len(pkt.Data)-n)
+			copy(t.readBuf, pkt.Data[n:])
+		}
+		return n, nil
+	}
+}
+
+func (t *ttyConn) Write(p []byte) (int, error) {
+	if t.closed {
+		return 0, fmt.Errorf("tty connection closed")
+	}
+	if err := t.stream.Send(&dotfilesdv1.TtyPacket{Data: p}); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (t *ttyConn) Close() error {
+	t.readMu.Lock()
+	defer t.readMu.Unlock()
+	if t.closed {
+		return nil
+	}
+	t.closed = true
+	t.stream.Send(&dotfilesdv1.TtyPacket{Eof: true})
+	t.stream.CloseRequest()
+	t.stream.CloseResponse()
+	return nil
+}
+
+func (t *ttyConn) Resize(width, height int) error {
+	if t.closed {
+		return fmt.Errorf("tty connection closed")
+	}
+	return t.stream.Send(&dotfilesdv1.TtyPacket{
+		WindowWidth:  int32(width),
+		WindowHeight: int32(height),
+	})
 }

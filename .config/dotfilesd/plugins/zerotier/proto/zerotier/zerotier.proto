@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package zerotier;
+
+option go_package = "plugins/zerotier/proto/zerotier";
+
+// ZeroTierService provides access to ZeroTier Central API for listing
+// networks and their members with IP assignments.
+service ZeroTierService {
+  // ListNetworks returns all networks accessible by the configured API token.
+  rpc ListNetworks(ListNetworksRequest) returns (ListNetworksResponse);
+  // ListMembers returns all members of a specific network with IPs and status.
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+}
+
+message ListNetworksRequest {}
+
+message Network {
+  // ZeroTier network ID (e.g. "8056c2e21c000001").
+  string id = 1;
+  // Human-readable name configured in ZeroTier Central.
+  string name = 2;
+  // Description of the network.
+  string description = 3;
+  // Number of members currently authorized on this network.
+  int32 member_count = 4;
+  // Unix timestamp of network creation time.
+  int64 creation_time = 5;
+}
+
+message ListNetworksResponse {
+  repeated Network networks = 1;
+}
+
+message ListMembersRequest {
+  // Network ID to list members for (e.g. "8056c2e21c000001").
+  string network_id = 1;
+}
+
+message Member {
+  // ZeroTier member/peer ID (same as node_id).
+  string id = 1;
+  string node_id = 2;
+  // Human-readable name assigned in ZeroTier Central.
+  string name = 3;
+  string description = 4;
+  // Whether this member is authorized on the network.
+  bool authorized = 5;
+  // Assigned IP addresses (e.g. ["10.147.20.1"]).
+  repeated string ip_assignments = 6;
+  // Unix timestamp of last online time.
+  int64 last_online = 7;
+  // Whether the member is currently online (based on lastOnline recency).
+  bool online = 8;
+  // Physical internet address (e.g. "1.2.3.4:9993").
+  string physical_address = 9;
+  // ZeroTier client version (e.g. "1.16.0").
+  string client_version = 10;
+}
+
+message ListMembersResponse {
+  repeated Member members = 1;
+}

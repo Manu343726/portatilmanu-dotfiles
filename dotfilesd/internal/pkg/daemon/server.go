@@ -166,6 +166,19 @@ func (d *Daemon) Start() error {
 		mux.Handle(p, auth(h))
 	}
 
+	// SecretsService — accessible with auth so only plugins with the
+	// context token can request secrets.
+	{
+		secretsPath := expandHome(secretsFilePath)
+		secretsData, err := loadSecretsFile(secretsPath)
+		if err != nil {
+			slog.Warn("failed to load secrets file", "path", secretsPath, "error", err)
+			secretsData = make(map[string]map[string]string)
+		}
+		p, h := dotfilesdv1connect.NewSecretsServiceHandler(newSecretsServer(d.sessions, secretsData))
+		mux.Handle(p, auth(h))
+	}
+
 	// PluginRegistryService is accessible WITHOUT auth — both plugins and CLI/MCP
 	// use it to discover plugin metadata. It is a read-only query service.
 	{
