@@ -115,9 +115,19 @@ message ListMembersRequest {
 }
 ```
 
-## 5. Document every field and value
+## 5. Document every field, value, and RPC
 
-**Bad:**
+Proto comments are the PRIMARY source of CLI help text and MCP tool descriptions.
+Every element must be documented:
+
+- **Service** — what this service provides, any prerequisites (e.g. API tokens).
+- **RPC method** — what the method does, when to use it, what the response contains.
+- **Message** — what data this message represents.
+- **Field** — the field's purpose, format, acceptable values, units, edge cases.
+- **Enum** — what the enum represents, how each value behaves.
+- **Enum value** — when to use this value over others, any side effects.
+
+### Bad — no documentation, incomprehensible CLI help:
 
 ```protobuf
 message Member {
@@ -127,20 +137,63 @@ message Member {
 }
 ```
 
-**Good:**
+CLI help becomes:
+```
+--id string    id
+--name string  name
+--authorized   authorized
+```
+
+### Good — fully documented, CLI help is self-explanatory:
 
 ```protobuf
-// A member of a ZeroTier network.
+// A member (peer node) of a ZeroTier network.
 message Member {
-  // ZeroTier node ID (10 hex characters, e.g. "3eb9637a20").
+  // Composite member ID in the form "<networkId>-<nodeId>".
   string id = 1;
-  // Human-readable name assigned in ZeroTier Central.
+  // Human-readable name assigned in ZeroTier Central (e.g. "my-laptop").
   string name = 2;
-  // Whether this member is authorized to join the network.
-  // Unauthorized members have no IP assignment and cannot communicate.
+  // Whether this member is authorized to communicate on the network.
+  // Unauthorized members cannot send or receive traffic but may still
+  // appear in the member list with a pending status.
   bool authorized = 3;
 }
 ```
+
+CLI help becomes:
+```
+--id string          Composite member ID in the form "<networkId>-<nodeId>".
+--name string        Human-readable name assigned in ZeroTier Central (e.g. "my-laptop").
+--authorized         Whether this member is authorized to communicate on the network.
+```
+
+### Documentation conventions
+
+- Start with a capital letter, end with a period.
+- Use the first line as a short summary (shown in `--help` summaries).
+- Add a blank comment line then a longer explanation for details, edge cases,
+  or examples. The CLI help shows the full text.
+- Document units: `Unix timestamp (seconds since epoch)`, `duration in milliseconds`.
+- Document constraints: `10 hex characters`, `between 0 and 100`.
+- Document the zero/default value: `0 means never seen`, `empty string means no filter`.
+
+### Always set DocsProto in plugin.Serve
+
+After compiling the proto with `make plugin-proto`, the generated
+`proto/<name>/<name>_docs.go` file exports `PluginDocs`. Pass it to
+`plugin.Serve`:
+
+```go
+plugin.Serve(plugin.Config{
+    Name:        "zerotier",
+    // ...
+    DocsProto:   pb.PluginDocs,
+    // ...
+})
+```
+
+Without this, the daemon has no access to the proto comments and CLI help
+will show only raw field names.
 
 ## 6. Prefer `int32`/`int64` over `string` for numeric identifiers
 
@@ -156,7 +209,7 @@ message Network {
 
 ```protobuf
 message Network {
-  int64 creation_time = 1;  // Unix timestamp
+  int64 creation_time = 1;  // Unix timestamp (seconds since epoch)
 }
 ```
 
@@ -178,55 +231,109 @@ enum OutputFormat {
 - For `repeated`: empty list means "no filter / use defaults." The server code should handle this without error.
 - For `string` filters: empty string means "no filter."
 
-## 9. Complete example (good)
+## 9. Complete documented example
 
 ```protobuf
 syntax = "proto3";
 package zerotier;
 option go_package = "plugins/zerotier/proto/zerotier";
 
+// ZeroTierService provides access to ZeroTier Central API for listing
+// networks and their members with IP assignments.
+service ZeroTierService {
+  // ListNetworks returns all networks accessible by the configured API token.
+  // Each network includes its ID, name, description, and member count.
+  rpc ListNetworks(ListNetworksRequest) returns (ListNetworksResponse);
+  // ListMembers returns all members of a specific network with IPs and status.
+  // Supports filtering by connection status and name substring, as well as
+  // column selection and output format control.
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+}
+
+// Filter by member connection and authorization status.
 enum MemberStatus {
+  // No status filter — return all members.
   MEMBER_STATUS_UNSPECIFIED = 0;
+  // Only members currently online (seen within the last 5 minutes).
   MEMBER_STATUS_ONLINE = 1;
+  // Only members currently offline.
   MEMBER_STATUS_OFFLINE = 2;
+  // Only authorized members.
   MEMBER_STATUS_AUTHORIZED = 3;
+  // Only unauthorized members.
   MEMBER_STATUS_UNAUTHORIZED = 4;
 }
 
+// Columns available for table display output.
 enum Column {
   COLUMN_UNSPECIFIED = 0;
-  COLUMN_NODE_ID = 1;
-  COLUMN_NAME = 2;
-  COLUMN_IP = 3;
-  COLUMN_STATUS = 4;
-  COLUMN_DESCRIPTION = 5;
-  COLUMN_VERSION = 6;
-  COLUMN_PHYSICAL_ADDRESS = 7;
+  COLUMN_NODE_ID = 1;   // ZeroTier node ID (10 hex chars).
+  COLUMN_NAME = 2;      // Human-readable member name.
+  COLUMN_IP = 3;        // Assigned IP addresses.
+  COLUMN_STATUS = 4;    // Connection status (online/offline/unauthorized).
+  COLUMN_DESCRIPTION = 5;  // User-defined description.
+  COLUMN_VERSION = 6;      // ZeroTier client version.
+  COLUMN_PHYSICAL_ADDRESS = 7;  // External IP:port.
 }
 
+// Output format for display output.
 enum OutputFormat {
-  OUTPUT_FORMAT_UNSPECIFIED = 0;
-  OUTPUT_FORMAT_TABLE = 1;
-  OUTPUT_FORMAT_RAW = 2;
+  OUTPUT_FORMAT_UNSPECIFIED = 0;  // Default (table).
+  OUTPUT_FORMAT_TABLE = 1;        // Formatted aligned columns.
+  OUTPUT_FORMAT_RAW = 2;          // Key: value lines per member.
 }
 
+// Filters applied to the member list before returning.
 message MemberFilter {
+  // Only include members matching this status.
+  // Unset means no status filter.
   MemberStatus status = 1;
   // Case-insensitive substring match against member name.
+  // Empty means no name filter.
   string name_substring = 2;
 }
 
+// Controls how members are rendered in human-readable output.
 message DisplayOptions {
-  // Columns to show. Empty = server default (node_id, name, ip, status).
+  // Columns to include. Empty or unspecified means the server default.
   repeated Column fields = 1;
+  // Output rendering format. Unset means table.
   OutputFormat format = 2;
 }
 
 message ListMembersRequest {
-  // Network ID. If empty and exactly one network exists, auto-detected.
+  // Network ID to list members for (e.g. "8056c2e21c000001").
+  // If empty and exactly one network exists, auto-detected.
   string network_id = 1;
+  // Optional filters to narrow the member list.
   MemberFilter filter = 2;
+  // Optional display options for human-readable output.
   DisplayOptions display = 3;
+}
+
+// A member (peer node) of a ZeroTier network.
+message Member {
+  // Composite member ID in the form "<networkId>-<nodeId>".
+  string id = 1;
+  // ZeroTier node ID (10 hex characters, e.g. "3eb9637a20").
+  string node_id = 2;
+  // Human-readable name assigned in ZeroTier Central.
+  string name = 3;
+  // Optional user-defined description for this member.
+  string description = 4;
+  // Whether this member is authorized to communicate on the network.
+  bool authorized = 5;
+  // Assigned IP addresses (e.g. ["10.147.20.1"]).
+  // Empty if not authorized or no IP assignment.
+  repeated string ip_assignments = 6;
+  // Unix timestamp (milliseconds) of last online time. 0 if never seen.
+  int64 last_online = 7;
+  // Whether the member is currently online (last 5 minutes).
+  bool online = 8;
+  // External IP:port the member last connected from.
+  string physical_address = 9;
+  // ZeroTier client version (e.g. "1.16.0").
+  string client_version = 10;
 }
 ```
 
@@ -238,7 +345,8 @@ message ListMembersRequest {
 | `string fields` (comma-separated) | No type safety, fragile parsing, no autocomplete | Replace with `repeated Column` |
 | `string output = "table"` | Same as above | Replace with `OutputFormat` enum |
 | Flat field soup without sub-messages | Hard to extend, no logical grouping | Group into `Filter` / `Display` sub-messages |
-| Missing field comments | Consumers don't know semantics | Add `//` comments on every field |
+| Missing field comments | CLI help shows raw field names, users can't understand flags | Add `//` comments on every field |
+| Missing `DocsProto` in plugin.Serve | Daemon can't access proto comments even if they exist | Add `DocsProto: pb.PluginDocs` |
 | `string timestamp` instead of `int64` | No validation, parsing overhead, locale-dependent | Use `int64 unix_seconds` or `google.protobuf.Timestamp` |
 
 ## 11. Plugin proto directory structure
@@ -253,6 +361,16 @@ Every plugin proto **must** have a `go_package` option pointing to its own direc
 
 ```protobuf
 option go_package = "plugins/zerotier/proto/zerotier";
+```
+
+After proto compilation, add `DocsProto: pb.PluginDocs` to `plugin.Serve`:
+
+```go
+plugin.Serve(plugin.Config{
+    Name:      "zerotier",
+    DocsProto: pb.PluginDocs,  // proto comments → CLI help
+    Services:  []plugin.Service{...},
+})
 ```
 
 ## 12. Service naming

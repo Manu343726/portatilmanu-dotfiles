@@ -407,6 +407,7 @@ func main() {
 		DisplayName: "ZeroTier",
 		Version:     "1.0.0",
 		Description: "Query ZeroTier Central API for network members and IPs",
+		DocsProto:   pb.PluginDocs,
 		Services: []plugin.Service{
 			{
 				Name:             "zerotier.ZeroTierService",

@@ -6,44 +6,74 @@ option go_package = "plugins/zerotier/proto/zerotier";
 
 // ZeroTierService provides access to ZeroTier Central API for listing
 // networks and their members with IP assignments.
+// Requires a ZeroTier Central API token stored in the daemon's secrets file.
 service ZeroTierService {
   // ListNetworks returns all networks accessible by the configured API token.
+  // Each network includes its ID, name, description, and member count.
+  // Use this to discover network IDs for subsequent ListMembers calls.
   rpc ListNetworks(ListNetworksRequest) returns (ListNetworksResponse);
   // ListMembers returns all members of a specific network with IPs and status.
+  // Supports filtering by connection status and name substring, as well as
+  // column selection and output format control for human-readable display.
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
 }
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 
-// Connection status filter for network members.
+// Filter by member connection and authorization status.
+// ONLINE/OFFLINE check whether the member was recently seen by the network
+// controller (last 5 minutes). AUTHORIZED/UNAUTHORIZED check whether the
+// member is allowed to communicate on the network. These are independent
+// axes — a member can be online but unauthorized, or authorized but offline.
 enum MemberStatus {
-  MEMBER_STATUS_UNSPECIFIED = 0;  // no filter
+  // No status filter — return all members regardless of status.
+  MEMBER_STATUS_UNSPECIFIED = 0;
+  // Only members currently online (seen within the last 5 minutes).
   MEMBER_STATUS_ONLINE = 1;
+  // Only members currently offline (not seen within the last 5 minutes).
   MEMBER_STATUS_OFFLINE = 2;
-  MEMBER_STATUS_AUTHORIZED = 3;   // online or offline, but authorized
+  // Only members that are authorized on the network.
+  MEMBER_STATUS_AUTHORIZED = 3;
+  // Only members that are NOT authorized (pending approval).
   MEMBER_STATUS_UNAUTHORIZED = 4;
 }
 
-// Columns available for table display output.
+// Columns available for table display output. Use with --display.fields
+// to control which columns appear in table or raw output. Pass as a
+// repeated flag: --display.fields=COLUMN_NAME --display.fields=COLUMN_IP
 enum Column {
+  // No column specified — uses the server default set.
   COLUMN_UNSPECIFIED = 0;
+  // ZeroTier node ID (10 hex characters, e.g. "3f2de3d43b").
   COLUMN_NODE_ID = 1;
+  // Human-readable member name assigned in ZeroTier Central.
   COLUMN_NAME = 2;
+  // Assigned IP addresses (comma-separated if multiple).
   COLUMN_IP = 3;
+  // Connection status: online (green), offline (red), or unauthorized (dim).
   COLUMN_STATUS = 4;
+  // User-defined description of the member.
   COLUMN_DESCRIPTION = 5;
+  // ZeroTier client version string (e.g. "1.16.0").
   COLUMN_VERSION = 6;
+  // External IP:port the member last connected from.
   COLUMN_PHYSICAL_ADDRESS = 7;
+  // Whether the member is authorized on the network (true/false).
   COLUMN_AUTHORIZED = 8;
+  // The ZeroTier network ID this member belongs to.
   COLUMN_NETWORK_ID = 9;
+  // ZeroTier protocol version number (e.g. v12).
   COLUMN_PROTOCOL_VERSION = 10;
 }
 
 // Output format for human-readable display output.
 enum OutputFormat {
-  OUTPUT_FORMAT_UNSPECIFIED = 0;  // default (table)
+  // Default table format with aligned columns.
+  OUTPUT_FORMAT_UNSPECIFIED = 0;
+  // Formatted table with column headers and aligned values.
   OUTPUT_FORMAT_TABLE = 1;
-  OUTPUT_FORMAT_RAW = 2;          // key: value lines per member
+  // Key: value lines per member, separated by blank lines.
+  OUTPUT_FORMAT_RAW = 2;
 }
 
 // ── Requests / Responses ─────────────────────────────────────────────────────
@@ -53,85 +83,99 @@ message ListNetworksRequest {}
 message ListMembersRequest {
   // Network ID to list members for (e.g. "8056c2e21c000001").
   // If empty and the account has exactly one network, it is auto-detected.
+  // If there are multiple networks, --network-id is required.
   string network_id = 1;
 
-  // Optional filters to narrow the member list.
+  // Optional filters to narrow the member list before returning.
+  // Supports status-based filtering and name substring search.
   MemberFilter filter = 2;
 
   // Optional display options for human-readable output.
-  // When absent, defaults to table format with standard columns.
+  // Controls which columns to show and in what format (table or raw).
+  // When absent, defaults to table format with default columns.
   DisplayOptions display = 3;
 }
 
-// Filters applied to the member list before returning.
+// Filters applied to the member list before returning results.
+// Filters are combined with AND logic (all conditions must match).
 message MemberFilter {
-  // Only include members matching this connection status.
-  // Unset means no status filter.
+  // Only include members matching this connection/authorization status.
+  // Unset (MEMBER_STATUS_UNSPECIFIED) means no status filter.
   MemberStatus status = 1;
   // Case-insensitive substring match against the member name.
-  // Empty means no name filter.
+  // Only members whose name contains this substring are returned.
+  // Empty string means no name filter.
   string name_substring = 2;
 }
 
-// Controls how members are rendered in human-readable output.
+// Controls how members are rendered in human-readable display output.
 message DisplayOptions {
-  // Columns to include. Empty or unspecified means the server default:
-  // node_id, name, ip, status.
+  // Columns to include in the output. When empty or unspecified, a default
+  // set is used: node_id, name, ip, status, authorized.
+  // Pass individual enum values: --display.fields=COLUMN_NAME
   repeated Column fields = 1;
-  // Output rendering format. Unset means table.
+  // Output rendering format. Unset means table format.
   OutputFormat format = 2;
 }
 
 // ── Data types ───────────────────────────────────────────────────────────────
 
 message ListNetworksResponse {
+  // All networks accessible by the configured API token.
   repeated Network networks = 1;
 }
 
-// A ZeroTier network.
+// A ZeroTier virtual network.
 message Network {
-  // ZeroTier network ID (e.g. "8056c2e21c000001").
+  // ZeroTier network ID (16 hex characters, e.g. "8056c2e21c000001").
   string id = 1;
-  // Human-readable name configured in ZeroTier Central.
+  // Human-readable name configured in ZeroTier Central (e.g. "home").
   string name = 2;
-  // Description of the network.
+  // Optional description of the network's purpose or scope.
   string description = 3;
   // Number of members currently authorized on this network.
   int32 member_count = 4;
-  // Unix timestamp of network creation time.
+  // Unix timestamp (seconds since epoch) of network creation time.
   int64 creation_time = 5;
 }
 
-// A member (peer) of a ZeroTier network.
+// A member (peer node) of a ZeroTier network.
 message Member {
-  // ZeroTier member/peer ID (10 hex characters, e.g. "3eb9637a20").
+  // Composite member ID in the form "<networkId>-<nodeId>".
   string id = 1;
+  // ZeroTier node ID (10 hex characters, e.g. "3eb9637a20").
   string node_id = 2;
   // Human-readable name assigned in ZeroTier Central.
   string name = 3;
-  // Optional description for this member.
+  // Optional user-defined description for this member.
   string description = 4;
-  // Whether this member is authorized on the network.
+  // Whether this member is authorized to communicate on the network.
+  // Unauthorized members cannot send or receive traffic.
   bool authorized = 5;
-  // Assigned IP addresses (e.g. ["10.147.20.1"]).
+  // Assigned IP addresses (e.g. ["10.147.20.1", "172.25.0.1"]).
   // Empty if the member has no IP assignment or is not authorized.
   repeated string ip_assignments = 6;
-  // Unix timestamp (seconds) of last online time. 0 if never seen.
+  // Unix timestamp (milliseconds) of last online time.
+  // Returns 0 if the member has never been seen.
   int64 last_online = 7;
-  // Whether the member is currently online (heuristic: lastOnline < 5 min ago).
+  // Whether the member is currently online.
+  // Heuristic: true if last_online is within the last 5 minutes.
   bool online = 8;
-  // Physical internet address (e.g. "1.2.3.4:9993").
+  // External internet IP:port the member last connected from.
+  // May be empty if the member has never connected.
   string physical_address = 9;
-  // ZeroTier client version (e.g. "1.16.0").
+  // ZeroTier client version string (e.g. "1.16.0").
   string client_version = 10;
   // The ZeroTier network ID this member belongs to.
   string network_id = 11;
-  // ZeroTier protocol version number.
+  // ZeroTier protocol version number (e.g. 12).
   int32 protocol_version = 12;
-  // Timestamp (milliseconds) of last check-in with controller.
+  // Timestamp (milliseconds since epoch) of last check-in with the
+  // network controller. More recent than last_online in some cases.
   int64 last_seen = 13;
 }
 
 message ListMembersResponse {
+  // All members of the requested network, after applying any filters.
   repeated Member members = 1;
 }
