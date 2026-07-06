@@ -177,23 +177,12 @@ CLI help becomes:
 - Document constraints: `10 hex characters`, `between 0 and 100`.
 - Document the zero/default value: `0 means never seen`, `empty string means no filter`.
 
-### Always set DocsProto in plugin.Serve
+### DocsProto is automatic
 
 After compiling the proto with `make plugin-proto`, the generated
-`proto/<name>/<name>_docs.go` file exports `PluginDocs`. Pass it to
-`plugin.Serve`:
-
-```go
-plugin.Serve(plugin.Config{
-    Name:        "zerotier",
-    // ...
-    DocsProto:   pb.PluginDocs,
-    // ...
-})
-```
-
-Without this, the daemon has no access to the proto comments and CLI help
-will show only raw field names.
+`proto/<name>/<name>_docs.go` file automatically registers the documentation
+with `plugin.DefaultDocs` in its `init()` function. The SDK picks this up
+automatically — plugins do NOT need to pass `DocsProto` explicitly.
 
 ## 6. Prefer `int32`/`int64` over `string` for numeric identifiers
 
@@ -346,7 +335,7 @@ message Member {
 | `string output = "table"` | Same as above | Replace with `OutputFormat` enum |
 | Flat field soup without sub-messages | Hard to extend, no logical grouping | Group into `Filter` / `Display` sub-messages |
 | Missing field comments | CLI help shows raw field names, users can't understand flags | Add `//` comments on every field |
-| Missing `DocsProto` in plugin.Serve | Daemon can't access proto comments even if they exist | Add `DocsProto: pb.PluginDocs` |
+| Missing `DocsProto` in plugin.Serve | (Automatic since protoc-gen-docs registers via `plugin.DefaultDocs`) | N/A — handled by generated code |
 | `string timestamp` instead of `int64` | No validation, parsing overhead, locale-dependent | Use `int64 unix_seconds` or `google.protobuf.Timestamp` |
 
 ## 11. Plugin proto directory structure
@@ -363,15 +352,9 @@ Every plugin proto **must** have a `go_package` option pointing to its own direc
 option go_package = "plugins/zerotier/proto/zerotier";
 ```
 
-After proto compilation, add `DocsProto: pb.PluginDocs` to `plugin.Serve`:
-
-```go
-plugin.Serve(plugin.Config{
-    Name:      "zerotier",
-    DocsProto: pb.PluginDocs,  // proto comments → CLI help
-    Services:  []plugin.Service{...},
-})
-```
+After proto compilation, the generated `*_docs.go` file automatically
+registers the documentation via `plugin.DefaultDocs`. No explicit
+`DocsProto` field is needed in `plugin.Serve`.
 
 ## 12. Service naming
 

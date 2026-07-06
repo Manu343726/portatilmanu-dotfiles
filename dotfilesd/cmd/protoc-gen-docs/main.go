@@ -320,8 +320,7 @@ func goPackageName(fdp *descriptorpb.FileDescriptorProto) string {
 }
 
 // renderGoEmbed generates a Go source file that embeds the binary
-// Documentation proto. Plugin main.go files import this and pass
-// Config.DocsProto using proto.Unmarshal on PluginDocsData.
+// Documentation proto and auto-registers it with the plugin SDK.
 func renderGoEmbed(protoName, pkg string) string {
 	base := protoName
 	if idx := strings.LastIndex(base, "/"); idx >= 0 {
@@ -334,6 +333,7 @@ func renderGoEmbed(protoName, pkg string) string {
 	b.WriteString("import (\n")
 	b.WriteString("\t_ \"embed\"\n\n")
 	b.WriteString("\tdotfilesdv1 \"dotfilesd/proto/dotfilesd/v1/dotfilesdv1\"\n")
+	b.WriteString("\t\"dotfilesd/plugin\"\n")
 	b.WriteString("\t\"google.golang.org/protobuf/proto\"\n")
 	b.WriteString(")\n\n")
 	b.WriteString("//go:embed " + pbName + "\n")
@@ -344,6 +344,7 @@ func renderGoEmbed(protoName, pkg string) string {
 	b.WriteString("\t\treturn\n")
 	b.WriteString("\t}\n")
 	b.WriteString("\tPluginDocs = &doc\n")
+	b.WriteString("\tplugin.DefaultDocs = &doc\n")
 	b.WriteString("}\n\n")
 	b.WriteString("var PluginDocs *dotfilesdv1.Documentation\n")
 	return b.String()
