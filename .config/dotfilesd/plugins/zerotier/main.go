@@ -129,7 +129,7 @@ func (s *zeroTierService) ListMembers(
 	now := time.Now().Unix()
 	members := make([]*pb.Member, 0, len(raw))
 	for _, m := range raw {
-		online := m.LastOnline > 0 && (now-m.LastOnline) < 300 // online within 5 min
+		online := m.LastOnline > 0 && (now-m.LastOnline) < 300
 		members = append(members, &pb.Member{
 			Id:              m.ID,
 			NodeId:          m.NodeID,
@@ -144,33 +144,165 @@ func (s *zeroTierService) ListMembers(
 		})
 	}
 
+	members = filterMembers(members, req.Msg.Status, req.Msg.NameFilter)
+
 	if pc.RenderOutput() {
 		if len(members) == 0 {
-			fmt.Fprintln(pc.Stdout(), "No members found for network", networkID)
+			fmt.Fprintln(pc.Stdout(), "No members match the current filters.")
 		} else {
-			onlineCount := 0
-			for _, m := range members {
-				if m.Online {
-					onlineCount++
-				}
-			}
-			fmt.Fprintf(pc.Stdout(), "Network: %s  (%d members, %d online)\n\n", networkID, len(members), onlineCount)
-			fmt.Fprintf(pc.Stdout(), "%-16s  %-20s  %-18s  %s\n", "Node ID", "Name", "IPs", "Status")
-			for _, m := range members {
-				ipStr := strings.Join(m.IpAssignments, ", ")
-				status := pc.Redf("offline")
-				if m.Online {
-					status = pc.Greenf("online")
-				}
-				if !m.Authorized {
-					status = pc.Dimf("unauthorized")
-				}
-				fmt.Fprintf(pc.Stdout(), "%-16s  %-20s  %-18s  %s\n", m.NodeId, m.Name, ipStr, status)
+			cols := parseColumns(req.Msg.Fields)
+			switch req.Msg.Output {
+			case "raw":
+				printMembersRaw(pc, members, networkID, cols)
+			default:
+				printMembersTable(pc, members, networkID, cols)
 			}
 		}
 	}
 
 	return connect.NewResponse(&pb.ListMembersResponse{Members: members}), nil
+}
+
+// filterMembers applies status and name filters to the member list.
+func filterMembers(members []*pb.Member, status, nameFilter string) []*pb.Member {
+	out := make([]*pb.Member, 0, len(members))
+	for _, m := range members {
+		switch strings.ToLower(status) {
+		case "online":
+			if !m.Online || !m.Authorized {
+				continue
+			}
+		case "offline":
+			if m.Online || !m.Authorized {
+				continue
+			}
+		case "authorized":
+			if !m.Authorized {
+				continue
+			}
+		case "unauthorized":
+			if m.Authorized {
+				continue
+			}
+		}
+		if nameFilter != "" && !strings.Contains(strings.ToLower(m.Name), strings.ToLower(nameFilter)) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// colHints defines column metadata for table output.
+type colHint struct {
+	Label string
+	Width int
+	Value func(m *pb.Member) string
+}
+
+var allColumns = map[string]colHint{
+	"node_id":          {"Node ID", 16, func(m *pb.Member) string { return m.NodeId }},
+	"name":             {"Name", 22, func(m *pb.Member) string { return m.Name }},
+	"ip":               {"IPs", 18, func(m *pb.Member) string { return strings.Join(m.IpAssignments, ", ") }},
+	"status":           {"Status", 12, nil},
+	"description":      {"Description", 30, func(m *pb.Member) string { return m.Description }},
+	"version":          {"Version", 10, func(m *pb.Member) string { return m.ClientVersion }},
+	"physical_address": {"Address", 22, func(m *pb.Member) string { return m.PhysicalAddress }},
+}
+
+var defaultCols = []string{"node_id", "name", "ip", "status"}
+
+// parseColumns parses the comma-separated fields parameter into column names.
+func parseColumns(fields string) []string {
+	if fields == "" {
+		return defaultCols
+	}
+	if fields == "all" {
+		return []string{"node_id", "name", "ip", "status", "description", "version", "physical_address"}
+	}
+	var cols []string
+	for _, f := range strings.Split(fields, ",") {
+		f = strings.TrimSpace(f)
+		if _, ok := allColumns[f]; ok {
+			cols = append(cols, f)
+		}
+	}
+	if len(cols) == 0 {
+		return defaultCols
+	}
+	return cols
+}
+
+// statusLabel returns the colored status label for a member.
+func statusLabel(pc plugin.Context, m *pb.Member) string {
+	if !m.Authorized {
+		return pc.Dimf("unauthorized")
+	}
+	if m.Online {
+		return pc.Greenf("online")
+	}
+	return pc.Redf("offline")
+}
+
+// printMembersTable prints members as a formatted table.
+func printMembersTable(pc plugin.Context, members []*pb.Member, networkID string, cols []string) {
+	onlineCount := 0
+	for _, m := range members {
+		if m.Online {
+			onlineCount++
+		}
+	}
+
+	formats := make([]string, len(cols))
+	headers := make([]string, len(cols))
+	for i, c := range cols {
+		h := allColumns[c]
+		formats[i] = fmt.Sprintf("%%-%ds  ", h.Width)
+		headers[i] = h.Label
+	}
+	colFmt := strings.Join(formats, "")
+
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "Network: %s  (%d members, %d online)\n\n", networkID, len(members), onlineCount)
+
+	headerArgs := make([]any, len(headers))
+	for i, h := range headers {
+		headerArgs[i] = h
+	}
+	fmt.Fprintf(&buf, colFmt, headerArgs...)
+	buf.WriteByte('\n')
+
+	for _, m := range members {
+		row := make([]any, len(cols))
+		for i, c := range cols {
+			h := allColumns[c]
+			if c == "status" {
+				row[i] = statusLabel(pc, m)
+			} else {
+				row[i] = h.Value(m)
+			}
+		}
+		fmt.Fprintf(&buf, colFmt, row...)
+		buf.WriteByte('\n')
+	}
+
+	fmt.Fprint(pc.Stdout(), buf.String())
+}
+
+// printMembersRaw prints members as key:value blocks.
+func printMembersRaw(pc plugin.Context, members []*pb.Member, networkID string, cols []string) {
+	fmt.Fprintf(pc.Stdout(), "network_id: %s  members: %d\n\n", networkID, len(members))
+	for _, m := range members {
+		for _, c := range cols {
+			h := allColumns[c]
+			if c == "status" {
+				fmt.Fprintf(pc.Stdout(), "%s: %s\n", h.Label, statusLabel(pc, m))
+			} else {
+				fmt.Fprintf(pc.Stdout(), "%s: %s\n", h.Label, h.Value(m))
+			}
+		}
+		fmt.Fprintln(pc.Stdout())
+	}
 }
 
 // resolveSingleNetwork fetches the network list and returns the single network ID.

@@ -60,7 +60,11 @@ ListMembers returns all members of a specific network with IPs and status.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `network_id` | string | Network ID to list members for (e.g. "8056c2e21c000001"). |
+| `network_id` | string | Network ID to list members for (e.g. "8056c2e21c000001"). If empty and the account has exactly one network, it is auto-detected. |
+| `status` | string | Filter by connection status: "online", "offline", "authorized", "unauthorized", or empty for all. |
+| `name_filter` | string | Filter by name substring (case-insensitive). |
+| `fields` | string | Comma-separated columns for table output. Supported values: node_id, name, ip, status, description, version, physical_address. Use "all" for every column. Default: "node_id,name,ip,status". |
+| `output` | string | Output format for human-readable stdout: "table" (default) or "raw" (key: value lines per member). |
 
 ### Member
 
