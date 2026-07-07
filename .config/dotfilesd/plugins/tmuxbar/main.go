@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -139,26 +137,6 @@ func formatDuration(m int) string {
 	return fmt.Sprintf("%dh%dm", h, m)
 }
 
-func topProcess(sortFlag string) string {
-	out, err := exec.Command("ps", "-eo", "comm", "--sort="+sortFlag).Output()
-	if err != nil {
-		return ""
-	}
-	lines := strings.Split(string(out), "\n")
-	if len(lines) < 2 {
-		return ""
-	}
-	name := strings.TrimSpace(lines[1])
-	if name == "ps" || name == "" || name == "COMMAND" {
-		if len(lines) > 2 {
-			name = strings.TrimSpace(lines[2])
-		} else {
-			return ""
-		}
-	}
-	return name
-}
-
 func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.CPUWidgetRequest]) (*connect.Response[pb.CPUWidgetResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
@@ -171,13 +149,12 @@ func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.C
 		return connect.NewResponse(&pb.CPUWidgetResponse{Text: "CPU N/A"}), nil
 	}
 
-	top := topProcess("-%cpu")
 	pct := int(cpu.TotalPercent)
 	c := pctColor(pct)
-	text := fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", c, pct, top, bar(pct))
+	text := fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", c, pct, r.Msg.TopCpuProcess, bar(pct))
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.CPUWidget", "pct", pct, "top", top)
+		pc.Log().Info("▶ TmuxBar.CPUWidget", "pct", pct, "top", r.Msg.TopCpuProcess)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -202,14 +179,13 @@ func (s *tmuxBarServer) RAMWidget(ctx context.Context, req *connect.Request[pb.R
 		return connect.NewResponse(&pb.RAMWidgetResponse{Text: "RAM N/A"}), nil
 	}
 
-	top := topProcess("-%mem")
 	pct := int(ram.Percent)
 	usedGiB := ram.UsedMb / 1024
 	c := pctColor(pct)
-	text := fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", c, usedGiB, pct, top, bar(pct))
+	text := fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", c, usedGiB, pct, r.Msg.TopMemProcess, bar(pct))
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.RAMWidget", "pct", pct, "used_gib", usedGiB, "top", top)
+		pc.Log().Info("▶ TmuxBar.RAMWidget", "pct", pct, "used_gib", usedGiB, "top", r.Msg.TopMemProcess)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -329,35 +305,22 @@ func (s *tmuxBarServer) BatteryWidget(ctx context.Context, req *connect.Request[
 func (s *tmuxBarServer) AsusProfileWidget(ctx context.Context, req *connect.Request[pb.AsusProfileWidgetRequest]) (*connect.Response[pb.AsusProfileWidgetResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
-	out, err := exec.CommandContext(ctx, "asusctl", "profile", "get").Output()
+	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
 	p := ""
 	if err == nil {
-		fields := strings.Fields(string(out))
-		if len(fields) >= 3 {
-			p = fields[2]
-		}
+		p = r.Msg.AsusProfile
 	}
 
 	var text string
 	switch p {
-	case "Performance":
+	case "PERF":
 		text = "#[fg=#E8871A]PERF#[default] "
-	case "Balanced":
+	case "BAL":
 		text = "#[fg=#A6E22E]BAL#[default] "
-	case "Quiet":
+	case "QUIET":
 		text = "#[fg=#66D9EF]QUIET#[default] "
 	default:
 		text = "? "
-	}
-
-	short := ""
-	switch p {
-	case "Performance":
-		short = "PERF"
-	case "Balanced":
-		short = "BAL"
-	case "Quiet":
-		short = "QUIET"
 	}
 
 	if pc != nil {
@@ -370,38 +333,33 @@ func (s *tmuxBarServer) AsusProfileWidget(ctx context.Context, req *connect.Requ
 
 	return connect.NewResponse(&pb.AsusProfileWidgetResponse{
 		Text:    text,
-		Profile: short,
+		Profile: p,
 	}), nil
 }
 
 func (s *tmuxBarServer) GPUProfileWidget(ctx context.Context, req *connect.Request[pb.GPUProfileWidgetRequest]) (*connect.Response[pb.GPUProfileWidgetResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
+	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
+	p := ""
+	if err == nil {
+		p = r.Msg.GpuProfile
+	}
+
 	var text string
-	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/egpu_connected"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	switch p {
+	case "EGPU":
 		text = "#[fg=#AE81FF]EGPU#[default] "
-	} else if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	case "NVIDIA":
 		text = "#[fg=#E8871A]NVIDIA#[default] "
-	} else if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/dgpu_disable"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	case "IGPU":
 		text = "#[fg=#66D9EF]IGPU#[default] "
-	} else {
+	default:
 		text = "#[fg=#A6E22E]HYBRID#[default] "
 	}
 
-	short := ""
-	switch {
-	case strings.Contains(text, "EGPU"):
-		short = "EGPU"
-	case strings.Contains(text, "NVIDIA"):
-		short = "NVIDIA"
-	case strings.Contains(text, "IGPU"):
-		short = "IGPU"
-	case strings.Contains(text, "HYBRID"):
-		short = "HYBRID"
-	}
-
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.GPUProfileWidget", "profile", short)
+		pc.Log().Info("▶ TmuxBar.GPUProfileWidget", "profile", p)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -410,17 +368,17 @@ func (s *tmuxBarServer) GPUProfileWidget(ctx context.Context, req *connect.Reque
 
 	return connect.NewResponse(&pb.GPUProfileWidgetResponse{
 		Text:    text,
-		Profile: short,
+		Profile: p,
 	}), nil
 }
 
 func (s *tmuxBarServer) LayoutWidget(ctx context.Context, req *connect.Request[pb.LayoutWidgetRequest]) (*connect.Response[pb.LayoutWidgetResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
+	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
 	layout := ""
-	out, err := exec.CommandContext(ctx, "xkb-switch").Output()
 	if err == nil {
-		layout = strings.TrimSpace(string(out))
+		layout = r.Msg.KeyboardLayout
 	}
 
 	if pc != nil {
@@ -437,78 +395,23 @@ func (s *tmuxBarServer) LayoutWidget(ctx context.Context, req *connect.Request[p
 	}), nil
 }
 
-func findWiFiInterface() string {
-	ents, err := os.ReadDir("/sys/class/net")
-	if err != nil {
-		return ""
-	}
-	for _, e := range ents {
-		wirelessDir := "/sys/class/net/" + e.Name() + "/wireless"
-		if info, err := os.Stat(wirelessDir); err == nil && info.IsDir() {
-			return e.Name()
-		}
-	}
-	return ""
-}
-
-func readWiFiSignal(iface string) int {
-	data, err := os.ReadFile("/proc/net/wireless")
-	if err != nil {
-		return 0
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if !strings.HasPrefix(line, iface+":") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
-			continue
-		}
-		// field 2 is link quality (with trailing dot). assume max 70 (iwlwifi scale).
-		q := strings.TrimRight(fields[2], ".")
-		quality, _ := strconv.Atoi(q)
-		pct := quality * 100 / 70
-		if pct < 0 {
-			pct = 0
-		}
-		if pct > 100 {
-			pct = 100
-		}
-		return pct
-	}
-	return 0
-}
-
-func readWiFiSSID(iface string) string {
-	out, err := exec.Command("iw", "dev", iface, "info").Output()
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "ssid ") {
-			return strings.TrimPrefix(line, "ssid ")
-		}
-	}
-	return ""
-}
-
 func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.WiFiWidgetRequest]) (*connect.Response[pb.WiFiWidgetResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
-	iface := findWiFiInterface()
-	pct := 0
+	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
+	pct := 0.0
 	ssid := ""
-	if iface != "" {
-		pct = readWiFiSignal(iface)
-		ssid = readWiFiSSID(iface)
+	if err == nil && r.Msg.Wifi != nil {
+		pct = r.Msg.Wifi.Percent
+		ssid = r.Msg.Wifi.Ssid
 	}
 
-	c := pctColor(100 - pct)
-	text := fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", c, pct, ssid, bar(pct))
+	ipct := int(pct)
+	c := pctColor(100 - ipct)
+	text := fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", c, ipct, ssid, bar(ipct))
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.WiFiWidget", "pct", pct, "ssid", ssid)
+		pc.Log().Info("▶ TmuxBar.WiFiWidget", "pct", ipct, "ssid", ssid)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -517,7 +420,7 @@ func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.
 
 	return connect.NewResponse(&pb.WiFiWidgetResponse{
 		Text:    text,
-		Percent: float64(pct),
+		Percent: pct,
 		Ssid:    ssid,
 	}), nil
 }
@@ -545,31 +448,24 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 	var b strings.Builder
 
 	// ASUS profile
-	out, err := exec.Command("asusctl", "profile", "get").Output()
-	p := ""
-	if err == nil {
-		fields := strings.Fields(string(out))
-		if len(fields) >= 3 {
-			p = fields[2]
-		}
-	}
-	switch p {
-	case "Performance":
+	switch r.Msg.AsusProfile {
+	case "PERF":
 		b.WriteString("#[fg=#E8871A]PERF#[default] ")
-	case "Balanced":
+	case "BAL":
 		b.WriteString("#[fg=#A6E22E]BAL#[default] ")
-	case "Quiet":
+	case "QUIET":
 		b.WriteString("#[fg=#66D9EF]QUIET#[default] ")
 	}
 
 	// GPU profile
-	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/egpu_connected"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	switch r.Msg.GpuProfile {
+	case "EGPU":
 		b.WriteString("#[fg=#AE81FF]EGPU#[default] ")
-	} else if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	case "NVIDIA":
 		b.WriteString("#[fg=#E8871A]NVIDIA#[default] ")
-	} else if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/dgpu_disable"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	case "IGPU":
 		b.WriteString("#[fg=#66D9EF]IGPU#[default] ")
-	} else {
+	default:
 		b.WriteString("#[fg=#A6E22E]HYBRID#[default] ")
 	}
 	b.WriteString(" ")
@@ -609,8 +505,7 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 	// CPU
 	if cpu := r.Msg.Cpu; cpu != nil {
 		pct := int(cpu.TotalPercent)
-		top := topProcess("-%cpu")
-		b.WriteString(fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", pctColor(pct), pct, top, bar(pct)))
+		b.WriteString(fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", pctColor(pct), pct, r.Msg.TopCpuProcess, bar(pct)))
 		b.WriteString("#[default] ")
 	}
 
@@ -641,16 +536,14 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 	if ram := r.Msg.Ram; ram != nil {
 		pct := int(ram.Percent)
 		usedGiB := ram.UsedMb / 1024
-		top := topProcess("-%mem")
-		b.WriteString(fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", pctColor(pct), usedGiB, pct, top, bar(pct)))
+		b.WriteString(fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", pctColor(pct), usedGiB, pct, r.Msg.TopMemProcess, bar(pct)))
 		b.WriteString("#[default] ")
 	}
 
 	// WiFi
-	if iface := findWiFiInterface(); iface != "" {
-		pct := readWiFiSignal(iface)
-		ssid := readWiFiSSID(iface)
-		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(100-pct), pct, ssid, bar(pct)))
+	if w := r.Msg.Wifi; w != nil && w.Percent > 0 {
+		ipct := int(w.Percent)
+		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(100-ipct), ipct, w.Ssid, bar(ipct)))
 		b.WriteString("#[default] ")
 	}
 
@@ -662,13 +555,7 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 
 	// Powerline arrow to red section for layout
 	b.WriteString(" #[fg=#E82572,bg=#272822,none]#[fg=#A6E22E,bg=#E82572,none] ")
-
-	out2, err := exec.Command("xkb-switch").Output()
-	layout := ""
-	if err == nil {
-		layout = strings.TrimSpace(string(out2))
-	}
-	b.WriteString(layout)
+	b.WriteString(r.Msg.KeyboardLayout)
 
 	// Powerline arrow to light section for username
 	b.WriteString(" #[fg=#E8E8E2,bg=#E82572,none]#[fg=#272822,bg=#E8E8E2,bold] ")

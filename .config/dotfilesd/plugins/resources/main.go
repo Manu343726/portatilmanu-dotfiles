@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -64,6 +65,12 @@ type BatterySnapshot struct {
 	PowerNow   int64
 }
 
+type WiFiSnapshot struct {
+	Interface string
+	Percent   float64
+	SSID      string
+}
+
 type ProcessInfo struct {
 	PID        int
 	Name       string
@@ -81,6 +88,13 @@ type SharedState struct {
 	diskIO DiskIOSnapshot
 	cpuTemp CPUTempSnapshot
 	battery BatterySnapshot
+	wifi    WiFiSnapshot
+
+	asusProfile     string
+	gpuProfile      string
+	keyboardLayout  string
+	topCPUProcess   string
+	topMemProcess   string
 
 	// History ring buffers (100 entries each)
 	ramHistory      []float64
@@ -102,21 +116,37 @@ func newSharedState() *SharedState {
 	}
 }
 
-func (s *SharedState) update(ram RAMSnapshot, cpu CPUSnapshot, disk DiskSnapshot, diskIO DiskIOSnapshot, cpuTemp CPUTempSnapshot, battery BatterySnapshot) {
+type systemSnapshot struct {
+	ram    RAMSnapshot
+	cpu    CPUSnapshot
+	disk   DiskSnapshot
+	diskIO DiskIOSnapshot
+	cpuTemp CPUTempSnapshot
+	battery BatterySnapshot
+	wifi    WiFiSnapshot
+}
+
+func (s *SharedState) update(snap systemSnapshot) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ram = ram
-	s.cpu = cpu
-	s.disk = disk
-	s.diskIO = diskIO
-	s.cpuTemp = cpuTemp
-	s.battery = battery
+	s.ram = snap.ram
+	s.cpu = snap.cpu
+	s.disk = snap.disk
+	s.diskIO = snap.diskIO
+	s.cpuTemp = snap.cpuTemp
+	s.battery = snap.battery
+	s.wifi = snap.wifi
+	s.asusProfile = collectASUSProfile()
+	s.gpuProfile = collectGPUProfile()
+	s.keyboardLayout = collectKeyboardLayout()
+	s.topCPUProcess = collectTopCPUProcess()
+	s.topMemProcess = collectTopMemProcess()
 
-	s.ramHistory = appendRing(s.ramHistory, ram.Percent, s.maxHistory)
-	s.cpuHistory = appendRing(s.cpuHistory, cpu.TotalPercent, s.maxHistory)
-	s.diskHistory = appendRing(s.diskHistory, disk.Percent, s.maxHistory)
-	s.cpuTempHistory = appendRing(s.cpuTempHistory, cpuTemp.TempCelsius, s.maxHistory)
-	s.batteryHistory = appendRing(s.batteryHistory, battery.Percent, s.maxHistory)
+	s.ramHistory = appendRing(s.ramHistory, snap.ram.Percent, s.maxHistory)
+	s.cpuHistory = appendRing(s.cpuHistory, snap.cpu.TotalPercent, s.maxHistory)
+	s.diskHistory = appendRing(s.diskHistory, snap.disk.Percent, s.maxHistory)
+	s.cpuTempHistory = appendRing(s.cpuTempHistory, snap.cpuTemp.TempCelsius, s.maxHistory)
+	s.batteryHistory = appendRing(s.batteryHistory, snap.battery.Percent, s.maxHistory)
 }
 
 func appendRing(buf []float64, val float64, max int) []float64 {
@@ -127,10 +157,11 @@ func appendRing(buf []float64, val float64, max int) []float64 {
 	return buf
 }
 
-func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot) {
+func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot, WiFiSnapshot, string, string, string, string, string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.ram, s.cpu, s.disk, s.diskIO, s.cpuTemp, s.battery
+	return s.ram, s.cpu, s.disk, s.diskIO, s.cpuTemp, s.battery, s.wifi,
+		s.asusProfile, s.gpuProfile, s.keyboardLayout, s.topCPUProcess, s.topMemProcess
 }
 
 func (s *SharedState) getHistory(resource pb.ResourceType, count int) []float64 {
@@ -182,7 +213,7 @@ func (s *resourcesServer) ensureFreshData() {
 
 func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.CurrentRequest]) (*connect.Response[pb.CurrentResponse], error) {
 	s.ensureFreshData()
-	ram, cpu, disk, diskIO, cpuTemp, battery := s.state.get()
+	ram, cpu, disk, diskIO, cpuTemp, battery, wifi, asusProfile, gpuProfile, keyboardLayout, topCPUProc, topMemProc := s.state.get()
 
 	pc := plugin.ExtractContext(ctx)
 	if pc != nil {
@@ -268,12 +299,22 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 			EnergyFull: battery.EnergyFull,
 			PowerNow:   battery.PowerNow,
 		},
+		Wifi: &pb.WiFiSnapshot{
+			Interface: wifi.Interface,
+			Percent:   wifi.Percent,
+			Ssid:      wifi.SSID,
+		},
+		AsusProfile:    asusProfile,
+		GpuProfile:     gpuProfile,
+		KeyboardLayout: keyboardLayout,
+		TopCpuProcess:  topCPUProc,
+		TopMemProcess:  topMemProc,
 	}), nil
 }
 
 func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRequest]) (*connect.Response[pb.TopResponse], error) {
 	s.ensureFreshData()
-	ram, cpu, disk, _, _, _ := s.state.get()
+	ram, cpu, disk, _, _, _, _, _, _, _, _, _ := s.state.get()
 	_ = disk
 
 	pc := plugin.ExtractContext(ctx)
@@ -312,7 +353,7 @@ func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRe
 
 func (s *resourcesServer) PS(ctx context.Context, req *connect.Request[pb.PSRequest]) (*connect.Response[pb.PSResponse], error) {
 	s.ensureFreshData()
-	ram, cpu, _, _, _, _ := s.state.get()
+	ram, cpu, _, _, _, _, _, _, _, _, _, _ := s.state.get()
 	_ = cpu
 
 	pc := plugin.ExtractContext(ctx)
@@ -376,13 +417,16 @@ func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.H
 }
 
 func collectAll(state *SharedState) {
-	ram := collectRAM()
-	cpu := collectCPU()
-	disk := collectDisk()
-	diskIO := collectDiskIO()
-	cpuTemp := collectCPUTemp()
-	battery := collectBattery()
-	state.update(ram, cpu, disk, diskIO, cpuTemp, battery)
+	snap := systemSnapshot{
+		ram:     collectRAM(),
+		cpu:     collectCPU(),
+		disk:    collectDisk(),
+		diskIO:  collectDiskIO(),
+		cpuTemp: collectCPUTemp(),
+		battery: collectBattery(),
+		wifi:    collectWiFi(),
+	}
+	state.update(snap)
 }
 
 func collectRAM() RAMSnapshot {
@@ -651,6 +695,150 @@ func batteryStatusToProto(s string) pb.BatteryStatus {
 	default:
 		return pb.BatteryStatus_BATTERY_STATUS_UNSPECIFIED
 	}
+}
+
+func findWiFiInterface() string {
+	ents, err := os.ReadDir("/sys/class/net")
+	if err != nil {
+		return ""
+	}
+	for _, e := range ents {
+		wirelessDir := "/sys/class/net/" + e.Name() + "/wireless"
+		if info, err := os.Stat(wirelessDir); err == nil && info.IsDir() {
+			return e.Name()
+		}
+	}
+	return ""
+}
+
+func readWiFiSignal(iface string) int {
+	data, err := os.ReadFile("/proc/net/wireless")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, iface+":") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		q := strings.TrimRight(fields[2], ".")
+		quality, _ := strconv.Atoi(q)
+		pct := quality * 100 / 70
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 100 {
+			pct = 100
+		}
+		return pct
+	}
+	return 0
+}
+
+func readWiFiSSID(iface string) string {
+	out, err := exec.Command("iw", "dev", iface, "info").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "ssid ") {
+			return strings.TrimPrefix(line, "ssid ")
+		}
+	}
+	return ""
+}
+
+func collectWiFi() WiFiSnapshot {
+	iface := findWiFiInterface()
+	if iface == "" {
+		return WiFiSnapshot{}
+	}
+	return WiFiSnapshot{
+		Interface: iface,
+		Percent:   float64(readWiFiSignal(iface)),
+		SSID:      readWiFiSSID(iface),
+	}
+}
+
+func collectASUSProfile() string {
+	out, err := exec.Command("asusctl", "profile", "get").Output()
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) < 3 {
+		return ""
+	}
+	switch fields[2] {
+	case "Performance":
+		return "PERF"
+	case "Balanced":
+		return "BAL"
+	case "Quiet":
+		return "QUIET"
+	}
+	return ""
+}
+
+func collectGPUProfile() string {
+	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/egpu_connected"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+		return "EGPU"
+	}
+	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+		return "NVIDIA"
+	}
+	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/dgpu_disable"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+		return "IGPU"
+	}
+	return "HYBRID"
+}
+
+func collectKeyboardLayout() string {
+	out, err := exec.Command("xkb-switch").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func collectTopCPUProcess() string {
+	out, err := exec.Command("ps", "-eo", "comm", "--sort=-%cpu").Output()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(out), "\n")
+	if len(lines) < 2 {
+		return ""
+	}
+	name := strings.TrimSpace(lines[1])
+	if name == "ps" || name == "" || name == "COMMAND" {
+		if len(lines) > 2 {
+			name = strings.TrimSpace(lines[2])
+		}
+	}
+	return name
+}
+
+func collectTopMemProcess() string {
+	out, err := exec.Command("ps", "-eo", "comm", "--sort=-%mem").Output()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(out), "\n")
+	if len(lines) < 2 {
+		return ""
+	}
+	name := strings.TrimSpace(lines[1])
+	if name == "ps" || name == "" || name == "COMMAND" {
+		if len(lines) > 2 {
+			name = strings.TrimSpace(lines[2])
+		}
+	}
+	return name
 }
 
 func main() {

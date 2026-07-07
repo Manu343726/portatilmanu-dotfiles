@@ -42,6 +42,18 @@ message CurrentResponse {
   CPUTempSnapshot cpu_temp = 5;
   // Battery status snapshot (level, charging, plugged).
   BatterySnapshot battery = 6;
+  // WiFi signal snapshot (strength, SSID).
+  WiFiSnapshot wifi = 7;
+  // ASUS performance profile: "PERF", "BAL", "QUIET", or "".
+  string asus_profile = 8;
+  // GPU mode: "EGPU", "NVIDIA", "IGPU", "HYBRID", or "".
+  string gpu_profile = 9;
+  // Current keyboard layout (e.g., "us" or "es").
+  string keyboard_layout = 10;
+  // Name of the process with highest CPU usage.
+  string top_cpu_process = 11;
+  // Name of the process with highest memory usage.
+  string top_mem_process = 12;
 }
 
 // Sort order for process listing.
@@ -238,6 +250,16 @@ message BatterySnapshot {
   // Current power draw in microwatts (µW). Positive for discharge,
   // negative is not used — interpret via `status`.
   int64 power_now = 7;
+}
+
+// WiFiSnapshot captures the WiFi signal strength at a point in time.
+message WiFiSnapshot {
+  // Wireless interface name (e.g., "wlp6s0").
+  string interface = 1;
+  // Signal quality as percentage (0-100). Higher is better.
+  double percent = 2;
+  // Connected network SSID.
+  string ssid = 3;
 }
 
 // ProcessInfo describes a running process.

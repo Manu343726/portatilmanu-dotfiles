@@ -23,6 +23,7 @@
   - [DiskIOSnapshot](#diskiosnapshot)
   - [CPUTempSnapshot](#cputempsnapshot)
   - [BatterySnapshot](#batterysnapshot)
+  - [WiFiSnapshot](#wifisnapshot)
   - [ProcessInfo](#processinfo)
 - [Enums](#enums)
   - [SortOrder](#sortorder)
@@ -93,6 +94,12 @@ CurrentResponse contains the latest snapshot of all resources.
 | `disk_io` | resources.DiskIOSnapshot | Primary block device I/O statistics. |
 | `cpu_temp` | resources.CPUTempSnapshot | CPU temperature snapshot from thermal sensors. |
 | `battery` | resources.BatterySnapshot | Battery status snapshot (level, charging, plugged). |
+| `wifi` | resources.WiFiSnapshot | WiFi signal snapshot (strength, SSID). |
+| `asus_profile` | string | ASUS performance profile: "PERF", "BAL", "QUIET", or "". |
+| `gpu_profile` | string | GPU mode: "EGPU", "NVIDIA", "IGPU", "HYBRID", or "". |
+| `keyboard_layout` | string | Current keyboard layout (e.g., "us" or "es"). |
+| `top_cpu_process` | string | Name of the process with highest CPU usage. |
+| `top_mem_process` | string | Name of the process with highest memory usage. |
 
 ### TopRequest
 
@@ -216,6 +223,16 @@ BatterySnapshot captures the battery status at a point in time.
 | `energy_now` | int64 | Current energy remaining in microamp-hours (µAh). |
 | `energy_full` | int64 | Full charge energy capacity in microamp-hours (µAh). |
 | `power_now` | int64 | Current power draw in microwatts (µW). Positive for discharge, negative is not used — interpret via `status`. |
+
+### WiFiSnapshot
+
+WiFiSnapshot captures the WiFi signal strength at a point in time.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `interface` | string | Wireless interface name (e.g., "wlp6s0"). |
+| `percent` | double | Signal quality as percentage (0-100). Higher is better. |
+| `ssid` | string | Connected network SSID. |
 
 ### ProcessInfo
 
