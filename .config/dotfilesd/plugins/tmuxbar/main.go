@@ -560,10 +560,15 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 		b.WriteString("#[default] ")
 	}
 
-	// Time/date
-	b.WriteString(fmt.Sprintf(", %s , %s | ", timeStr, dateStr))
+	// Thin separator before time
+	b.WriteString("#[fg=#E8E8E2,bg=#272822,none]   ")
+	b.WriteString(timeStr)
+	b.WriteString(" #[fg=#E8E8E2,bg=#272822,none]   ")
+	b.WriteString(dateStr)
 
-	// Layout
+	// Powerline arrow to red section for layout
+	b.WriteString(" #[fg=#E82572,bg=#272822,none]#[fg=#A6E22E,bg=#E82572,none] ")
+
 	out2, err := exec.Command("xkb-switch").Output()
 	layout := ""
 	if err == nil {
@@ -571,8 +576,15 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 	}
 	b.WriteString(layout)
 
-	// Username, hostname
-	b.WriteString(fmt.Sprintf(" | %s%s | %s ", username, root, host))
+	// Powerline arrow to light section for username
+	b.WriteString(" #[fg=#E8E8E2,bg=#E82572,none]#[fg=#272822,bg=#E8E8E2,bold] ")
+	b.WriteString(username)
+	b.WriteString(root)
+
+	// Powerline arrow back to dark section for hostname
+	b.WriteString(" #[fg=#272822,bg=#E8E8E2,none]#[fg=#E8E8E2,bg=#272822,none] ")
+	b.WriteString(host)
+	b.WriteString(" ")
 
 	text := b.String()
 
