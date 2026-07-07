@@ -34,6 +34,9 @@ service TmuxBarService {
   rpc GPUProfileWidget(GPUProfileWidgetRequest) returns (GPUProfileWidgetResponse);
   // LayoutWidget returns the current keyboard layout (e.g., "us" or "es").
   rpc LayoutWidget(LayoutWidgetRequest) returns (LayoutWidgetResponse);
+  // WiFiWidget returns a formatted WiFi signal indicator like
+  // "#[fg=#A6E22E]65% (MyNetwork) ◼◼◼◼◼◼◻◻◻◻#[default]".
+  rpc WiFiWidget(WiFiWidgetRequest) returns (WiFiWidgetResponse);
 }
 
 // RAMWidgetRequest configures the RAM widget output.
@@ -137,4 +140,18 @@ message LayoutWidgetResponse {
   string text = 1;
   // Same as text, the layout name.
   string layout = 2;
+}
+
+// WiFiWidgetRequest is empty.
+message WiFiWidgetRequest {}
+
+// WiFiWidgetResponse contains the WiFi signal indicator.
+message WiFiWidgetResponse {
+  // Formatted text with tmux color sequences
+  // (e.g., "#[fg=#A6E22E]65% (MyNetwork) ◼◼◼◼◼◼◻◻◻◻#[default]").
+  string text = 1;
+  // Signal quality percentage (0-100).
+  double percent = 2;
+  // WiFi SSID of the connected network.
+  string ssid = 3;
 }

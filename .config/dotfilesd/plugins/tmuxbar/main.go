@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -436,6 +437,91 @@ func (s *tmuxBarServer) LayoutWidget(ctx context.Context, req *connect.Request[p
 	}), nil
 }
 
+func findWiFiInterface() string {
+	ents, err := os.ReadDir("/sys/class/net")
+	if err != nil {
+		return ""
+	}
+	for _, e := range ents {
+		wirelessDir := "/sys/class/net/" + e.Name() + "/wireless"
+		if info, err := os.Stat(wirelessDir); err == nil && info.IsDir() {
+			return e.Name()
+		}
+	}
+	return ""
+}
+
+func readWiFiSignal(iface string) int {
+	data, err := os.ReadFile("/proc/net/wireless")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, iface+":") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		// field 2 is link quality (with trailing dot). assume max 70 (iwlwifi scale).
+		q := strings.TrimRight(fields[2], ".")
+		quality, _ := strconv.Atoi(q)
+		pct := quality * 100 / 70
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 100 {
+			pct = 100
+		}
+		return pct
+	}
+	return 0
+}
+
+func readWiFiSSID(iface string) string {
+	out, err := exec.Command("iw", "dev", iface, "info").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "ssid ") {
+			return strings.TrimPrefix(line, "ssid ")
+		}
+	}
+	return ""
+}
+
+func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.WiFiWidgetRequest]) (*connect.Response[pb.WiFiWidgetResponse], error) {
+	pc := plugin.ExtractContext(ctx)
+
+	iface := findWiFiInterface()
+	pct := 0
+	ssid := ""
+	if iface != "" {
+		pct = readWiFiSignal(iface)
+		ssid = readWiFiSSID(iface)
+	}
+
+	c := pctColor(pct)
+	text := fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", c, pct, ssid, bar(pct))
+
+	if pc != nil {
+		pc.Log().Info("▶ TmuxBar.WiFiWidget", "pct", pct, "ssid", ssid)
+	}
+
+	if pc != nil && pc.RenderOutput() {
+		fmt.Fprintln(pc.Stdout(), text)
+	}
+
+	return connect.NewResponse(&pb.WiFiWidgetResponse{
+		Text:    text,
+		Percent: float64(pct),
+		Ssid:    ssid,
+	}), nil
+}
+
 func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.StatusBarRequest]) (*connect.Response[pb.StatusBarResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
@@ -557,6 +643,14 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 		usedGiB := ram.UsedMb / 1024
 		top := topProcess("-%mem")
 		b.WriteString(fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", pctColor(pct), usedGiB, pct, top, bar(pct)))
+		b.WriteString("#[default] ")
+	}
+
+	// WiFi
+	if iface := findWiFiInterface(); iface != "" {
+		pct := readWiFiSignal(iface)
+		ssid := readWiFiSSID(iface)
+		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(pct), pct, ssid, bar(pct)))
 		b.WriteString("#[default] ")
 	}
 

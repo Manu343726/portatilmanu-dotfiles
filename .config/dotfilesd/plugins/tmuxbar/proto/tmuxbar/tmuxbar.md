@@ -12,6 +12,7 @@
     - [AsusProfileWidget](#asusprofilewidget)
     - [GPUProfileWidget](#gpuprofilewidget)
     - [LayoutWidget](#layoutwidget)
+    - [WiFiWidget](#wifiwidget)
 - [Messages](#messages)
   - [RAMWidgetRequest](#ramwidgetrequest)
   - [RAMWidgetResponse](#ramwidgetresponse)
@@ -29,6 +30,8 @@
   - [GPUProfileWidgetResponse](#gpuprofilewidgetresponse)
   - [LayoutWidgetRequest](#layoutwidgetrequest)
   - [LayoutWidgetResponse](#layoutwidgetresponse)
+  - [WiFiWidgetRequest](#wifiwidgetrequest)
+  - [WiFiWidgetResponse](#wifiwidgetresponse)
 - [Enums](#enums)
   - [TemperatureUnit](#temperatureunit)
 
@@ -105,6 +108,14 @@ LayoutWidget returns the current keyboard layout (e.g., "us" or "es").
 
 - **Request:** `tmuxbar.LayoutWidgetRequest`
 - **Response:** `tmuxbar.LayoutWidgetResponse`
+
+#### WiFiWidget
+
+WiFiWidget returns a formatted WiFi signal indicator like
+"#[fg=#A6E22E]65% (MyNetwork) ◼◼◼◼◼◼◻◻◻◻#[default]".
+
+- **Request:** `tmuxbar.WiFiWidgetRequest`
+- **Response:** `tmuxbar.WiFiWidgetResponse`
 
 
 ## Messages
@@ -220,6 +231,20 @@ LayoutWidgetResponse contains the keyboard layout.
 |-------|------|-------------|
 | `text` | string | Keyboard layout identifier (e.g., "us" or "es"). |
 | `layout` | string | Same as text, the layout name. |
+
+### WiFiWidgetRequest
+
+WiFiWidgetRequest is empty.
+
+### WiFiWidgetResponse
+
+WiFiWidgetResponse contains the WiFi signal indicator.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Formatted text with tmux color sequences (e.g., "#[fg=#A6E22E]65% (MyNetwork) ◼◼◼◼◼◼◻◻◻◻#[default]"). |
+| `percent` | double | Signal quality percentage (0-100). |
+| `ssid` | string | WiFi SSID of the connected network. |
 
 
 ## Enums
