@@ -12,6 +12,7 @@
 - [Messages](#messages)
   - [CurrentRequest](#currentrequest)
   - [WatchRequest](#watchrequest)
+  - [WatchFilter](#watchfilter)
   - [CurrentResponse](#currentresponse)
   - [TopRequest](#toprequest)
   - [TopResponse](#topresponse)
@@ -97,7 +98,32 @@ CurrentRequest is empty. Current returns the latest snapshot.
 
 ### WatchRequest
 
-WatchRequest is empty. Watch streams snapshots as they are collected.
+WatchRequest specifies which resources the client wants to monitor.
+Only fields with filter=true are checked for changes; updates are
+streamed when any watched field differs from the previous poll.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `filter` | resources.WatchFilter | Filter controlling which resources trigger stream updates. |
+
+### WatchFilter
+
+WatchFilter selects which resources the client is interested in.
+Only set fields to true for the resources you want to watch.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ram` | bool | RAM usage percentage changes. |
+| `cpu` | bool | CPU usage percentage changes. |
+| `disk` | bool | Root disk usage percentage changes. |
+| `disk_io` | bool | Disk I/O statistics changes. |
+| `cpu_temp` | bool | CPU temperature changes. |
+| `battery` | bool | Battery level or status changes. |
+| `wifi` | bool | WiFi signal or SSID changes. |
+| `asus_profile` | bool | ASUS performance profile changes. |
+| `gpu_profile` | bool | GPU mode changes. |
+| `keyboard_layout` | bool | Keyboard layout changes. |
+| `top_processes` | bool | Top CPU/memory process name changes. |
 
 ### CurrentResponse
 

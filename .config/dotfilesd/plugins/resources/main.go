@@ -202,15 +202,17 @@ func parseMemValue(line string) float64 {
 }
 
 type subscriber struct {
-	ch chan *pb.CurrentResponse
+	ch     chan *pb.CurrentResponse
+	filter *pb.WatchFilter
 }
 
 type resourcesServer struct {
-	state   *SharedState
-	poller  *SmartPoller
-	subs    map[string]*subscriber
-	subMu   sync.Mutex
-	subID   int64
+	state        *SharedState
+	poller       *SmartPoller
+	subs         map[string]*subscriber
+	subMu        sync.Mutex
+	subID        int64
+	lastResponse *pb.CurrentResponse
 }
 
 func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
@@ -269,20 +271,105 @@ func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
 	}
 }
 
+func fieldsChanged(f *pb.WatchFilter, old, cur *pb.CurrentResponse) bool {
+	if f == nil {
+		return true
+	}
+	if old == nil {
+		return true
+	}
+
+	if f.Ram && old.Ram != nil && cur.Ram != nil {
+		if abs(cur.Ram.Percent-old.Ram.Percent) > 0.5 {
+			return true
+		}
+	}
+	if f.Cpu && old.Cpu != nil && cur.Cpu != nil {
+		if abs(cur.Cpu.TotalPercent-old.Cpu.TotalPercent) > 0.5 {
+			return true
+		}
+	}
+	if f.Disk && old.Disk != nil && cur.Disk != nil {
+		if abs(cur.Disk.Percent-old.Disk.Percent) > 0.5 {
+			return true
+		}
+	}
+	if f.DiskIo && old.DiskIo != nil && cur.DiskIo != nil {
+		if abs(cur.DiskIo.ReadsPerSec-old.DiskIo.ReadsPerSec) > 0.5 ||
+			abs(cur.DiskIo.WritesPerSec-old.DiskIo.WritesPerSec) > 0.5 {
+			return true
+		}
+	}
+	if f.CpuTemp && old.CpuTemp != nil && cur.CpuTemp != nil {
+		if abs(cur.CpuTemp.TempCelsius-old.CpuTemp.TempCelsius) > 0.5 {
+			return true
+		}
+	}
+	if f.Battery {
+		if (old.Battery == nil) != (cur.Battery == nil) {
+			return true
+		}
+		if old.Battery != nil && cur.Battery != nil {
+			if abs(cur.Battery.Percent-old.Battery.Percent) > 0.5 ||
+				cur.Battery.Status != old.Battery.Status ||
+				cur.Battery.Charging != old.Battery.Charging ||
+				cur.Battery.Plugged != old.Battery.Plugged {
+				return true
+			}
+		}
+	}
+	if f.Wifi {
+		if (old.Wifi == nil) != (cur.Wifi == nil) {
+			return true
+		}
+		if old.Wifi != nil && cur.Wifi != nil {
+			if abs(cur.Wifi.Percent-old.Wifi.Percent) > 0.5 ||
+				cur.Wifi.Ssid != old.Wifi.Ssid {
+				return true
+			}
+		}
+	}
+	if f.AsusProfile && cur.AsusProfile != old.AsusProfile {
+		return true
+	}
+	if f.GpuProfile && cur.GpuProfile != old.GpuProfile {
+		return true
+	}
+	if f.KeyboardLayout && cur.KeyboardLayout != old.KeyboardLayout {
+		return true
+	}
+	if f.TopProcesses && (cur.TopCpuProcess != old.TopCpuProcess || cur.TopMemProcess != old.TopMemProcess) {
+		return true
+	}
+	return false
+}
+
+func abs(f float64) float64 {
+	if f < 0 {
+		return -f
+	}
+	return f
+}
+
 func (s *resourcesServer) broadcast() {
 	resp := s.buildResponse()
 	s.subMu.Lock()
 	defer s.subMu.Unlock()
 	for _, sub := range s.subs {
+		if !fieldsChanged(sub.filter, s.lastResponse, resp) {
+			continue
+		}
 		select {
 		case sub.ch <- resp:
 		default:
 		}
 	}
+	s.lastResponse = resp
 }
 
 func (s *resourcesServer) Watch(ctx context.Context, req *connect.Request[pb.WatchRequest], stream *connect.ServerStream[pb.CurrentResponse]) error {
-	sub := &subscriber{ch: make(chan *pb.CurrentResponse, 4)}
+	filter := req.Msg.GetFilter()
+	sub := &subscriber{ch: make(chan *pb.CurrentResponse, 4), filter: filter}
 	s.subMu.Lock()
 	s.subID++
 	id := fmt.Sprintf("sub_%d", s.subID)

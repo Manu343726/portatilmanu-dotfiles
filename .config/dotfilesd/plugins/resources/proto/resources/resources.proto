@@ -32,8 +32,40 @@ service ResourcesService {
 // CurrentRequest is empty. Current returns the latest snapshot.
 message CurrentRequest {}
 
-// WatchRequest is empty. Watch streams snapshots as they are collected.
-message WatchRequest {}
+// WatchRequest specifies which resources the client wants to monitor.
+// Only fields with filter=true are checked for changes; updates are
+// streamed when any watched field differs from the previous poll.
+message WatchRequest {
+  // Filter controlling which resources trigger stream updates.
+  WatchFilter filter = 1;
+}
+
+// WatchFilter selects which resources the client is interested in.
+// Only set fields to true for the resources you want to watch.
+message WatchFilter {
+  // RAM usage percentage changes.
+  bool ram = 1;
+  // CPU usage percentage changes.
+  bool cpu = 2;
+  // Root disk usage percentage changes.
+  bool disk = 3;
+  // Disk I/O statistics changes.
+  bool disk_io = 4;
+  // CPU temperature changes.
+  bool cpu_temp = 5;
+  // Battery level or status changes.
+  bool battery = 6;
+  // WiFi signal or SSID changes.
+  bool wifi = 7;
+  // ASUS performance profile changes.
+  bool asus_profile = 8;
+  // GPU mode changes.
+  bool gpu_profile = 9;
+  // Keyboard layout changes.
+  bool keyboard_layout = 10;
+  // Top CPU/memory process name changes.
+  bool top_processes = 11;
+}
 
 // CurrentResponse contains the latest snapshot of all resources.
 message CurrentResponse {

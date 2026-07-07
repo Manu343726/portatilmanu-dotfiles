@@ -626,8 +626,21 @@ func main() {
 		},
 		Background: func(ctx plugin.Context, stop <-chan struct{}) {
 			go func() {
+				filter := &respb.WatchFilter{
+					Ram:             true,
+					Cpu:             true,
+					Disk:            true,
+					DiskIo:          true,
+					CpuTemp:         true,
+					Battery:         true,
+					Wifi:            true,
+					AsusProfile:     true,
+					GpuProfile:      true,
+					KeyboardLayout:  true,
+					TopProcesses:    true,
+				}
 				for {
-					stream, err := resClient.Watch(context.Background(), connect.NewRequest(&respb.WatchRequest{}))
+					stream, err := resClient.Watch(context.Background(), connect.NewRequest(&respb.WatchRequest{Filter: filter}))
 					if err != nil {
 						select {
 						case <-stop:
