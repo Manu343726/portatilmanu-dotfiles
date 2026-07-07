@@ -227,7 +227,7 @@ func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 		short := enumShortName(name)
 		fmt.Fprintf(&b, "  %s:\n", short)
 		if es.Description != "" {
-			fmt.Fprintf(&b, "    %s\n\n", strings.ReplaceAll(es.Description, "\n", " "))
+			fmt.Fprintf(&b, "    %s\n\n", wrapText(es.Description, 4, 79))
 		}
 		for _, e := range entries[name] {
 			if e.desc != "" {
@@ -239,6 +239,33 @@ func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 		fmt.Fprintln(&b)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// wrapText wraps text at the given width, indenting continuation lines by `indent` spaces.
+func wrapText(text string, indent int, width int) string {
+	// First flatten any embedded newlines into spaces.
+	flat := strings.Join(strings.Fields(text), " ")
+	if flat == "" {
+		return ""
+	}
+	pad := strings.Repeat(" ", indent)
+	avail := width - indent
+	if avail < 20 {
+		avail = 20
+	}
+	var b strings.Builder
+	for len(flat) > avail {
+		cut := strings.LastIndex(flat[:avail], " ")
+		if cut < 1 {
+			cut = avail
+		}
+		b.WriteString(flat[:cut])
+		b.WriteByte('\n')
+		b.WriteString(pad)
+		flat = flat[cut+1:]
+	}
+	b.WriteString(flat)
+	return b.String()
 }
 
 // addFlagsFromSchema recursively adds cobra flags from a registry MessageSchema.
