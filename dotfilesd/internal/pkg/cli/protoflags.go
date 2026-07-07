@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
@@ -97,7 +98,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 					svcCmd.Long = fmt.Sprintf("%s/%s\n\n%s", svc.Name, m.Name, m.Description)
 				}
 				if appendix := enumAppendix(enums); appendix != "" {
-					svcCmd.Example = appendix
+					svcCmd.Annotations = map[string]string{"enum_values": appendix}
 				}
 			} else {
 				rpcCmd := &cobra.Command{
@@ -108,7 +109,7 @@ func BuildPluginCommand(p PluginRegistryInfo) *cobra.Command {
 				}
 				addFlagsFromSchema(rpcCmd, m.Request, "", enums)
 				if appendix := enumAppendix(enums); appendix != "" {
-					rpcCmd.Example = appendix
+					rpcCmd.Annotations = map[string]string{"enum_values": appendix}
 				}
 				svcCmd.AddCommand(rpcCmd)
 			}
@@ -181,6 +182,8 @@ func seeEnumSuffix(enumSchema *dotfilesdv1.EnumSchema) string {
 }
 
 // enumAppendix formats all collected enums as a help appendix block.
+// Value name prefixes derived from the enum name are stripped, and
+// descriptions are formatted as a right-aligned two-column layout.
 func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 	if len(enums) == 0 {
 		return ""
@@ -191,24 +194,47 @@ func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 	}
 	sort.Strings(names)
 
-	var b strings.Builder
-	b.WriteString("Enums referenced by the flags above:\n")
+	// First pass: strip prefixes and find max display width.
+	type entry struct {
+		display string // prefix-stripped name
+		desc    string
+	}
+	entries := map[string][]entry{}
+	maxWidth := 0
 	for _, name := range names {
 		es := enums[name]
-		short := name
-		if idx := strings.LastIndex(name, "."); idx >= 0 {
-			short = name[idx+1:]
+		short := enumShortName(name)
+		var list []entry
+		for _, v := range es.Values {
+			d := stripEnumPrefix(v.Name, short)
+			if len(d) > maxWidth {
+				maxWidth = len(d)
+			}
+			list = append(list, entry{display: d, desc: v.Description})
 		}
+		entries[name] = list
+	}
+
+	var b strings.Builder
+	// Use a minimum width so narrow values don't look cramped.
+	if maxWidth < 16 {
+		maxWidth = 16
+	}
+	pad := maxWidth + 2
+
+	for _, name := range names {
+		es := enums[name]
+		short := enumShortName(name)
 		desc := ""
 		if es.Description != "" {
 			desc = ": " + es.Description
 		}
 		fmt.Fprintf(&b, "  %s%s\n", short, desc)
-		for _, v := range es.Values {
-			if v.Description != "" {
-				fmt.Fprintf(&b, "    %s  %s\n", v.Name, v.Description)
+		for _, e := range entries[name] {
+			if e.desc != "" {
+				fmt.Fprintf(&b, "    %-*s%s\n", pad, e.display, e.desc)
 			} else {
-				fmt.Fprintf(&b, "    %s\n", v.Name)
+				fmt.Fprintf(&b, "    %s\n", e.display)
 			}
 		}
 	}
@@ -272,9 +298,10 @@ func addScalarFlag(cmd *cobra.Command, flagName string, fs *dotfilesdv1.FieldSch
 
 	case dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
 		if fs.EnumSchema != nil {
+			short := enumShortName(fs.EnumSchema.Name)
 			choices := make([]string, len(fs.EnumSchema.Values))
 			for i, ev := range fs.EnumSchema.Values {
-				choices[i] = ev.Name
+				choices[i] = stripEnumPrefix(ev.Name, short)
 			}
 			defVal := ""
 			if len(choices) > 0 {
@@ -760,6 +787,9 @@ func setNestedField(obj map[string]any, path, value string, msg *dotfilesdv1.Mes
 			if err != nil {
 				return fmt.Errorf("field %q: %w", lastPart, err)
 			}
+			if f.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM {
+				typed = resolveEnumValue(typed.(string), f.EnumSchema)
+			}
 			obj[lastPart] = typed
 			return nil
 		}
@@ -854,7 +884,7 @@ func buildScalarFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv1.
 		return v, nil
 	case dotfilesdv1.FieldKind_FIELD_KIND_ENUM:
 		v, _ := cmd.Flags().GetString(flagName)
-		return v, nil
+		return resolveEnumValue(v, fs.EnumSchema), nil
 	default:
 		return nil, nil
 	}
@@ -878,8 +908,72 @@ func buildRepeatedFromSchema(cmd *cobra.Command, flagName string, fs *dotfilesdv
 		return v
 	default:
 		v, _ := cmd.Flags().GetStringSlice(flagName)
+		if fs.Kind == dotfilesdv1.FieldKind_FIELD_KIND_ENUM {
+			resolved := make([]string, len(v))
+			for i, s := range v {
+				resolved[i] = resolveEnumValue(s, fs.EnumSchema)
+			}
+			return resolved
+		}
 		return v
 	}
+}
+
+// ─────────────────────────────────────────────
+// Enum value prefix stripping helpers
+// ─────────────────────────────────────────────
+
+// camelToUpperSnake converts CamelCase to UPPER_SNAKE_CASE.
+func camelToUpperSnake(s string) string {
+	var b strings.Builder
+	for i, r := range s {
+		if unicode.IsUpper(r) && i > 0 {
+			b.WriteByte('_')
+		}
+		b.WriteRune(unicode.ToUpper(r))
+	}
+	return b.String()
+}
+
+// stripEnumPrefix removes the enum-derived prefix from a value name.
+// For example, stripEnumPrefix("COLUMN_NODE_ID", "Column") returns "NODE_ID".
+func stripEnumPrefix(valueName, enumShortName string) string {
+	prefix := camelToUpperSnake(enumShortName) + "_"
+	return strings.TrimPrefix(valueName, prefix)
+}
+
+// enumShortName extracts the short name from a fully-qualified enum name.
+func enumShortName(fqName string) string {
+	if idx := strings.LastIndex(fqName, "."); idx >= 0 {
+		return fqName[idx+1:]
+	}
+	return fqName
+}
+
+// resolveEnumValue maps a user-supplied enum value (stripped or full) to the
+// canonical full enum name. If the input matches a full value name directly
+// it is returned as-is. Otherwise the stripped prefix is prepended and
+// checked. Returns the input unmodified if no resolution is found.
+func resolveEnumValue(input string, enumSchema *dotfilesdv1.EnumSchema) string {
+	if enumSchema == nil {
+		return input
+	}
+	// Direct match — already a full name.
+	for _, v := range enumSchema.Values {
+		if v.Name == input {
+			return input
+		}
+	}
+	// Try with prefix.
+	short := enumShortName(enumSchema.Name)
+	prefix := camelToUpperSnake(short) + "_"
+	candidate := prefix + input
+	for _, v := range enumSchema.Values {
+		if v.Name == candidate {
+			return candidate
+		}
+	}
+	return input
 }
 
 // ─────────────────────────────────────────────
