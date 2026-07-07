@@ -50,6 +50,24 @@ func (s *CPUTempState) update(temp float64) (min, max float64) {
 type tmuxBarServer struct {
 	resourcesClient resourcesconnect.ResourcesServiceClient
 	cpuTempState    CPUTempState
+	cache           widgetCache
+}
+
+type widgetCache struct {
+	mu  sync.RWMutex
+	bar string
+}
+
+func (c *widgetCache) get() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.bar
+}
+
+func (c *widgetCache) set(bar string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.bar = bar
 }
 
 func batteryStatusString(s respb.BatteryStatus) string {
@@ -433,30 +451,10 @@ func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.
 	}), nil
 }
 
-func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.StatusBarRequest]) (*connect.Response[pb.StatusBarResponse], error) {
-	pc := plugin.ExtractContext(ctx)
-
-	now := time.Now()
-	host, _ := os.Hostname()
-	username := os.Getenv("USER")
-	timeStr := now.Format("15:04")
-	dateStr := now.Format("02 Jan")
-
-	var root string
-	if username == "root" {
-		root = "!"
-	}
-
-	// Read resources data once
-	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
-	if err != nil {
-		return connect.NewResponse(&pb.StatusBarResponse{Text: "resources unavailable"}), nil
-	}
-
+func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, host, timeStr, dateStr string) string {
 	var b strings.Builder
 
-	// ASUS profile
-	switch r.Msg.AsusProfile {
+	switch r.AsusProfile {
 	case respb.ASUSProfile_ASUS_PROFILE_PERF:
 		b.WriteString("#[fg=#E8871A]PERF#[default] ")
 	case respb.ASUSProfile_ASUS_PROFILE_BAL:
@@ -465,8 +463,7 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 		b.WriteString("#[fg=#66D9EF]QUIET#[default] ")
 	}
 
-	// GPU profile
-	switch r.Msg.GpuProfile {
+	switch r.GpuProfile {
 	case respb.GPUProfile_GPU_PROFILE_EGPU:
 		b.WriteString("#[fg=#AE81FF]EGPU#[default] ")
 	case respb.GPUProfile_GPU_PROFILE_NVIDIA:
@@ -478,13 +475,11 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 	}
 	b.WriteString(" ")
 
-	// Battery
-	if bt := r.Msg.Battery; bt != nil {
+	if bt := r.Battery; bt != nil {
 		pct := int(bt.Percent)
 		status := batteryStatusString(bt.Status)
 		btBar := batteryBar(pct)
 		lc := batteryLabelColor(pct)
-
 		switch status {
 		case "Charging":
 			if pct >= 100 {
@@ -510,19 +505,17 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 		b.WriteString("#[default] ")
 	}
 
-	// CPU
-	if cpu := r.Msg.Cpu; cpu != nil {
+	if cpu := r.Cpu; cpu != nil {
 		pct := int(cpu.TotalPercent)
-		b.WriteString(fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", pctColor(pct), pct, r.Msg.TopCpuProcess, bar(pct)))
+		b.WriteString(fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", pctColor(pct), pct, r.TopCpuProcess, bar(pct)))
 		b.WriteString("#[default] ")
 	}
 
-	// CPU temp
-	if t := r.Msg.CpuTemp; t != nil {
+	if t := r.CpuTemp; t != nil {
 		temp := int(t.TempCelsius)
 		var pct int
 		if temp > 0 {
-			min, max := s.cpuTempState.update(float64(temp))
+			min, max := state.update(float64(temp))
 			range_ := max - min
 			if range_ <= 0 {
 				pct = 50
@@ -540,42 +533,41 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 		b.WriteString("#[default] ")
 	}
 
-	// RAM
-	if ram := r.Msg.Ram; ram != nil {
+	if ram := r.Ram; ram != nil {
 		pct := int(ram.Percent)
 		usedGiB := ram.UsedMb / 1024
-		b.WriteString(fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", pctColor(pct), usedGiB, pct, r.Msg.TopMemProcess, bar(pct)))
+		b.WriteString(fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", pctColor(pct), usedGiB, pct, r.TopMemProcess, bar(pct)))
 		b.WriteString("#[default] ")
 	}
 
-	// WiFi
-	if w := r.Msg.Wifi; w != nil && w.Percent > 0 {
+	if w := r.Wifi; w != nil && w.Percent > 0 {
 		ipct := int(w.Percent)
 		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(100-ipct), ipct, w.Ssid, bar(ipct)))
 		b.WriteString("#[default] ")
 	}
 
-	// Thin separator before time
 	b.WriteString("#[fg=#E8E8E2,bg=#272822,none]   ")
 	b.WriteString(timeStr)
 	b.WriteString(" #[fg=#E8E8E2,bg=#272822,none]   ")
 	b.WriteString(dateStr)
 
-	// Powerline arrow to red section for layout
 	b.WriteString(" #[fg=#E82572,bg=#272822,none]#[fg=#A6E22E,bg=#E82572,none] ")
-	b.WriteString(r.Msg.KeyboardLayout)
+	b.WriteString(r.KeyboardLayout)
 
-	// Powerline arrow to light section for username
 	b.WriteString(" #[fg=#E8E8E2,bg=#E82572,none]#[fg=#272822,bg=#E8E8E2,bold] ")
 	b.WriteString(username)
 	b.WriteString(root)
 
-	// Powerline arrow back to dark section for hostname
 	b.WriteString(" #[fg=#272822,bg=#E8E8E2,none]#[fg=#E8E8E2,bg=#272822,none] ")
 	b.WriteString(host)
 	b.WriteString(" ")
 
-	text := b.String()
+	return b.String()
+}
+
+func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.StatusBarRequest]) (*connect.Response[pb.StatusBarResponse], error) {
+	pc := plugin.ExtractContext(ctx)
+	text := s.cache.get()
 
 	if pc != nil {
 		pc.Log().Info("▶ TmuxBar.StatusBar")
@@ -625,6 +617,12 @@ func main() {
 			},
 		},
 		Background: func(ctx plugin.Context, stop <-chan struct{}) {
+			host, _ := os.Hostname()
+			username := os.Getenv("USER")
+			root := ""
+			if username == "root" {
+				root = "!"
+			}
 			go func() {
 				filter := &respb.WatchFilter{
 					Ram:             true,
@@ -650,6 +648,10 @@ func main() {
 						continue
 					}
 					for stream.Receive() {
+						msg := stream.Msg()
+						now := time.Now()
+						bar := renderBar(msg, &svc.cpuTempState, username, root, host, now.Format("15:04"), now.Format("02 Jan"))
+						svc.cache.set(bar)
 						exec.Command("tmux", "refresh-client", "-S").Run()
 					}
 					select {
