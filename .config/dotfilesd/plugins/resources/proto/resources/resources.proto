@@ -38,6 +38,10 @@ message CurrentResponse {
   DiskSnapshot disk = 3;
   // Primary block device I/O statistics.
   DiskIOSnapshot disk_io = 4;
+  // CPU temperature snapshot from thermal sensors.
+  CPUTempSnapshot cpu_temp = 5;
+  // Battery status snapshot (level, charging, plugged).
+  BatterySnapshot battery = 6;
 }
 
 // Sort order for process listing.
@@ -88,6 +92,10 @@ enum ResourceType {
   RESOURCE_TYPE_CPU = 2;
   // Disk usage data.
   RESOURCE_TYPE_DISK = 3;
+  // CPU temperature data.
+  RESOURCE_TYPE_CPU_TEMP = 4;
+  // Battery level data.
+  RESOURCE_TYPE_BATTERY = 5;
 }
 
 // Unit of measurement for metric values.
@@ -95,6 +103,8 @@ enum Unit {
   UNIT_UNSPECIFIED = 0;
   // Percentage value (0-100).
   UNIT_PERCENT = 1;
+  // Degrees Celsius.
+  UNIT_CELSIUS = 2;
 }
 
 // Request for historical resource data.
@@ -190,6 +200,22 @@ enum ProcessState {
   PROCESS_STATE_TRACE_STOP = 6;
   // Dead (should not be visible).
   PROCESS_STATE_DEAD = 7;
+}
+
+// CPUTempSnapshot captures the CPU temperature from onboard thermal sensors.
+message CPUTempSnapshot {
+  // CPU temperature in degrees Celsius.
+  double temp_celsius = 1;
+}
+
+// BatterySnapshot captures the battery status at a point in time.
+message BatterySnapshot {
+  // Battery charge level as percentage (0-100).
+  double percent = 1;
+  // Whether the battery is currently being charged.
+  bool charging = 2;
+  // Whether the AC power adapter is plugged in.
+  bool plugged = 3;
 }
 
 // ProcessInfo describes a running process.

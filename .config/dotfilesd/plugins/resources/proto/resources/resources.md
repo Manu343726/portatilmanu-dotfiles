@@ -21,6 +21,8 @@
   - [CPUSnapshot](#cpusnapshot)
   - [DiskSnapshot](#disksnapshot)
   - [DiskIOSnapshot](#diskiosnapshot)
+  - [CPUTempSnapshot](#cputempsnapshot)
+  - [BatterySnapshot](#batterysnapshot)
   - [ProcessInfo](#processinfo)
 - [Enums](#enums)
   - [SortOrder](#sortorder)
@@ -88,6 +90,8 @@ CurrentResponse contains the latest snapshot of all resources.
 | `cpu` | resources.CPUSnapshot | CPU usage snapshot with per-type breakdown. |
 | `disk` | resources.DiskSnapshot | Root disk partition usage. |
 | `disk_io` | resources.DiskIOSnapshot | Primary block device I/O statistics. |
+| `cpu_temp` | resources.CPUTempSnapshot | CPU temperature snapshot from thermal sensors. |
+| `battery` | resources.BatterySnapshot | Battery status snapshot (level, charging, plugged). |
 
 ### TopRequest
 
@@ -190,6 +194,24 @@ DiskIOSnapshot captures block device I/O metrics.
 | `read_bytes_per_sec` | double | Bytes read per second. |
 | `write_bytes_per_sec` | double | Bytes written per second. |
 
+### CPUTempSnapshot
+
+CPUTempSnapshot captures the CPU temperature from onboard thermal sensors.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `temp_celsius` | double | CPU temperature in degrees Celsius. |
+
+### BatterySnapshot
+
+BatterySnapshot captures the battery status at a point in time.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `percent` | double | Battery charge level as percentage (0-100). |
+| `charging` | bool | Whether the battery is currently being charged. |
+| `plugged` | bool | Whether the AC power adapter is plugged in. |
+
 ### ProcessInfo
 
 ProcessInfo describes a running process.
@@ -226,6 +248,8 @@ Type of system resource for historical data queries.
 | `RESOURCE_TYPE_RAM` | 1 | RAM/memory usage data. |
 | `RESOURCE_TYPE_CPU` | 2 | CPU utilization data. |
 | `RESOURCE_TYPE_DISK` | 3 | Disk usage data. |
+| `RESOURCE_TYPE_CPU_TEMP` | 4 | CPU temperature data. |
+| `RESOURCE_TYPE_BATTERY` | 5 | Battery level data. |
 
 ### Unit
 
@@ -235,6 +259,7 @@ Unit of measurement for metric values.
 |------|--------|-------------|
 | `UNIT_UNSPECIFIED` | 0 |  |
 | `UNIT_PERCENT` | 1 | Percentage value (0-100). |
+| `UNIT_CELSIUS` | 2 | Degrees Celsius. |
 
 ### ProcessState
 
