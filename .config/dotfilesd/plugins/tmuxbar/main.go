@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"dotfilesd/plugin"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
@@ -137,6 +138,26 @@ func formatDuration(m int) string {
 	return fmt.Sprintf("%dh%dm", h, m)
 }
 
+func topProcess(sortFlag string) string {
+	out, err := exec.Command("ps", "-eo", "comm", "--sort="+sortFlag).Output()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(out), "\n")
+	if len(lines) < 2 {
+		return ""
+	}
+	name := strings.TrimSpace(lines[1])
+	if name == "ps" || name == "" || name == "COMMAND" {
+		if len(lines) > 2 {
+			name = strings.TrimSpace(lines[2])
+		} else {
+			return ""
+		}
+	}
+	return name
+}
+
 func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.CPUWidgetRequest]) (*connect.Response[pb.CPUWidgetResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
@@ -149,12 +170,13 @@ func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.C
 		return connect.NewResponse(&pb.CPUWidgetResponse{Text: "CPU N/A"}), nil
 	}
 
+	top := topProcess("-%cpu")
 	pct := int(cpu.TotalPercent)
 	c := pctColor(pct)
-	text := fmt.Sprintf("CPU %s%d%% %s#[default]", c, pct, bar(pct))
+	text := fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", c, pct, top, bar(pct))
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.CPUWidget", "pct", pct)
+		pc.Log().Info("▶ TmuxBar.CPUWidget", "pct", pct, "top", top)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -179,13 +201,14 @@ func (s *tmuxBarServer) RAMWidget(ctx context.Context, req *connect.Request[pb.R
 		return connect.NewResponse(&pb.RAMWidgetResponse{Text: "RAM N/A"}), nil
 	}
 
+	top := topProcess("-%mem")
 	pct := int(ram.Percent)
 	usedGiB := ram.UsedMb / 1024
 	c := pctColor(pct)
-	text := fmt.Sprintf("RAM %s%.2fGiB %d%% %s#[default]", c, usedGiB, pct, bar(pct))
+	text := fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", c, usedGiB, pct, top, bar(pct))
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.RAMWidget", "pct", pct, "used_gib", usedGiB)
+		pc.Log().Info("▶ TmuxBar.RAMWidget", "pct", pct, "used_gib", usedGiB, "top", top)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -416,34 +439,147 @@ func (s *tmuxBarServer) LayoutWidget(ctx context.Context, req *connect.Request[p
 func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.StatusBarRequest]) (*connect.Response[pb.StatusBarResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
+	now := time.Now()
+	host, _ := os.Hostname()
+	username := os.Getenv("USER")
+	timeStr := now.Format("15:04")
+	dateStr := now.Format("02 Jan")
+
+	var root string
+	if username == "root" {
+		root = "!"
+	}
+
+	// Read resources data once
 	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
 	if err != nil {
 		return connect.NewResponse(&pb.StatusBarResponse{Text: "resources unavailable"}), nil
 	}
 
-	parts := []string{}
-	if r.Msg.Ram != nil {
-		parts = append(parts, fmt.Sprintf("RAM %.0f%%", r.Msg.Ram.Percent))
-	}
-	if r.Msg.Cpu != nil {
-		parts = append(parts, fmt.Sprintf("CPU %.0f%%", r.Msg.Cpu.TotalPercent))
-	}
-	if r.Msg.CpuTemp != nil {
-		parts = append(parts, fmt.Sprintf("%.0f°C", r.Msg.CpuTemp.TempCelsius))
-	}
-	if r.Msg.Battery != nil && r.Msg.Battery.Percent > 0 {
-		bt := fmt.Sprintf("BAT %.0f%%", r.Msg.Battery.Percent)
-		if r.Msg.Battery.Charging {
-			bt += " ⚡"
+	var b strings.Builder
+
+	// ASUS profile
+	out, err := exec.Command("asusctl", "profile", "get").Output()
+	p := ""
+	if err == nil {
+		fields := strings.Fields(string(out))
+		if len(fields) >= 3 {
+			p = fields[2]
 		}
-		parts = append(parts, bt)
 	}
+	switch p {
+	case "Performance":
+		b.WriteString("#[fg=#E8871A]PERF#[default] ")
+	case "Balanced":
+		b.WriteString("#[fg=#A6E22E]BAL#[default] ")
+	case "Quiet":
+		b.WriteString("#[fg=#66D9EF]QUIET#[default] ")
+	}
+
+	// GPU profile
+	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/egpu_connected"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+		b.WriteString("#[fg=#AE81FF]EGPU#[default] ")
+	} else if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+		b.WriteString("#[fg=#E8871A]NVIDIA#[default] ")
+	} else if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/dgpu_disable"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+		b.WriteString("#[fg=#66D9EF]IGPU#[default] ")
+	} else {
+		b.WriteString("#[fg=#A6E22E]HYBRID#[default] ")
+	}
+	b.WriteString(" ")
+
+	// Battery
+	if bt := r.Msg.Battery; bt != nil {
+		pct := int(bt.Percent)
+		status := batteryStatusString(bt.Status)
+		btBar := batteryBar(pct)
+		lc := batteryLabelColor(pct)
+
+		switch status {
+		case "Charging":
+			if pct >= 100 {
+				b.WriteString(fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] %s %d%%", btBar, pct))
+			} else if bt.PowerNow > 0 {
+				m := int((bt.EnergyFull - bt.EnergyNow) * 60 / bt.PowerNow)
+				b.WriteString(fmt.Sprintf("#[fg=%s]CHARGING#[default] %s %d%% %s", lc, btBar, pct, formatDuration(m)))
+			} else {
+				b.WriteString(fmt.Sprintf("#[fg=%s]CHARGING#[default] %s %d%%", lc, btBar, pct))
+			}
+		case "Discharging":
+			if bt.PowerNow > 0 {
+				m := int(bt.EnergyNow * 60 / bt.PowerNow)
+				b.WriteString(fmt.Sprintf("#[fg=%s]BAT#[default] %s %d%% %s", lc, btBar, pct, formatDuration(m)))
+			} else {
+				b.WriteString(fmt.Sprintf("#[fg=%s]BAT#[default] %s %d%%", lc, btBar, pct))
+			}
+		case "Full", "Not charging":
+			b.WriteString(fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] %s %d%%", btBar, pct))
+		default:
+			b.WriteString(fmt.Sprintf("%d%%", pct))
+		}
+		b.WriteString("#[default] ")
+	}
+
+	// CPU
+	if cpu := r.Msg.Cpu; cpu != nil {
+		pct := int(cpu.TotalPercent)
+		top := topProcess("-%cpu")
+		b.WriteString(fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", pctColor(pct), pct, top, bar(pct)))
+		b.WriteString("#[default] ")
+	}
+
+	// CPU temp
+	if t := r.Msg.CpuTemp; t != nil {
+		temp := int(t.TempCelsius)
+		var pct int
+		if temp > 0 {
+			min, max := s.cpuTempState.update(float64(temp))
+			range_ := max - min
+			if range_ <= 0 {
+				pct = 50
+			} else {
+				pct = int((float64(temp) - min) * 100 / range_)
+			}
+			if pct < 0 {
+				pct = 0
+			}
+			if pct > 100 {
+				pct = 100
+			}
+		}
+		b.WriteString(fmt.Sprintf("TEMP %s%3d°C %s#[default]", pctColor(pct), temp, bar(pct)))
+		b.WriteString("#[default] ")
+	}
+
+	// RAM
+	if ram := r.Msg.Ram; ram != nil {
+		pct := int(ram.Percent)
+		usedGiB := ram.UsedMb / 1024
+		top := topProcess("-%mem")
+		b.WriteString(fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", pctColor(pct), usedGiB, pct, top, bar(pct)))
+		b.WriteString("#[default] ")
+	}
+
+	// Time/date
+	b.WriteString(fmt.Sprintf(", %s , %s | ", timeStr, dateStr))
+
+	// Layout
+	out2, err := exec.Command("xkb-switch").Output()
+	layout := ""
+	if err == nil {
+		layout = strings.TrimSpace(string(out2))
+	}
+	b.WriteString(layout)
+
+	// Username, hostname
+	b.WriteString(fmt.Sprintf(" | %s%s | %s ", username, root, host))
+
+	text := b.String()
 
 	if pc != nil {
 		pc.Log().Info("▶ TmuxBar.StatusBar")
 	}
 
-	text := strings.Join(parts, " | ")
 	if pc != nil && pc.RenderOutput() {
 		fmt.Fprintln(pc.Stdout(), text)
 	}
