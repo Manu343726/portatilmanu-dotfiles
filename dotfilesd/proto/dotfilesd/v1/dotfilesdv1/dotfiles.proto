@@ -10,6 +10,7 @@ import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 // Git operations (commit, push, diff, add, log) are handled by scripts
 // in the scripts/git/ directory, not by this service.
 service DotfilesService {
+  // Status returns the dotfiles repository git status: clean/dirty state, current branch, and last commit.
   rpc Status(StatusRequest) returns (StatusResponse);
 }
 
@@ -17,7 +18,10 @@ message StatusRequest {
   Session session = 100;
 }
 message StatusResponse {
+  // Whether the working tree is clean (no uncommitted changes).
   bool git_clean = 1;
+  // Current git branch name (e.g. "master").
   string git_branch = 2;
+  // Short hash and subject of the most recent commit (e.g. "a1b2c3d Fix typo").
   string last_commit = 5;
 }

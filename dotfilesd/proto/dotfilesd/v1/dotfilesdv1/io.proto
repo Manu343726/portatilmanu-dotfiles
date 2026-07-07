@@ -48,19 +48,26 @@ message TtyPacket {
 }
 
 message StdinRequest {
-  string client_id = 1; // client ID from the active CallPlugin stream
-  int32 max_bytes = 2; // max bytes to return (0 = default 4096)
+  // Client identifier from the active CallPlugin stream.
+  string client_id = 1;
+  // Maximum number of bytes to return. 0 means use the default (4096).
+  int32 max_bytes = 2;
 }
 
 message StdinResponse {
+  // Bytes read from stdin.
   bytes data = 1;
-  bool eof = 2; // true when the stdin stream is closed
+  // True when the stdin stream is closed (no more data will arrive).
+  bool eof = 2;
 }
 
 // LogEntry represents a single log record from a plugin or tool.
 message LogEntry {
+  // Severity level of the log entry.
   LogLevel level = 1;
+  // Log message text.
   string message = 2;
+  // Structured key-value attributes for additional context.
   map<string, string> attributes = 3;
 }
 

@@ -24,18 +24,21 @@ service FeedbackService {
 // InputService is called by the daemon when it needs arbitrary text input
 // from the user (e.g. a value for a shell variable, git identity config).
 service InputService {
+  // RequestInput prompts the user for text input and returns their response.
   rpc RequestInput(InputRequest) returns (InputResponse);
 }
 
 // ConfirmService is called by the daemon when it needs a yes/no
 // confirmation before proceeding (e.g. destructive file operation).
 service ConfirmService {
+  // RequestConfirm prompts the user for a yes/no confirmation and returns their choice.
   rpc RequestConfirm(ConfirmRequest) returns (ConfirmResponse);
 }
 
 // ChooseService is called by the daemon when it needs the user to pick
 // from a list of options (e.g. select a git branch, choose a target).
 service ChooseService {
+  // RequestChoose prompts the user to pick from a list of options and returns their selection.
   rpc RequestChoose(ChooseRequest) returns (ChooseResponse);
 }
 
@@ -50,6 +53,7 @@ message InputRequest {
 }
 
 message InputResponse {
+  // Session ID associated with this feedback request.
   string session_id = 100;
   // The value provided by the user (or the default).
   string value = 1;
@@ -64,6 +68,7 @@ message ConfirmRequest {
 }
 
 message ConfirmResponse {
+  // Session ID associated with this confirmation request.
   string session_id = 100;
   // Whether the user confirmed.
   bool confirmed = 1;
@@ -80,6 +85,7 @@ message ChooseRequest {
 }
 
 message ChooseResponse {
+  // Session ID associated with this choice request.
   string session_id = 100;
   // Index of the selected option, -1 if cancelled.
   int32 selected_index = 1;

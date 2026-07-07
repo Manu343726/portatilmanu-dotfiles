@@ -30,14 +30,22 @@ message Shell {
 }
 
 message Session {
+  // Unique session identifier (UUID).
   string id = 1;
-  int64 created_at = 2;      // unix timestamp (seconds)
-  int64 last_active = 3;     // unix timestamp (seconds)
+  // Unix timestamp (seconds since epoch) of session creation.
+  int64 created_at = 2;
+  // Unix timestamp (seconds since epoch) of the most recent request using this session.
+  int64 last_active = 3;
+  // Number of requests made within this session.
   int32 request_count = 4;
+  // Whether the session has been finalized.
   bool finalized = 5;
+  // Arbitrary key-value data associated with the session.
   map<string, string> data = 6;
-  map<string, string> variables = 7; // session variables injected into shell env
-  Shell shell = 8;                  // CLI shell context (cwd, shell, env)
+  // Session variables that are injected into the shell environment for exec calls.
+  map<string, string> variables = 7;
+  // CLI shell context (working directory, shell binary, environment).
+  Shell shell = 8;
 }
 
 message CreateSessionRequest {
@@ -45,6 +53,7 @@ message CreateSessionRequest {
 }
 
 message CreateSessionResponse {
+  // The newly created session.
   Session session = 1;
 }
 
@@ -53,7 +62,9 @@ message FinalizeSessionRequest {
 }
 
 message FinalizeSessionResponse {
+  // Whether the session was finalized successfully.
   bool success = 1;
+  // Human-readable message (empty on success, error description on failure).
   string message = 2;
 }
 
@@ -62,6 +73,7 @@ message GetSessionRequest {
 }
 
 message GetSessionResponse {
+  // The requested session metadata.
   Session session = 1;
 }
 
@@ -75,6 +87,7 @@ message ConnectRequest {
 }
 
 message ConnectResponse {
+  // The session the callback URL was registered with.
   Session session = 1;
 }
 
@@ -83,5 +96,6 @@ message ListSessionsRequest {
 }
 
 message ListSessionsResponse {
+  // List of all active (non-finalized) sessions.
   repeated Session sessions = 1;
 }

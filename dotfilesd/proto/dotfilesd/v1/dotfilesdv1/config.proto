@@ -10,26 +10,36 @@ import "proto/dotfilesd/v1/dotfilesdv1/session.proto";
 // Reloading user-facing dotfiles (tmux, i3, kitty) is handled by scripts
 // in the scripts/reload/ directory, not by this service.
 service ConfigService {
+  // Reconfigure changes daemon runtime configuration (e.g. log level). Changes take effect immediately.
   rpc Reconfigure(ReconfigureRequest) returns (ReconfigureResponse);
+  // Restart gracefully restarts the daemon process.
   rpc Restart(RestartRequest) returns (RestartResponse);
 }
 
 enum LogLevel {
   LOG_LEVEL_UNSPECIFIED = 0;
+  // Verbose diagnostic information, includes all internal state changes.
   LOG_LEVEL_TRACE = 1;
+  // Detailed debugging information useful for development.
   LOG_LEVEL_DEBUG = 2;
+  // Normal operational messages.
   LOG_LEVEL_INFO = 3;
+  // Warning conditions that should be reviewed.
   LOG_LEVEL_WARN = 4;
+  // Error conditions that require attention.
   LOG_LEVEL_ERROR = 5;
 }
 
 message ReconfigureRequest {
   Session session = 100;
+  // New log level to apply. The change takes effect immediately.
   LogLevel log_level = 1;
 }
 
 message ReconfigureResponse {
+  // Whether the reconfiguration was applied successfully.
   bool success = 1;
+  // Human-readable status message or error description.
   string message = 2;
 }
 
@@ -38,5 +48,6 @@ message RestartRequest {
 }
 
 message RestartResponse {
+  // Human-readable status message (e.g. "restart initiated").
   string message = 1;
 }
