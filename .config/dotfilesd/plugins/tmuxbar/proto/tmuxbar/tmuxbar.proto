@@ -26,6 +26,14 @@ service TmuxBarService {
   // and other widgets into a single string like "CPU 24% | RAM 39% | 65°C".
   // Intended as a one-call solution for tmux status-right configuration.
   rpc StatusBar(StatusBarRequest) returns (StatusBarResponse);
+  // AsusProfileWidget returns a formatted ASUS performance profile indicator
+  // like "#[fg=#E8871A]PERF#[default] " with Monokai-colored output.
+  rpc AsusProfileWidget(AsusProfileWidgetRequest) returns (AsusProfileWidgetResponse);
+  // GPUProfileWidget returns a formatted GPU mode indicator like
+  // "#[fg=#A6E22E]HYBRID#[default] " with Monokai-colored output.
+  rpc GPUProfileWidget(GPUProfileWidgetRequest) returns (GPUProfileWidgetResponse);
+  // LayoutWidget returns the current keyboard layout (e.g., "us" or "es").
+  rpc LayoutWidget(LayoutWidgetRequest) returns (LayoutWidgetResponse);
 }
 
 // RAMWidgetRequest configures the RAM widget output.
@@ -96,4 +104,37 @@ message StatusBarRequest {}
 message StatusBarResponse {
   // Combined compact status line (e.g., "CPU 24% | RAM 39% | 65°C").
   string text = 1;
+}
+
+// AsusProfileWidgetRequest is empty.
+message AsusProfileWidgetRequest {}
+
+// AsusProfileWidgetResponse contains the ASUS performance profile indicator.
+message AsusProfileWidgetResponse {
+  // Formatted text with tmux color sequences (e.g., "#[fg=#A6E22E]BAL#[default] ").
+  string text = 1;
+  // Raw profile name ("PERF", "BAL", "QUIET", or "").
+  string profile = 2;
+}
+
+// GPUProfileWidgetRequest is empty.
+message GPUProfileWidgetRequest {}
+
+// GPUProfileWidgetResponse contains the GPU mode indicator.
+message GPUProfileWidgetResponse {
+  // Formatted text with tmux color sequences (e.g., "#[fg=#A6E22E]HYBRID#[default] ").
+  string text = 1;
+  // Raw profile name ("EGPU", "NVIDIA", "IGPU", "HYBRID", or "").
+  string profile = 2;
+}
+
+// LayoutWidgetRequest is empty.
+message LayoutWidgetRequest {}
+
+// LayoutWidgetResponse contains the keyboard layout.
+message LayoutWidgetResponse {
+  // Keyboard layout identifier (e.g., "us" or "es").
+  string text = 1;
+  // Same as text, the layout name.
+  string layout = 2;
 }

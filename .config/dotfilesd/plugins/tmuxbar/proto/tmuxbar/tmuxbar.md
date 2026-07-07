@@ -9,6 +9,9 @@
     - [CPUTempWidget](#cputempwidget)
     - [BatteryWidget](#batterywidget)
     - [StatusBar](#statusbar)
+    - [AsusProfileWidget](#asusprofilewidget)
+    - [GPUProfileWidget](#gpuprofilewidget)
+    - [LayoutWidget](#layoutwidget)
 - [Messages](#messages)
   - [RAMWidgetRequest](#ramwidgetrequest)
   - [RAMWidgetResponse](#ramwidgetresponse)
@@ -20,6 +23,12 @@
   - [BatteryWidgetResponse](#batterywidgetresponse)
   - [StatusBarRequest](#statusbarrequest)
   - [StatusBarResponse](#statusbarresponse)
+  - [AsusProfileWidgetRequest](#asusprofilewidgetrequest)
+  - [AsusProfileWidgetResponse](#asusprofilewidgetresponse)
+  - [GPUProfileWidgetRequest](#gpuprofilewidgetrequest)
+  - [GPUProfileWidgetResponse](#gpuprofilewidgetresponse)
+  - [LayoutWidgetRequest](#layoutwidgetrequest)
+  - [LayoutWidgetResponse](#layoutwidgetresponse)
 - [Enums](#enums)
   - [TemperatureUnit](#temperatureunit)
 
@@ -73,6 +82,29 @@ Intended as a one-call solution for tmux status-right configuration.
 
 - **Request:** `tmuxbar.StatusBarRequest`
 - **Response:** `tmuxbar.StatusBarResponse`
+
+#### AsusProfileWidget
+
+AsusProfileWidget returns a formatted ASUS performance profile indicator
+like "#[fg=#E8871A]PERF#[default] " with Monokai-colored output.
+
+- **Request:** `tmuxbar.AsusProfileWidgetRequest`
+- **Response:** `tmuxbar.AsusProfileWidgetResponse`
+
+#### GPUProfileWidget
+
+GPUProfileWidget returns a formatted GPU mode indicator like
+"#[fg=#A6E22E]HYBRID#[default] " with Monokai-colored output.
+
+- **Request:** `tmuxbar.GPUProfileWidgetRequest`
+- **Response:** `tmuxbar.GPUProfileWidgetResponse`
+
+#### LayoutWidget
+
+LayoutWidget returns the current keyboard layout (e.g., "us" or "es").
+
+- **Request:** `tmuxbar.LayoutWidgetRequest`
+- **Response:** `tmuxbar.LayoutWidgetResponse`
 
 
 ## Messages
@@ -149,6 +181,45 @@ StatusBarResponse contains the combined status line.
 | Field | Type | Description |
 |-------|------|-------------|
 | `text` | string | Combined compact status line (e.g., "CPU 24% | RAM 39% | 65°C"). |
+
+### AsusProfileWidgetRequest
+
+AsusProfileWidgetRequest is empty.
+
+### AsusProfileWidgetResponse
+
+AsusProfileWidgetResponse contains the ASUS performance profile indicator.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Formatted text with tmux color sequences (e.g., "#[fg=#A6E22E]BAL#[default] "). |
+| `profile` | string | Raw profile name ("PERF", "BAL", "QUIET", or ""). |
+
+### GPUProfileWidgetRequest
+
+GPUProfileWidgetRequest is empty.
+
+### GPUProfileWidgetResponse
+
+GPUProfileWidgetResponse contains the GPU mode indicator.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Formatted text with tmux color sequences (e.g., "#[fg=#A6E22E]HYBRID#[default] "). |
+| `profile` | string | Raw profile name ("EGPU", "NVIDIA", "IGPU", "HYBRID", or ""). |
+
+### LayoutWidgetRequest
+
+LayoutWidgetRequest is empty.
+
+### LayoutWidgetResponse
+
+LayoutWidgetResponse contains the keyboard layout.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Keyboard layout identifier (e.g., "us" or "es"). |
+| `layout` | string | Same as text, the layout name. |
 
 
 ## Enums
