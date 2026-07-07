@@ -44,10 +44,10 @@ message CurrentResponse {
   BatterySnapshot battery = 6;
   // WiFi signal snapshot (strength, SSID).
   WiFiSnapshot wifi = 7;
-  // ASUS performance profile: "PERF", "BAL", "QUIET", or "".
-  string asus_profile = 8;
-  // GPU mode: "EGPU", "NVIDIA", "IGPU", "HYBRID", or "".
-  string gpu_profile = 9;
+  // ASUS performance profile.
+  ASUSProfile asus_profile = 8;
+  // GPU mode.
+  GPUProfile gpu_profile = 9;
   // Current keyboard layout (e.g., "us" or "es").
   string keyboard_layout = 10;
   // Name of the process with highest CPU usage.
@@ -231,6 +231,30 @@ enum BatteryStatus {
   BATTERY_STATUS_FULL = 3;
   // Battery is not charging but also not full (e.g. charge threshold).
   BATTERY_STATUS_NOT_CHARGING = 4;
+}
+
+// ASUS performance profile as reported by asusctl.
+enum ASUSProfile {
+  ASUS_PROFILE_UNSPECIFIED = 0;
+  // Performance mode (high power).
+  ASUS_PROFILE_PERF = 1;
+  // Balanced mode.
+  ASUS_PROFILE_BAL = 2;
+  // Quiet mode (low power, low fan).
+  ASUS_PROFILE_QUIET = 3;
+}
+
+// GPU mode as detected from the ASUS nv-wmi driver.
+enum GPUProfile {
+  GPU_PROFILE_UNSPECIFIED = 0;
+  // External GPU connected via Thunderbolt.
+  GPU_PROFILE_EGPU = 1;
+  // Dedicated NVIDIA GPU active (mux switched).
+  GPU_PROFILE_NVIDIA = 2;
+  // Integrated GPU only (dGPU disabled).
+  GPU_PROFILE_IGPU = 3;
+  // Hybrid mode (iGPU + dGPU, dynamic switching).
+  GPU_PROFILE_HYBRID = 4;
 }
 
 // BatterySnapshot captures the battery status at a point in time.

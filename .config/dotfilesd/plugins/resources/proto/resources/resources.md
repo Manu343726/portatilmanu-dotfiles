@@ -31,6 +31,8 @@
   - [Unit](#unit)
   - [ProcessState](#processstate)
   - [BatteryStatus](#batterystatus)
+  - [ASUSProfile](#asusprofile)
+  - [GPUProfile](#gpuprofile)
 
 ## Services
 
@@ -95,8 +97,8 @@ CurrentResponse contains the latest snapshot of all resources.
 | `cpu_temp` | resources.CPUTempSnapshot | CPU temperature snapshot from thermal sensors. |
 | `battery` | resources.BatterySnapshot | Battery status snapshot (level, charging, plugged). |
 | `wifi` | resources.WiFiSnapshot | WiFi signal snapshot (strength, SSID). |
-| `asus_profile` | string | ASUS performance profile: "PERF", "BAL", "QUIET", or "". |
-| `gpu_profile` | string | GPU mode: "EGPU", "NVIDIA", "IGPU", "HYBRID", or "". |
+| `asus_profile` | resources.ASUSProfile | ASUS performance profile. |
+| `gpu_profile` | resources.GPUProfile | GPU mode. |
 | `keyboard_layout` | string | Current keyboard layout (e.g., "us" or "es"). |
 | `top_cpu_process` | string | Name of the process with highest CPU usage. |
 | `top_mem_process` | string | Name of the process with highest memory usage. |
@@ -309,4 +311,27 @@ Battery charge/discharge status as reported by the power supply subsystem.
 | `BATTERY_STATUS_DISCHARGING` | 2 | Battery is discharging (on battery power). |
 | `BATTERY_STATUS_FULL` | 3 | Battery is fully charged. |
 | `BATTERY_STATUS_NOT_CHARGING` | 4 | Battery is not charging but also not full (e.g. charge threshold). |
+
+### ASUSProfile
+
+ASUS performance profile as reported by asusctl.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `ASUS_PROFILE_UNSPECIFIED` | 0 |  |
+| `ASUS_PROFILE_PERF` | 1 | Performance mode (high power). |
+| `ASUS_PROFILE_BAL` | 2 | Balanced mode. |
+| `ASUS_PROFILE_QUIET` | 3 | Quiet mode (low power, low fan). |
+
+### GPUProfile
+
+GPU mode as detected from the ASUS nv-wmi driver.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `GPU_PROFILE_UNSPECIFIED` | 0 |  |
+| `GPU_PROFILE_EGPU` | 1 | External GPU connected via Thunderbolt. |
+| `GPU_PROFILE_NVIDIA` | 2 | Dedicated NVIDIA GPU active (mux switched). |
+| `GPU_PROFILE_IGPU` | 3 | Integrated GPU only (dGPU disabled). |
+| `GPU_PROFILE_HYBRID` | 4 | Hybrid mode (iGPU + dGPU, dynamic switching). |
 

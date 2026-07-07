@@ -90,8 +90,8 @@ type SharedState struct {
 	battery BatterySnapshot
 	wifi    WiFiSnapshot
 
-	asusProfile     string
-	gpuProfile      string
+	asusProfile     pb.ASUSProfile
+	gpuProfile      pb.GPUProfile
 	keyboardLayout  string
 	topCPUProcess   string
 	topMemProcess   string
@@ -157,7 +157,7 @@ func appendRing(buf []float64, val float64, max int) []float64 {
 	return buf
 }
 
-func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot, WiFiSnapshot, string, string, string, string, string) {
+func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot, WiFiSnapshot, pb.ASUSProfile, pb.GPUProfile, string, string, string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.ram, s.cpu, s.disk, s.diskIO, s.cpuTemp, s.battery, s.wifi,
@@ -764,37 +764,37 @@ func collectWiFi() WiFiSnapshot {
 	}
 }
 
-func collectASUSProfile() string {
+func collectASUSProfile() pb.ASUSProfile {
 	out, err := exec.Command("asusctl", "profile", "get").Output()
 	if err != nil {
-		return ""
+		return pb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
 	}
 	fields := strings.Fields(string(out))
 	if len(fields) < 3 {
-		return ""
+		return pb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
 	}
 	switch fields[2] {
 	case "Performance":
-		return "PERF"
+		return pb.ASUSProfile_ASUS_PROFILE_PERF
 	case "Balanced":
-		return "BAL"
+		return pb.ASUSProfile_ASUS_PROFILE_BAL
 	case "Quiet":
-		return "QUIET"
+		return pb.ASUSProfile_ASUS_PROFILE_QUIET
 	}
-	return ""
+	return pb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
 }
 
-func collectGPUProfile() string {
+func collectGPUProfile() pb.GPUProfile {
 	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/egpu_connected"); err == nil && strings.TrimSpace(string(raw)) == "1" {
-		return "EGPU"
+		return pb.GPUProfile_GPU_PROFILE_EGPU
 	}
 	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil && strings.TrimSpace(string(raw)) == "1" {
-		return "NVIDIA"
+		return pb.GPUProfile_GPU_PROFILE_NVIDIA
 	}
 	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/dgpu_disable"); err == nil && strings.TrimSpace(string(raw)) == "1" {
-		return "IGPU"
+		return pb.GPUProfile_GPU_PROFILE_IGPU
 	}
-	return "HYBRID"
+	return pb.GPUProfile_GPU_PROFILE_HYBRID
 }
 
 func collectKeyboardLayout() string {

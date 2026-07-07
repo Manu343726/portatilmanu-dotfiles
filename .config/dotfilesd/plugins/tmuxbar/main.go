@@ -306,25 +306,28 @@ func (s *tmuxBarServer) AsusProfileWidget(ctx context.Context, req *connect.Requ
 	pc := plugin.ExtractContext(ctx)
 
 	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
-	p := ""
+	p := respb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
 	if err == nil {
 		p = r.Msg.AsusProfile
 	}
 
-	var text string
+	var text, short string
 	switch p {
-	case "PERF":
+	case respb.ASUSProfile_ASUS_PROFILE_PERF:
 		text = "#[fg=#E8871A]PERF#[default] "
-	case "BAL":
+		short = "PERF"
+	case respb.ASUSProfile_ASUS_PROFILE_BAL:
 		text = "#[fg=#A6E22E]BAL#[default] "
-	case "QUIET":
+		short = "BAL"
+	case respb.ASUSProfile_ASUS_PROFILE_QUIET:
 		text = "#[fg=#66D9EF]QUIET#[default] "
+		short = "QUIET"
 	default:
 		text = "? "
 	}
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.AsusProfileWidget", "profile", p)
+		pc.Log().Info("▶ TmuxBar.AsusProfileWidget", "profile", short)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -333,7 +336,7 @@ func (s *tmuxBarServer) AsusProfileWidget(ctx context.Context, req *connect.Requ
 
 	return connect.NewResponse(&pb.AsusProfileWidgetResponse{
 		Text:    text,
-		Profile: p,
+		Profile: short,
 	}), nil
 }
 
@@ -341,25 +344,29 @@ func (s *tmuxBarServer) GPUProfileWidget(ctx context.Context, req *connect.Reque
 	pc := plugin.ExtractContext(ctx)
 
 	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
-	p := ""
+	p := respb.GPUProfile_GPU_PROFILE_UNSPECIFIED
 	if err == nil {
 		p = r.Msg.GpuProfile
 	}
 
-	var text string
+	var text, short string
 	switch p {
-	case "EGPU":
+	case respb.GPUProfile_GPU_PROFILE_EGPU:
 		text = "#[fg=#AE81FF]EGPU#[default] "
-	case "NVIDIA":
+		short = "EGPU"
+	case respb.GPUProfile_GPU_PROFILE_NVIDIA:
 		text = "#[fg=#E8871A]NVIDIA#[default] "
-	case "IGPU":
+		short = "NVIDIA"
+	case respb.GPUProfile_GPU_PROFILE_IGPU:
 		text = "#[fg=#66D9EF]IGPU#[default] "
+		short = "IGPU"
 	default:
 		text = "#[fg=#A6E22E]HYBRID#[default] "
+		short = "HYBRID"
 	}
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.GPUProfileWidget", "profile", p)
+		pc.Log().Info("▶ TmuxBar.GPUProfileWidget", "profile", short)
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -368,7 +375,7 @@ func (s *tmuxBarServer) GPUProfileWidget(ctx context.Context, req *connect.Reque
 
 	return connect.NewResponse(&pb.GPUProfileWidgetResponse{
 		Text:    text,
-		Profile: p,
+		Profile: short,
 	}), nil
 }
 
@@ -449,21 +456,21 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 
 	// ASUS profile
 	switch r.Msg.AsusProfile {
-	case "PERF":
+	case respb.ASUSProfile_ASUS_PROFILE_PERF:
 		b.WriteString("#[fg=#E8871A]PERF#[default] ")
-	case "BAL":
+	case respb.ASUSProfile_ASUS_PROFILE_BAL:
 		b.WriteString("#[fg=#A6E22E]BAL#[default] ")
-	case "QUIET":
+	case respb.ASUSProfile_ASUS_PROFILE_QUIET:
 		b.WriteString("#[fg=#66D9EF]QUIET#[default] ")
 	}
 
 	// GPU profile
 	switch r.Msg.GpuProfile {
-	case "EGPU":
+	case respb.GPUProfile_GPU_PROFILE_EGPU:
 		b.WriteString("#[fg=#AE81FF]EGPU#[default] ")
-	case "NVIDIA":
+	case respb.GPUProfile_GPU_PROFILE_NVIDIA:
 		b.WriteString("#[fg=#E8871A]NVIDIA#[default] ")
-	case "IGPU":
+	case respb.GPUProfile_GPU_PROFILE_IGPU:
 		b.WriteString("#[fg=#66D9EF]IGPU#[default] ")
 	default:
 		b.WriteString("#[fg=#A6E22E]HYBRID#[default] ")
