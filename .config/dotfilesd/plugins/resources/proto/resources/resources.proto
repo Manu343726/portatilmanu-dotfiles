@@ -23,10 +23,17 @@ service ResourcesService {
   // History returns historical resource usage data points from the ring
   // buffer. Use this to track resource usage trends over time.
   rpc History(HistoryRequest) returns (HistoryResponse);
+  // Watch returns a stream of CurrentResponse snapshots, one per poll
+  // cycle. Consumers (like tmuxbar) use this to react to fresh data
+  // without polling.
+  rpc Watch(WatchRequest) returns (stream CurrentResponse);
 }
 
 // CurrentRequest is empty. Current returns the latest snapshot.
 message CurrentRequest {}
+
+// WatchRequest is empty. Watch streams snapshots as they are collected.
+message WatchRequest {}
 
 // CurrentResponse contains the latest snapshot of all resources.
 message CurrentResponse {
@@ -54,6 +61,9 @@ message CurrentResponse {
   string top_cpu_process = 11;
   // Name of the process with highest memory usage.
   string top_mem_process = 12;
+  // Monotonic counter incremented on each poll cycle. Tmuxbar plugin
+  // uses this to detect fresh data and trigger refresh-client.
+  int64 poll_count = 13;
 }
 
 // Sort order for process listing.

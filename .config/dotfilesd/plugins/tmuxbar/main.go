@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -622,6 +623,29 @@ func main() {
 				Handler:          handler,
 				PluginAccessible: true,
 			},
+		},
+		Background: func(ctx plugin.Context, stop <-chan struct{}) {
+			go func() {
+				for {
+					stream, err := resClient.Watch(context.Background(), connect.NewRequest(&respb.WatchRequest{}))
+					if err != nil {
+						select {
+						case <-stop:
+							return
+						case <-time.After(5 * time.Second):
+						}
+						continue
+					}
+					for stream.Receive() {
+						exec.Command("tmux", "refresh-client", "-S").Run()
+					}
+					select {
+					case <-stop:
+						return
+					default:
+					}
+				}
+			}()
 		},
 	})
 }

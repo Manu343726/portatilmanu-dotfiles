@@ -8,8 +8,10 @@
     - [Top](#top)
     - [PS](#ps)
     - [History](#history)
+    - [Watch](#watch)
 - [Messages](#messages)
   - [CurrentRequest](#currentrequest)
+  - [WatchRequest](#watchrequest)
   - [CurrentResponse](#currentresponse)
   - [TopRequest](#toprequest)
   - [TopResponse](#topresponse)
@@ -77,12 +79,25 @@ buffer. Use this to track resource usage trends over time.
 - **Request:** `resources.HistoryRequest`
 - **Response:** `resources.HistoryResponse`
 
+#### Watch
+
+Watch returns a stream of CurrentResponse snapshots, one per poll
+cycle. Consumers (like tmuxbar) use this to react to fresh data
+without polling.
+
+- **Request:** `resources.WatchRequest`
+- **Response:** `resources.CurrentResponse`
+
 
 ## Messages
 
 ### CurrentRequest
 
 CurrentRequest is empty. Current returns the latest snapshot.
+
+### WatchRequest
+
+WatchRequest is empty. Watch streams snapshots as they are collected.
 
 ### CurrentResponse
 
@@ -102,6 +117,7 @@ CurrentResponse contains the latest snapshot of all resources.
 | `keyboard_layout` | string | Current keyboard layout (e.g., "us" or "es"). |
 | `top_cpu_process` | string | Name of the process with highest CPU usage. |
 | `top_mem_process` | string | Name of the process with highest memory usage. |
+| `poll_count` | int64 | Monotonic counter incremented on each poll cycle. Tmuxbar plugin uses this to detect fresh data and trigger refresh-client. |
 
 ### TopRequest
 

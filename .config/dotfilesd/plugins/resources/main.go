@@ -96,6 +96,8 @@ type SharedState struct {
 	topCPUProcess   string
 	topMemProcess   string
 
+	pollCount int64
+
 	// History ring buffers (100 entries each)
 	ramHistory      []float64
 	cpuHistory      []float64
@@ -199,67 +201,22 @@ func parseMemValue(line string) float64 {
 	return 0
 }
 
+type subscriber struct {
+	ch chan *pb.CurrentResponse
+}
+
 type resourcesServer struct {
-	state  *SharedState
-	poller *SmartPoller
+	state   *SharedState
+	poller  *SmartPoller
+	subs    map[string]*subscriber
+	subMu   sync.Mutex
+	subID   int64
 }
 
-func (s *resourcesServer) ensureFreshData() {
-	s.poller.NoteCall()
-	if s.poller.IsStale() {
-		s.poller.PollNow()
-	}
-}
-
-func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.CurrentRequest]) (*connect.Response[pb.CurrentResponse], error) {
-	s.ensureFreshData()
+func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
 	ram, cpu, disk, diskIO, cpuTemp, battery, wifi, asusProfile, gpuProfile, keyboardLayout, topCPUProc, topMemProc := s.state.get()
 
-	pc := plugin.ExtractContext(ctx)
-	if pc != nil {
-		peer := req.Peer()
-		pc.Log().Info("▶ Resources.Current",
-			"peer", peer.Addr,
-			"protocol", peer.Protocol,
-			"render_output", pc.RenderOutput(),
-			"ram_pct", ram.Percent,
-			"cpu_pct", cpu.TotalPercent,
-			"cpu_temp", cpuTemp.TempCelsius,
-			"battery_pct", battery.Percent,
-			"battery_charging", battery.Charging,
-			"ac_plugged", battery.Plugged,
-		)
-
-		if result, err := pc.Exec("uname -a"); err == nil {
-			pc.Log().Info("Current exec check", "stdout", strings.TrimSpace(result.Stdout))
-		}
-	}
-	if pc != nil && pc.RenderOutput() {
-		batteryStr := ""
-		if cpuTemp.TempCelsius > 0 {
-			batteryStr = fmt.Sprintf(" | CPU temp: %.0f°C", cpuTemp.TempCelsius)
-		}
-		if battery.Percent > 0 {
-			batteryStr += fmt.Sprintf(" | Battery: %.0f%%", battery.Percent)
-			switch {
-			case battery.Charging:
-				batteryStr += " (charging)"
-			case battery.Plugged:
-				batteryStr += " (plugged)"
-			default:
-				batteryStr += " (discharging)"
-			}
-		}
-		fmt.Fprintf(pc.Stdout(), " RAM: %.0f/%.0f MB (%.0f%%) | CPU: %.0f%% (%.0f%% user, %.0f%% sys, %.0f%% iowait) | Disk: %.1f/%.1f GB (%.0f%%) on %s | Disk I/O: %.0f r/s %.0f w/s on %s%s\n",
-			ram.UsedMB, ram.TotalMB, ram.Percent,
-			cpu.TotalPercent, cpu.UserPercent, cpu.SystemPercent, cpu.IOwaitPercent,
-			disk.UsedGB, disk.TotalGB, disk.Percent, disk.MountPoint,
-			diskIO.ReadsPerSec, diskIO.WritesPerSec, diskIO.Device,
-			batteryStr,
-		)
-	}
-
-	return connect.NewResponse(&pb.CurrentResponse{
+	return &pb.CurrentResponse{
 		Ram: &pb.RAMSnapshot{
 			TotalMb:     ram.TotalMB,
 			UsedMb:      ram.UsedMB,
@@ -309,7 +266,106 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 		KeyboardLayout: keyboardLayout,
 		TopCpuProcess:  topCPUProc,
 		TopMemProcess:  topMemProc,
-	}), nil
+	}
+}
+
+func (s *resourcesServer) broadcast() {
+	resp := s.buildResponse()
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	for _, sub := range s.subs {
+		select {
+		case sub.ch <- resp:
+		default:
+		}
+	}
+}
+
+func (s *resourcesServer) Watch(ctx context.Context, req *connect.Request[pb.WatchRequest], stream *connect.ServerStream[pb.CurrentResponse]) error {
+	sub := &subscriber{ch: make(chan *pb.CurrentResponse, 4)}
+	s.subMu.Lock()
+	s.subID++
+	id := fmt.Sprintf("sub_%d", s.subID)
+	if s.subs == nil {
+		s.subs = make(map[string]*subscriber)
+	}
+	s.subs[id] = sub
+	s.subMu.Unlock()
+
+	defer func() {
+		s.subMu.Lock()
+		delete(s.subs, id)
+		s.subMu.Unlock()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case resp := <-sub.ch:
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (s *resourcesServer) ensureFreshData() {
+	s.poller.NoteCall()
+	if s.poller.IsStale() {
+		s.poller.PollNow()
+	}
+}
+
+func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.CurrentRequest]) (*connect.Response[pb.CurrentResponse], error) {
+	s.ensureFreshData()
+	ram, cpu, disk, diskIO, cpuTemp, battery, _, _, _, _, _, _ := s.state.get()
+
+	pc := plugin.ExtractContext(ctx)
+	if pc != nil {
+		peer := req.Peer()
+		pc.Log().Info("▶ Resources.Current",
+			"peer", peer.Addr,
+			"protocol", peer.Protocol,
+			"render_output", pc.RenderOutput(),
+			"ram_pct", ram.Percent,
+			"cpu_pct", cpu.TotalPercent,
+			"cpu_temp", cpuTemp.TempCelsius,
+			"battery_pct", battery.Percent,
+			"battery_charging", battery.Charging,
+			"ac_plugged", battery.Plugged,
+		)
+
+		if result, err := pc.Exec("uname -a"); err == nil {
+			pc.Log().Info("Current exec check", "stdout", strings.TrimSpace(result.Stdout))
+		}
+	}
+	if pc != nil && pc.RenderOutput() {
+		batteryStr := ""
+		if cpuTemp.TempCelsius > 0 {
+			batteryStr = fmt.Sprintf(" | CPU temp: %.0f°C", cpuTemp.TempCelsius)
+		}
+		if battery.Percent > 0 {
+			batteryStr += fmt.Sprintf(" | Battery: %.0f%%", battery.Percent)
+			switch {
+			case battery.Charging:
+				batteryStr += " (charging)"
+			case battery.Plugged:
+				batteryStr += " (plugged)"
+			default:
+				batteryStr += " (discharging)"
+			}
+		}
+		fmt.Fprintf(pc.Stdout(), " RAM: %.0f/%.0f MB (%.0f%%) | CPU: %.0f%% (%.0f%% user, %.0f%% sys, %.0f%% iowait) | Disk: %.1f/%.1f GB (%.0f%%) on %s | Disk I/O: %.0f r/s %.0f w/s on %s%s\n",
+			ram.UsedMB, ram.TotalMB, ram.Percent,
+			cpu.TotalPercent, cpu.UserPercent, cpu.SystemPercent, cpu.IOwaitPercent,
+			disk.UsedGB, disk.TotalGB, disk.Percent, disk.MountPoint,
+			diskIO.ReadsPerSec, diskIO.WritesPerSec, diskIO.Device,
+			batteryStr,
+		)
+	}
+
+	return connect.NewResponse(s.buildResponse()), nil
 }
 
 func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRequest]) (*connect.Response[pb.TopResponse], error) {
@@ -866,6 +922,7 @@ func main() {
 		Background: func(ctx plugin.Context, stop <-chan struct{}) {
 			poller.Run(stop, func() {
 				collectAll(state)
+				svc.broadcast()
 			})
 		},
 	})
