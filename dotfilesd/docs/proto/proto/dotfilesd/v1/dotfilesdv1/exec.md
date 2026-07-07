@@ -75,25 +75,25 @@ or the client cancels. Only one BackgroundExec per stream.
 | Field | Type | Description |
 |-------|------|-------------|
 | `session` | dotfilesd.v1.Session |  |
-| `command` | string |  |
-| `sudo` | bool |  |
+| `command` | string | Shell command to execute (e.g. "ls -la"). |
+| `sudo` | bool | If true, execute the command with sudo elevation. |
 | `sudo_timeout_seconds` | int32 | Override the daemon's sudo credential cache timeout (seconds). 0 or unset means use the daemon default. |
 
 ### ExecResponse
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `exit_code` | int32 |  |
-| `stdout` | string |  |
-| `stderr` | string |  |
+| `exit_code` | int32 | Exit code of the command. 0 means success. |
+| `stdout` | string | Standard output from the command. |
+| `stderr` | string | Standard error from the command. |
 
 ### ExecStreamRequest
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `session` | dotfilesd.v1.Session |  |
-| `command` | string |  |
-| `sudo` | bool |  |
+| `command` | string | Shell command to execute (e.g. "ls -la"). |
+| `sudo` | bool | If true, execute the command with sudo elevation. |
 | `sudo_timeout_seconds` | int32 | Override the daemon's sudo credential cache timeout (seconds). 0 or unset means use the daemon default. |
 
 ### ExecStreamResponse
@@ -111,9 +111,9 @@ or the client cancels. Only one BackgroundExec per stream.
 | Field | Type | Description |
 |-------|------|-------------|
 | `session` | dotfilesd.v1.Session |  |
-| `command` | string |  |
-| `password` | string |  |
-| `preferred_method` | dotfilesd.v1.SudoMethod |  |
+| `command` | string | Shell command to execute (e.g. "ls -la"). |
+| `password` | string | Sudo password (plaintext). Preferred over encrypted_password for direct use. |
+| `preferred_method` | dotfilesd.v1.SudoMethod | Preferred sudo method to use. |
 | `sudo_timeout_seconds` | int32 | Override the daemon's sudo credential cache timeout (seconds). 0 or unset means use the daemon default. |
 | `key_id` | string | key_id from a prior KeyService.NegotiateKey call. When set alongside encrypted_password, the daemon decrypts encrypted_password using the negotiated key instead of using the password field directly. |
 | `encrypted_password` | bytes | AES-256-GCM ciphertext (nonce||ciphertext) of the sudo password, encrypted with the shared key identified by key_id. |
@@ -150,7 +150,7 @@ carry stdin data or a cancel signal.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session` | dotfilesd.v1.Session |  |
+| `session` | dotfilesd.v1.Session | Session for grouping and lifecycle management. |
 | `start` | dotfilesd.v1.StartCommand |  |
 | `stdin_chunk` | bytes |  |
 | `cancel` | bool |  |
@@ -162,8 +162,8 @@ StartCommand configures the background process.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `command` | string |  |
-| `sudo` | bool |  |
+| `command` | string | Shell command to execute in the background. |
+| `sudo` | bool | If true, execute with sudo elevation. |
 | `sudo_timeout_seconds` | int32 | Override the daemon's sudo credential cache timeout (seconds). 0 or unset means use the daemon default. |
 
 ### BackgroundExecResponse
@@ -184,13 +184,13 @@ carry output chunks or a final exit event.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `task_id` | string | Opaque task ID for logging/diagnostics. |
+| `task_id` | string | Opaque task identifier for logging and diagnostics. |
 
 ### ExitEvent
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `exit_code` | int32 |  |
+| `exit_code` | int32 | Exit code from the background process. |
 | `error_message` | string | Non-empty if the command could not be started (Go error). |
 
 

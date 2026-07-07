@@ -452,7 +452,7 @@ func kindToProto(k protoreflect.Kind) dotfilesdv1.FieldKind {
 	case protoreflect.MessageKind, protoreflect.GroupKind:
 		return dotfilesdv1.FieldKind_FIELD_KIND_MESSAGE
 	default:
-		return dotfilesdv1.FieldKind_FIELD_KIND_UNKNOWN
+		return dotfilesdv1.FieldKind_FIELD_KIND_UNSPECIFIED
 	}
 }
 

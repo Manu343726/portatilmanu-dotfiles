@@ -15,14 +15,54 @@ service TuiDiagService {
   rpc Watch(WatchRequest) returns (WatchResponse);
 }
 
-message WatchRequest {
-  // Optional initial type filter (e.g. "plugin", "executor").
-  string initial_type_filter = 1;
-  // Optional initial status filter (e.g. "active", "finished").
-  string initial_status_filter = 2;
-  // Show idle/inactive nodes too.
-  bool show_idle = 3;
+// Initial filter for diagnostic node types in the TUI.
+enum DiagTypeFilter {
+  DIAG_TYPE_FILTER_UNSPECIFIED = 0;
+  // Show plugin nodes.
+  DIAG_TYPE_FILTER_PLUGIN = 1;
+  // Show executor (command) nodes.
+  DIAG_TYPE_FILTER_EXECUTOR = 2;
+  // Show daemon nodes.
+  DIAG_TYPE_FILTER_DAEMON = 3;
+  // Show session nodes.
+  DIAG_TYPE_FILTER_SESSION = 4;
+  // Show background task nodes.
+  DIAG_TYPE_FILTER_BG_TASK = 5;
 }
 
+// Initial filter for diagnostic node status in the TUI.
+enum DiagStatusFilter {
+  DIAG_STATUS_FILTER_UNSPECIFIED = 0;
+  // Show active nodes only.
+  DIAG_STATUS_FILTER_ACTIVE = 1;
+  // Show finished nodes only.
+  DIAG_STATUS_FILTER_FINISHED = 2;
+  // Show crashed nodes only.
+  DIAG_STATUS_FILTER_CRASHED = 3;
+  // Show pending nodes only.
+  DIAG_STATUS_FILTER_PENDING = 4;
+}
+
+// Terminal window dimensions from the CLI caller.
+message TerminalSize {
+  // Terminal width in characters (default: 132).
+  int32 width = 1;
+  // Terminal height in characters (default: 43).
+  int32 height = 2;
+}
+
+message WatchRequest {
+  // Optional initial type filter. Unset means no type filter.
+  DiagTypeFilter initial_type_filter = 1;
+  // Optional initial status filter. Unset means no status filter.
+  DiagStatusFilter initial_status_filter = 2;
+  // Show idle/inactive nodes too.
+  bool show_idle = 3;
+  // Terminal window size from the CLI caller. Used to size the PTY
+  // correctly before the TUI starts. When unset, defaults to 132x43.
+  TerminalSize terminal_size = 4;
+}
+
+// WatchResponse is returned when the TUI session ends. Currently empty.
 message WatchResponse {
 }

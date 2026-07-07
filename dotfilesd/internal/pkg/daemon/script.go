@@ -157,7 +157,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 		result := &dotfilesdv1.StepResult{
 			StepNumber: int32(i + 1),
 			SourceLine: step.rawLine,
-			StepKind:   step.kind,
+			StepKind:   stepKindFromString(step.kind),
 		}
 
 		switch step.kind {
@@ -550,4 +550,19 @@ func parseChooseArgs(args string) (prompt string, options []string, varName stri
 	}
 
 	return prompt, options, varName, nil
+}
+
+func stepKindFromString(s string) dotfilesdv1.StepKind {
+	switch s {
+	case "exec":
+		return dotfilesdv1.StepKind_STEP_KIND_EXEC
+	case "confirm":
+		return dotfilesdv1.StepKind_STEP_KIND_CONFIRM
+	case "input":
+		return dotfilesdv1.StepKind_STEP_KIND_INPUT
+	case "choose":
+		return dotfilesdv1.StepKind_STEP_KIND_CHOOSE
+	default:
+		return dotfilesdv1.StepKind_STEP_KIND_UNSPECIFIED
+	}
 }

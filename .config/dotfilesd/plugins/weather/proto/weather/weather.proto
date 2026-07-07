@@ -15,23 +15,33 @@ service WeatherService {
   rpc Forecast(ForecastRequest) returns (ForecastResponse);
 }
 
+// Output format for weather forecast results.
+enum WeatherFormat {
+  // One-line summary of current conditions.
+  WEATHER_FORMAT_UNSPECIFIED = 0;
+  // One-line text summary (default for human output).
+  WEATHER_FORMAT_BRIEF = 1;
+  // Multi-line detailed weather report.
+  WEATHER_FORMAT_FULL = 2;
+  // Structured JSON data for programmatic consumption.
+  WEATHER_FORMAT_JSON = 3;
+}
+
 // Request for a weather forecast for a specific location.
 message ForecastRequest {
   // Location to forecast (city name, "London", "Paris", or IP address).
   // Supports any location that wttr.in understands.
   string location = 1;
-  // Output format: "brief" (one-line summary), "full" (detailed), or "json"
-  // (structured data). Defaults to brief for human output, json for
-  // programmatic callers.
-  string format = 2;
+  // Output format for the forecast. Use JSON for programmatic consumption.
+  WeatherFormat format = 2;
 }
 
 // Response containing the weather forecast result.
 message ForecastResponse {
   // Raw forecast output from wttr.in. Content depends on format:
-  // - "brief": one-line text summary
-  // - "full": multi-line detailed report
-  // - "json": structured JSON for programmatic parsing
+  // - BRIEF: one-line text summary
+  // - FULL: multi-line detailed report
+  // - JSON: structured JSON for programmatic parsing
   string report = 1;
   // Exit code from the curl command. 0 on success, non-zero on error.
   int32 exit_code = 2;

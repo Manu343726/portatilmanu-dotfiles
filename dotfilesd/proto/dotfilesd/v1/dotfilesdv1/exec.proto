@@ -37,7 +37,9 @@ enum SudoMethod {
 
 message ExecRequest {
   Session session = 100;
+  // Shell command to execute (e.g. "ls -la").
   string command = 1;
+  // If true, execute the command with sudo elevation.
   bool sudo = 2;
   // Override the daemon's sudo credential cache timeout (seconds).
   // 0 or unset means use the daemon default.
@@ -45,8 +47,11 @@ message ExecRequest {
 }
 
 message ExecResponse {
+  // Exit code of the command. 0 means success.
   int32 exit_code = 1;
+  // Standard output from the command.
   string stdout = 2;
+  // Standard error from the command.
   string stderr = 3;
 }
 
@@ -54,7 +59,9 @@ message ExecResponse {
 
 message ExecStreamRequest {
   Session session = 100;
+  // Shell command to execute (e.g. "ls -la").
   string command = 1;
+  // If true, execute the command with sudo elevation.
   bool sudo = 2;
   // Override the daemon's sudo credential cache timeout (seconds).
   // 0 or unset means use the daemon default.
@@ -78,8 +85,11 @@ message ExecStreamResponse {
 
 message SudoExecRequest {
   Session session = 100;
+  // Shell command to execute (e.g. "ls -la").
   string command = 1;
+  // Sudo password (plaintext). Preferred over encrypted_password for direct use.
   string password = 2;
+  // Preferred sudo method to use.
   SudoMethod preferred_method = 3;
   // Override the daemon's sudo credential cache timeout (seconds).
   // 0 or unset means use the daemon default.
@@ -119,6 +129,7 @@ message SudoResult {
 // stream. The first message MUST be a start action; subsequent messages
 // carry stdin data or a cancel signal.
 message BackgroundExecRequest {
+  // Session for grouping and lifecycle management.
   Session session = 100;
   oneof action {
     StartCommand start = 1;
@@ -129,7 +140,9 @@ message BackgroundExecRequest {
 
 // StartCommand configures the background process.
 message StartCommand {
+  // Shell command to execute in the background.
   string command = 1;
+  // If true, execute with sudo elevation.
   bool sudo = 2;
   // Override the daemon's sudo credential cache timeout (seconds).
   // 0 or unset means use the daemon default.
@@ -149,11 +162,12 @@ message BackgroundExecResponse {
 }
 
 message StartedEvent {
-  // Opaque task ID for logging/diagnostics.
+  // Opaque task identifier for logging and diagnostics.
   string task_id = 1;
 }
 
 message ExitEvent {
+  // Exit code from the background process.
   int32 exit_code = 1;
   // Non-empty if the command could not be started (Go error).
   string error_message = 2;

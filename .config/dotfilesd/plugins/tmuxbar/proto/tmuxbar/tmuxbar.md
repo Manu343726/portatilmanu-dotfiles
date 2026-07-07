@@ -20,6 +20,8 @@
   - [BatteryWidgetResponse](#batterywidgetresponse)
   - [StatusBarRequest](#statusbarrequest)
   - [StatusBarResponse](#statusbarresponse)
+- [Enums](#enums)
+  - [TemperatureUnit](#temperatureunit)
 
 ## Services
 
@@ -111,7 +113,7 @@ CPUTempWidgetRequest configures the temperature unit.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `unit` | string | Temperature unit: "celsius" or "fahrenheit" (default: "celsius"). |
+| `unit` | tmuxbar.TemperatureUnit | Temperature unit. Unset means Celsius. |
 
 ### CPUTempWidgetResponse
 
@@ -147,4 +149,17 @@ StatusBarResponse contains the combined status line.
 | Field | Type | Description |
 |-------|------|-------------|
 | `text` | string | Combined compact status line (e.g., "CPU 24% | RAM 39% | 65°C"). |
+
+
+## Enums
+
+### TemperatureUnit
+
+Temperature unit for CPU temperature display.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `TEMPERATURE_UNIT_UNSPECIFIED` | 0 |  |
+| `TEMPERATURE_UNIT_CELSIUS` | 1 | Degrees Celsius. |
+| `TEMPERATURE_UNIT_FAHRENHEIT` | 2 | Degrees Fahrenheit. |
 

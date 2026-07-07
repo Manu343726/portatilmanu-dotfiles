@@ -25,6 +25,10 @@
   - [StatusResponse](#statusresponse)
   - [ScreenshotResponse](#screenshotresponse)
   - [WindowsUpdatesResponse](#windowsupdatesresponse)
+- [Enums](#enums)
+  - [DeviceClass](#deviceclass)
+  - [PCState](#pcstate)
+  - [MonitorPowerState](#monitorpowerstate)
 
 ## Services
 
@@ -34,6 +38,8 @@ PcgordoService controls and monitors the PCGORDO desktop PC (Salon)
 via Home Assistant. Supports power management (poweron, shutdown,
 restart, hibernate), monitor control, satellite management, status
 queries, screen captures, and Windows Update monitoring.
+Requires a Home Assistant API token and URL configured in the daemon's
+secrets file.
 
 #### Poweron
 
@@ -167,7 +173,7 @@ EntityState represents a single Home Assistant entity.
 | `friendly_name` | string | Human-readable name from Home Assistant. |
 | `state` | string | Current state value. |
 | `unit` | string | Unit of measurement if applicable. |
-| `device_class` | string | Device class if set (e.g., "temperature", "power"). |
+| `device_class` | pcgordo.DeviceClass | Device class if set. |
 
 ### StatusResponse
 
@@ -175,17 +181,17 @@ StatusResponse contains the full PC status from Home Assistant.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `pc_state` | string | Power state: "online", "offline", or Home Assistant state. |
-| `last_boot` | string | Timestamp of last boot (ISO 8601). |
-| `last_active` | string | Timestamp of last user activity (ISO 8601). |
+| `pc_state` | pcgordo.PCState | Power state of the PC. |
+| `last_boot` | int64 | Unix timestamp (seconds since epoch) of last boot. |
+| `last_active` | int64 | Unix timestamp (seconds since epoch) of last user activity. |
 | `cpu_load` | double | CPU load as percentage (0-100). |
 | `gpu_load` | double | GPU load as percentage (0-100). |
 | `gpu_temp` | double | GPU temperature in Celsius. |
 | `memory_usage` | double | Memory usage as percentage (0-100). |
 | `active_window` | string | Title of the currently active window. |
 | `active_desktop` | string | Name of the currently active virtual desktop. |
-| `monitor_power` | string | Monitor power state ("on", "off", or "unknown"). |
-| `zerotier_ping` | string | ZeroTier network connectivity status. |
+| `monitor_power` | pcgordo.MonitorPowerState | Monitor power state. |
+| `zerotier_ping_reachable` | bool | Whether the PC is reachable via ZeroTier network ping. |
 | `entities` | repeated pcgordo.EntityState | All entity states available for this PC. |
 
 ### ScreenshotResponse
@@ -208,4 +214,47 @@ WindowsUpdatesResponse reports available Windows updates.
 | `pending_software_updates` | int32 | Number of pending software updates awaiting reboot. |
 | `available_driver_updates` | int32 | Number of available driver updates. |
 | `pending_driver_updates` | int32 | Number of pending driver updates awaiting reboot. |
+
+
+## Enums
+
+### DeviceClass
+
+Home Assistant device class for entity state values.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `DEVICE_CLASS_UNSPECIFIED` | 0 |  |
+| `DEVICE_CLASS_TEMPERATURE` | 1 |  |
+| `DEVICE_CLASS_POWER` | 2 |  |
+| `DEVICE_CLASS_HUMIDITY` | 3 |  |
+| `DEVICE_CLASS_PRESSURE` | 4 |  |
+| `DEVICE_CLASS_BATTERY` | 5 |  |
+| `DEVICE_CLASS_ENERGY` | 6 |  |
+| `DEVICE_CLASS_CURRENT` | 7 |  |
+| `DEVICE_CLASS_VOLTAGE` | 8 |  |
+| `DEVICE_CLASS_SPEED` | 9 |  |
+| `DEVICE_CLASS_DURATION` | 10 |  |
+| `DEVICE_CLASS_MONETARY` | 11 |  |
+
+### PCState
+
+Power state of the managed PC.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `PC_STATE_UNSPECIFIED` | 0 |  |
+| `PC_STATE_ONLINE` | 1 | PC is powered on and reachable. |
+| `PC_STATE_OFFLINE` | 2 | PC is powered off or unreachable. |
+
+### MonitorPowerState
+
+Power state of the PC's display monitors.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `MONITOR_POWER_STATE_UNSPECIFIED` | 0 |  |
+| `MONITOR_POWER_STATE_ON` | 1 | Monitors are powered on. |
+| `MONITOR_POWER_STATE_OFF` | 2 | Monitors are powered off. |
+| `MONITOR_POWER_STATE_UNKNOWN` | 3 | Monitor power state is unknown or the PC is offline. |
 

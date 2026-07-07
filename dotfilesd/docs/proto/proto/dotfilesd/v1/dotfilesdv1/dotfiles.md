@@ -19,6 +19,8 @@ in the scripts/git/ directory, not by this service.
 
 #### Status
 
+Status returns the dotfiles repository git status: clean/dirty state, current branch, and last commit.
+
 - **Request:** `dotfilesd.v1.StatusRequest`
 - **Response:** `dotfilesd.v1.StatusResponse`
 
@@ -35,7 +37,7 @@ in the scripts/git/ directory, not by this service.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `git_clean` | bool |  |
-| `git_branch` | string |  |
-| `last_commit` | string |  |
+| `git_clean` | bool | Whether the working tree is clean (no uncommitted changes). |
+| `git_branch` | string | Current git branch name (e.g. "master"). |
+| `last_commit` | string | Short hash and subject of the most recent commit (e.g. "a1b2c3d Fix typo"). |
 

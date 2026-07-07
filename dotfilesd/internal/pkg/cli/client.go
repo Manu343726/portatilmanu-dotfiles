@@ -388,10 +388,11 @@ func (c *Clients) Connect(ctx context.Context) error {
 
 	// Push client_connect diagnostic event.
 	if _, err := c.DiagPost.PostEvent(ctx, connect.NewRequest(&dotfilesdv1.DiagEvent{
-		Type:        "client_connect",
+		Type:        dotfilesdv1.EventType_EVENT_TYPE_LIFECYCLE,
 		Resource:    "client:" + c.ClientID,
 		Message:     c.ClientID,
 		TimestampNs: time.Now().UnixNano(),
+		Labels:      map[string]string{"event_type": "client_connect"},
 		Attrs:       attrs,
 	})); err != nil {
 		slog.Debug("diag post client_connect failed", "error", err)
@@ -462,10 +463,11 @@ func (c *Clients) negotiateKey(ctx context.Context, keyID string) error {
 func (c *Clients) Close() {
 	if c.ClientID != "" {
 		_, err := c.DiagPost.PostEvent(context.Background(), connect.NewRequest(&dotfilesdv1.DiagEvent{
-			Type:        "client_disconnect",
+			Type:        dotfilesdv1.EventType_EVENT_TYPE_LIFECYCLE,
 			Resource:    "client:" + c.ClientID,
 			Message:     c.ClientID,
 			TimestampNs: time.Now().UnixNano(),
+			Labels:      map[string]string{"event_type": "client_disconnect"},
 		}))
 		if err != nil {
 			slog.Debug("diag post client_disconnect failed", "error", err)

@@ -15,6 +15,8 @@
   - [FieldDoc](#fielddoc)
   - [EnumDoc](#enumdoc)
   - [EnumValueDoc](#enumvaluedoc)
+- [Enums](#enums)
+  - [DocFormat](#docformat)
 
 ## Services
 
@@ -47,7 +49,7 @@ GetDocumentation returns documentation for a specific service.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `format` | string | Documentation format. Defaults to "markdown". Other formats may be supported in the future ("html", "man"). |
+| `format` | dotfilesd.v1.DocFormat | Documentation format. Unset means markdown. |
 | `content` | string | Documentation content in the requested format. |
 | `documentation` | dotfilesd.v1.Documentation | Structured documentation, populated when the plugin has embedded docs from protoc-gen-docs. Preferred over format/content for programmatic use. |
 
@@ -135,4 +137,18 @@ EnumValueDoc documents a single enum value.
 | `name` | string | Value name (e.g. "COLOR_RED"). |
 | `number` | int32 | Numeric value (e.g. 0). |
 | `description` | string | Value description from proto leading comments. |
+
+
+## Enums
+
+### DocFormat
+
+Documentation format for rendering help text.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `DOC_FORMAT_UNSPECIFIED` | 0 | Default markdown format with headings, tables, and code blocks. |
+| `DOC_FORMAT_MARKDOWN` | 1 | GitHub-Flavored Markdown with service/method sections. |
+| `DOC_FORMAT_HTML` | 2 | HTML rendered from the structured documentation. |
+| `DOC_FORMAT_MAN` | 3 | Unix man page format (roff). |
 

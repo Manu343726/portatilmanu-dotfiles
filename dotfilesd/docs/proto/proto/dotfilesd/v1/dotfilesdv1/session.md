@@ -109,14 +109,14 @@ so commands behave as if run directly in the user's terminal.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string |  |
-| `created_at` | int64 |  |
-| `last_active` | int64 |  |
-| `request_count` | int32 |  |
-| `finalized` | bool |  |
-| `data` | map<...> |  |
-| `variables` | map<...> |  |
-| `shell` | dotfilesd.v1.Shell |  |
+| `id` | string | Unique session identifier (UUID). |
+| `created_at` | int64 | Unix timestamp (seconds since epoch) of session creation. |
+| `last_active` | int64 | Unix timestamp (seconds since epoch) of the most recent request using this session. |
+| `request_count` | int32 | Number of requests made within this session. |
+| `finalized` | bool | Whether the session has been finalized. |
+| `data` | map<...> | Arbitrary key-value data associated with the session. |
+| `variables` | map<...> | Session variables that are injected into the shell environment for exec calls. |
+| `shell` | dotfilesd.v1.Shell | CLI shell context (working directory, shell binary, environment). |
 
 ### CreateSessionRequest
 
@@ -128,7 +128,7 @@ so commands behave as if run directly in the user's terminal.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session` | dotfilesd.v1.Session |  |
+| `session` | dotfilesd.v1.Session | The newly created session. |
 
 ### FinalizeSessionRequest
 
@@ -140,8 +140,8 @@ so commands behave as if run directly in the user's terminal.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | bool |  |
-| `message` | string |  |
+| `success` | bool | Whether the session was finalized successfully. |
+| `message` | string | Human-readable message (empty on success, error description on failure). |
 
 ### GetSessionRequest
 
@@ -153,7 +153,7 @@ so commands behave as if run directly in the user's terminal.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session` | dotfilesd.v1.Session |  |
+| `session` | dotfilesd.v1.Session | The requested session metadata. |
 
 ### ConnectRequest
 
@@ -166,7 +166,7 @@ so commands behave as if run directly in the user's terminal.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session` | dotfilesd.v1.Session |  |
+| `session` | dotfilesd.v1.Session | The session the callback URL was registered with. |
 
 ### ListSessionsRequest
 
@@ -178,5 +178,5 @@ so commands behave as if run directly in the user's terminal.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sessions` | repeated dotfilesd.v1.Session |  |
+| `sessions` | repeated dotfilesd.v1.Session | List of all active (non-finalized) sessions. |
 

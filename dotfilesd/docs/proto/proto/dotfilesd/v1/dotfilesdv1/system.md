@@ -27,6 +27,8 @@ daemon components can query this information.
 
 #### Ping
 
+Ping returns the daemon version, process ID, and uptime. Use this for health checks and liveness probes.
+
 - **Request:** `dotfilesd.v1.PingRequest`
 - **Response:** `dotfilesd.v1.PingResponse`
 
@@ -53,9 +55,9 @@ daemon components can query this information.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `version` | string |  |
-| `pid` | int64 |  |
-| `uptime_secs` | int64 |  |
+| `version` | string | Daemon version string. |
+| `pid` | int64 | Process ID of the daemon. |
+| `uptime_secs` | int64 | Daemon uptime in seconds. |
 
 ### RuntimeInfoRequest
 
@@ -85,7 +87,7 @@ daemon components can query this information.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `available_methods` | repeated string |  |
-| `current_method` | string |  |
-| `has_elevation` | bool |  |
+| `available_methods` | repeated string | Available sudo methods detected on the system (e.g. sudo, pkexec). |
+| `current_method` | string | The currently active sudo method. |
+| `has_elevation` | bool | Whether the daemon currently has sudo elevation (cached credentials). |
 

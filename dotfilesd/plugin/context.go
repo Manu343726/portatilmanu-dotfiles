@@ -138,7 +138,7 @@ type ScriptResult struct {
 type ScriptStepResult struct {
 	StepNumber    int
 	SourceLine    string
-	StepKind      string
+	StepKind      dotfilesdv1.StepKind
 	ExitCode      int
 	Stdout        string
 	Stderr        string
@@ -263,13 +263,14 @@ func (c *contextClient) WithRenderOutput(v bool) Context {
 }
 
 // pushDiagEvent sends a diagnostic event to the daemon.
-func (c *contextClient) pushDiagEvent(eventType, resource, parent, message string, attrs map[string]string) {
+func (c *contextClient) pushDiagEvent(eventType dotfilesdv1.EventType, eventTypeStr, resource, parent, message string, attrs map[string]string) {
 	req := connect.NewRequest(&dotfilesdv1.DiagEvent{
 		Type:        eventType,
 		Resource:    resource,
 		Parent:      parent,
 		Message:     message,
 		TimestampNs: time.Now().UnixNano(),
+		Labels:      map[string]string{"event_type": eventTypeStr},
 		Attrs:       attrs,
 	})
 	c.setTokenHeader(req)

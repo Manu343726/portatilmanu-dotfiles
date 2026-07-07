@@ -14,6 +14,24 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// toProtoEventType maps an engine EventType string to the proto EventType enum.
+func toProtoEventType(typ diagnostics.EventType) dotfilesdv1.EventType {
+	switch typ {
+	case diagnostics.EventDaemonStart, diagnostics.EventDaemonStop,
+		diagnostics.EventPluginSpawn, diagnostics.EventPluginStop, diagnostics.EventPluginCrash,
+		diagnostics.EventClientConnect, diagnostics.EventClientDisconn,
+		diagnostics.EventExecStart, diagnostics.EventExecStop,
+		diagnostics.EventExecutorOpen, diagnostics.EventExecutorClose,
+		diagnostics.EventSessionCreate, diagnostics.EventSessionEnd,
+		diagnostics.EventBgTaskStart, diagnostics.EventBgTaskStop,
+		diagnostics.EventScriptStart, diagnostics.EventScriptStop,
+		diagnostics.EventPluginRpcOpen, diagnostics.EventPluginRpcClose:
+		return dotfilesdv1.EventType_EVENT_TYPE_LIFECYCLE
+	default:
+		return dotfilesdv1.EventType_EVENT_TYPE_UNSPECIFIED
+	}
+}
+
 // diagnosticsPostServer implements DiagnosticsPostService.
 // It receives events, metrics, and snapshots from daemon components and
 // forwards them to the engine.
@@ -30,10 +48,14 @@ func (s *diagnosticsPostServer) PostEvent(
 	req *connect.Request[dotfilesdv1.DiagEvent],
 ) (*connect.Response[dotfilesdv1.PostEventResponse], error) {
 	evt := req.Msg
+	eventTypeStr := evt.Labels["event_type"]
+	if eventTypeStr == "" {
+		eventTypeStr = evt.Type.String()
+	}
 	e := diagnostics.Event{
 		ID:        evt.Id,
 		Timestamp: time.Unix(0, evt.TimestampNs),
-		Type:      diagnostics.EventType(evt.Type),
+		Type:      diagnostics.EventType(eventTypeStr),
 		Resource:  evt.Resource,
 		Parent:    evt.Parent,
 		Labels:    evt.Labels,
@@ -84,22 +106,24 @@ func (s *diagnosticsQueryServer) QueryTree(
 	r := req.Msg
 	var filters []diagnostics.FilterFunc
 
-	if len(r.IncludeTypes) > 0 {
-		filters = append(filters, diagnostics.TypeFilter(r.IncludeTypes...))
-	}
-	if r.LabelRegex != "" {
-		filters = append(filters, diagnostics.LabelFilter(r.LabelRegex))
-	}
-	if r.StatusFilter != "" {
-		filters = append(filters, diagnostics.StatusFilter(r.StatusFilter))
-	}
-	for k, v := range r.AttrFilters {
-		filters = append(filters, diagnostics.AttrFilter(k, v))
+	if f := r.GetFilter(); f != nil {
+		for _, t := range f.GetIncludeTypes() {
+			filters = append(filters, diagnostics.TypeFilter(diagNodeTypeToShort(t)))
+		}
+		if f.GetLabelRegex() != "" {
+			filters = append(filters, diagnostics.LabelFilter(f.GetLabelRegex()))
+		}
+		if f.GetStatusFilter() != dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_UNSPECIFIED {
+			filters = append(filters, diagnostics.StatusFilter(diagNodeStatusToShort(f.GetStatusFilter())))
+		}
+		for k, v := range f.GetAttrFilters() {
+			filters = append(filters, diagnostics.AttrFilter(k, v))
+		}
 	}
 
-	timeWindow := durationFromProto(r.TimeWindow)
+	timeWindow := diagnosticsDurationFromProto(r.GetFilter().GetTimeWindow())
 	// Handle show_idle = true → no pruning.
-	if r.ShowIdle && r.TimeWindow == nil {
+	if r.ShowIdle && r.GetFilter().GetTimeWindow() == nil {
 		timeWindow = time.Duration(-1)
 	}
 
@@ -114,22 +138,24 @@ func (s *diagnosticsQueryServer) QueryResources(
 	r := req.Msg
 	var filters []diagnostics.FilterFunc
 
-	if len(r.IncludeTypes) > 0 {
-		filters = append(filters, diagnostics.TypeFilter(r.IncludeTypes...))
-	}
-	if r.LabelRegex != "" {
-		filters = append(filters, diagnostics.LabelFilter(r.LabelRegex))
-	}
-	if r.StatusFilter != "" {
-		filters = append(filters, diagnostics.StatusFilter(r.StatusFilter))
-	}
-	for k, v := range r.AttrFilters {
-		filters = append(filters, diagnostics.AttrFilter(k, v))
+	if f := r.GetFilter(); f != nil {
+		for _, t := range f.GetIncludeTypes() {
+			filters = append(filters, diagnostics.TypeFilter(diagNodeTypeToShort(t)))
+		}
+		if f.GetLabelRegex() != "" {
+			filters = append(filters, diagnostics.LabelFilter(f.GetLabelRegex()))
+		}
+		if f.GetStatusFilter() != dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_UNSPECIFIED {
+			filters = append(filters, diagnostics.StatusFilter(diagNodeStatusToShort(f.GetStatusFilter())))
+		}
+		for k, v := range f.GetAttrFilters() {
+			filters = append(filters, diagnostics.AttrFilter(k, v))
+		}
 	}
 
 	// For flat list we apply time window during filtering.
 	// Pass the time window through the filters by wrapping.
-	timeWindow := durationFromProto(r.TimeWindow)
+	timeWindow := diagnosticsDurationFromProto(r.GetFilter().GetTimeWindow())
 	_ = timeWindow // The FilterResources function currently doesn't filter by time
 	// TODO: Add time-window filtering to FilterResources in a follow-up.
 
@@ -141,13 +167,13 @@ func (s *diagnosticsQueryServer) QueryResources(
 	sort.Slice(resources, func(i, j int) bool {
 		var less bool
 		switch sortBy {
-		case "started_at":
+		case dotfilesdv1.SortField_SORT_FIELD_STARTED_AT:
 			less = resources[i].StartedAt.Before(resources[j].StartedAt)
-		case "type":
+		case dotfilesdv1.SortField_SORT_FIELD_TYPE:
 			less = resources[i].Type < resources[j].Type
-		case "label":
+		case dotfilesdv1.SortField_SORT_FIELD_LABEL:
 			less = resources[i].Label < resources[j].Label
-		case "status":
+		case dotfilesdv1.SortField_SORT_FIELD_STATUS:
 			less = resources[i].Status < resources[j].Status
 		default:
 			less = resources[i].StartedAt.Before(resources[j].StartedAt)
@@ -171,10 +197,10 @@ func (s *diagnosticsQueryServer) QueryResources(
 	for _, rs := range resources {
 		pr := &dotfilesdv1.ResourceState{
 			Id:          rs.ID,
-			Type:        rs.Type,
+			Type:        diagNodeTypeFromShort(rs.Type),
 			Label:       rs.Label,
 			ParentId:    rs.ParentID,
-			Status:      string(rs.Status),
+			Status:      diagNodeStatusFromShort(string(rs.Status)),
 			CreatedAtNs: rs.CreatedAt.UnixNano(),
 			StartedAtNs: rs.StartedAt.UnixNano(),
 		}
@@ -211,13 +237,13 @@ func (s *diagnosticsQueryServer) QueryHistory(
 		limit = 100
 	}
 
-	typeSet := make(map[string]bool, len(r.Types))
+	typeSet := make(map[dotfilesdv1.EventType]bool, len(r.Types))
 	for _, t := range r.Types {
 		typeSet[t] = true
 	}
 
 	events := s.engine.GetHistory(func(evt diagnostics.Event) bool {
-		if len(typeSet) > 0 && !typeSet[string(evt.Type)] {
+		if len(typeSet) > 0 && !typeSet[toProtoEventType(evt.Type)] {
 			return false
 		}
 		if r.SinceNs > 0 && evt.Timestamp.Before(since) {
@@ -245,13 +271,18 @@ func (s *diagnosticsQueryServer) QueryHistory(
 
 	protoEvents := make([]*dotfilesdv1.DiagEvent, 0, len(events))
 	for _, evt := range events {
+		labels := evt.Labels
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+		labels["event_type"] = string(evt.Type)
 		protoEvents = append(protoEvents, &dotfilesdv1.DiagEvent{
 			Id:          evt.ID,
 			TimestampNs: evt.Timestamp.UnixNano(),
-			Type:        string(evt.Type),
+			Type:        toProtoEventType(evt.Type),
 			Resource:    evt.Resource,
 			Parent:      evt.Parent,
-			Labels:      evt.Labels,
+			Labels:      labels,
 			Message:     evt.Message,
 			Attrs:       evt.Attrs,
 		})
@@ -322,7 +353,7 @@ func (s *diagnosticsQueryServer) StreamEvents(
 	stream *connect.ServerStream[dotfilesdv1.DiagEvent],
 ) error {
 	r := req.Msg
-	typeSet := make(map[string]bool, len(r.Types))
+	typeSet := make(map[dotfilesdv1.EventType]bool, len(r.Types))
 	for _, t := range r.Types {
 		typeSet[t] = true
 	}
@@ -339,16 +370,21 @@ func (s *diagnosticsQueryServer) StreamEvents(
 			if !ok {
 				return nil
 			}
-			if len(typeSet) > 0 && !typeSet[string(evt.Type)] {
+			if len(typeSet) > 0 && !typeSet[toProtoEventType(evt.Type)] {
 				continue
 			}
+			labels := evt.Labels
+			if labels == nil {
+				labels = make(map[string]string)
+			}
+			labels["event_type"] = string(evt.Type)
 			protoEvt := &dotfilesdv1.DiagEvent{
 				Id:          evt.ID,
 				TimestampNs: evt.Timestamp.UnixNano(),
-				Type:        string(evt.Type),
+				Type:        toProtoEventType(evt.Type),
 				Resource:    evt.Resource,
 				Parent:      evt.Parent,
-				Labels:      evt.Labels,
+				Labels:      labels,
 				Message:     evt.Message,
 				Attrs:       evt.Attrs,
 			}
@@ -360,13 +396,89 @@ func (s *diagnosticsQueryServer) StreamEvents(
 	}
 }
 
-// durationFromProto converts a protobuf Duration to a Go time.Duration.
+// diagnosticsDurationFromProto converts a protobuf Duration to a Go time.Duration.
 // Returns 0 if nil.
-func durationFromProto(d *durationpb.Duration) time.Duration {
+func diagnosticsDurationFromProto(d *durationpb.Duration) time.Duration {
 	if d == nil {
 		return 0
 	}
 	return d.AsDuration()
+}
+
+func diagNodeTypeToShort(t dotfilesdv1.DiagNodeType) string {
+	switch t {
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT:
+		return "root"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_DAEMON:
+		return "daemon"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT:
+		return "client"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_EXECUTOR:
+		return "executor"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION:
+		return "session"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN:
+		return "plugin"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_BG_TASK:
+		return "bg_task"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SHELL:
+		return "shell"
+	default:
+		return "unknown"
+	}
+}
+
+func diagNodeTypeFromShort(s string) dotfilesdv1.DiagNodeType {
+	switch s {
+	case "root":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT
+	case "daemon":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_DAEMON
+	case "client":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT
+	case "executor":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_EXECUTOR
+	case "session":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION
+	case "plugin":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN
+	case "bg_task":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_BG_TASK
+	case "shell":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SHELL
+	default:
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_UNSPECIFIED
+	}
+}
+
+func diagNodeStatusToShort(s dotfilesdv1.DiagNodeStatus) string {
+	switch s {
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_ACTIVE:
+		return "active"
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_PENDING:
+		return "pending"
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_FINISHED:
+		return "finished"
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_CRASHED:
+		return "crashed"
+	default:
+		return "unknown"
+	}
+}
+
+func diagNodeStatusFromShort(s string) dotfilesdv1.DiagNodeStatus {
+	switch s {
+	case "active":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_ACTIVE
+	case "pending":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_PENDING
+	case "finished":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_FINISHED
+	case "crashed":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_CRASHED
+	default:
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_UNSPECIFIED
+	}
 }
 
 var _ = durationpb.File_google_protobuf_duration_proto // import guard

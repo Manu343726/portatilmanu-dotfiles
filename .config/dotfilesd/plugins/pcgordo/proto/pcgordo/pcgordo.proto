@@ -8,6 +8,8 @@ option go_package = "plugins/pcgordo/proto/pcgordo";
 // via Home Assistant. Supports power management (poweron, shutdown,
 // restart, hibernate), monitor control, satellite management, status
 // queries, screen captures, and Windows Update monitoring.
+// Requires a Home Assistant API token and URL configured in the daemon's
+// secrets file.
 service PcgordoService {
   // Poweron sends a Wake-on-LAN magic packet to wake the PC from off state.
   rpc Poweron(PoweronRequest) returns (PoweronResponse);
@@ -65,6 +67,22 @@ message ActionResult {
   string message = 2;
 }
 
+// Home Assistant device class for entity state values.
+enum DeviceClass {
+  DEVICE_CLASS_UNSPECIFIED = 0;
+  DEVICE_CLASS_TEMPERATURE = 1;
+  DEVICE_CLASS_POWER = 2;
+  DEVICE_CLASS_HUMIDITY = 3;
+  DEVICE_CLASS_PRESSURE = 4;
+  DEVICE_CLASS_BATTERY = 5;
+  DEVICE_CLASS_ENERGY = 6;
+  DEVICE_CLASS_CURRENT = 7;
+  DEVICE_CLASS_VOLTAGE = 8;
+  DEVICE_CLASS_SPEED = 9;
+  DEVICE_CLASS_DURATION = 10;
+  DEVICE_CLASS_MONETARY = 11;
+}
+
 // EntityState represents a single Home Assistant entity.
 message EntityState {
   // Entity ID (e.g., "binary_sensor.pcgordo_zerotier_ping").
@@ -75,18 +93,38 @@ message EntityState {
   string state = 3;
   // Unit of measurement if applicable.
   string unit = 4;
-  // Device class if set (e.g., "temperature", "power").
-  string device_class = 5;
+  // Device class if set.
+  DeviceClass device_class = 5;
+}
+
+// Power state of the managed PC.
+enum PCState {
+  PC_STATE_UNSPECIFIED = 0;
+  // PC is powered on and reachable.
+  PC_STATE_ONLINE = 1;
+  // PC is powered off or unreachable.
+  PC_STATE_OFFLINE = 2;
+}
+
+// Power state of the PC's display monitors.
+enum MonitorPowerState {
+  MONITOR_POWER_STATE_UNSPECIFIED = 0;
+  // Monitors are powered on.
+  MONITOR_POWER_STATE_ON = 1;
+  // Monitors are powered off.
+  MONITOR_POWER_STATE_OFF = 2;
+  // Monitor power state is unknown or the PC is offline.
+  MONITOR_POWER_STATE_UNKNOWN = 3;
 }
 
 // StatusResponse contains the full PC status from Home Assistant.
 message StatusResponse {
-  // Power state: "online", "offline", or Home Assistant state.
-  string pc_state = 1;
-  // Timestamp of last boot (ISO 8601).
-  string last_boot = 2;
-  // Timestamp of last user activity (ISO 8601).
-  string last_active = 3;
+  // Power state of the PC.
+  PCState pc_state = 1;
+  // Unix timestamp (seconds since epoch) of last boot.
+  int64 last_boot = 2;
+  // Unix timestamp (seconds since epoch) of last user activity.
+  int64 last_active = 3;
   // CPU load as percentage (0-100).
   double cpu_load = 4;
   // GPU load as percentage (0-100).
@@ -99,10 +137,10 @@ message StatusResponse {
   string active_window = 8;
   // Name of the currently active virtual desktop.
   string active_desktop = 9;
-  // Monitor power state ("on", "off", or "unknown").
-  string monitor_power = 10;
-  // ZeroTier network connectivity status.
-  string zerotier_ping = 11;
+  // Monitor power state.
+  MonitorPowerState monitor_power = 10;
+  // Whether the PC is reachable via ZeroTier network ping.
+  bool zerotier_ping_reachable = 11;
   // All entity states available for this PC.
   repeated EntityState entities = 12;
 }

@@ -15,8 +15,8 @@
 #   this only triggers when an external output is actually present.
 #
 # Assumptions:
-#   - The internal display is always named "DP-0" (ASUS ROG Flow X13)
-#   - External displays show up as something other than "DP-0" (e.g. "DisplayPort-1")
+#   - The internal display is always named "eDP" (ASUS ROG Flow X13)
+#   - External displays show up as something other than "eDP" (e.g. "DisplayPort-1")
 #   - We use xrandr (X11), not Wayland
 
 # Give the display driver time to finish detecting connected monitors.
@@ -44,8 +44,8 @@ fi
 # Switch to external-only layout:
 #   --output "$ext"  --auto   — enable the external at its preferred resolution
 #   --primary                 — set it as the primary output (i3 bar, etc.)
-#   --output DP-0    --off    — disable the internal laptop panel
-xrandr --output "$ext" --auto --primary --output DP-0 --off
+#   --output eDP     --off    — disable the internal laptop panel
+xrandr --output "$ext" --auto --primary --output eDP --off
 
 # Send a desktop notification so the user knows what happened.
 # The notification appears briefly in the corner and can be clicked away.

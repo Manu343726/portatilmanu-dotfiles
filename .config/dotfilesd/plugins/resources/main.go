@@ -114,13 +114,13 @@ func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnaps
 	return s.ram, s.cpu, s.disk, s.diskIO
 }
 
-func (s *SharedState) getHistory(resource string, count int) []float64 {
+func (s *SharedState) getHistory(resource pb.ResourceType, count int) []float64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	switch resource {
-	case "cpu":
+	case pb.ResourceType_RESOURCE_TYPE_CPU:
 		return lastN(s.cpuHistory, count)
-	case "disk":
+	case pb.ResourceType_RESOURCE_TYPE_DISK:
 		return lastN(s.diskHistory, count)
 	default:
 		return lastN(s.ramHistory, count)
@@ -294,8 +294,8 @@ func (s *resourcesServer) PS(ctx context.Context, req *connect.Request[pb.PSRequ
 func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.HistoryRequest]) (*connect.Response[pb.HistoryResponse], error) {
 	s.ensureFreshData()
 	resource := req.Msg.Resource
-	if resource == "" {
-		resource = "ram"
+	if resource == pb.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
+		resource = pb.ResourceType_RESOURCE_TYPE_RAM
 	}
 	count := int(req.Msg.Count)
 	if count <= 0 {
@@ -315,10 +315,7 @@ func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.H
 	}
 
 	values := s.state.getHistory(resource, count)
-	unit := "%"
-	if resource == "disk" {
-		unit = "%"
-	}
+	unit := pb.Unit_UNIT_PERCENT
 
 	return connect.NewResponse(&pb.HistoryResponse{
 		Values:   values,

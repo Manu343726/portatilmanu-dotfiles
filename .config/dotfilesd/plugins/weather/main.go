@@ -57,28 +57,34 @@ func (s *weatherServer) Forecast(
 	// Determine URL based on explicit format or RenderOutput flag.
 	// When RenderOutput=false, default to JSON (structured data).
 	// When RenderOutput=true, default to brief (human-readable).
-	var url string
-	switch {
-	case format == "json":
+	var (
+		url       string
+		formatStr string
+	)
+	switch format {
+	case pb.WeatherFormat_WEATHER_FORMAT_JSON:
 		url = fmt.Sprintf("wttr.in/%s?format=j1", location)
-	case format == "full":
+		formatStr = "json"
+	case pb.WeatherFormat_WEATHER_FORMAT_FULL:
 		url = fmt.Sprintf("wttr.in/%s", location)
-	case format != "":
-		// Explicit format was given (e.g. "brief").
+		formatStr = "full"
+	case pb.WeatherFormat_WEATHER_FORMAT_BRIEF:
 		url = fmt.Sprintf("wttr.in/%s?0", location)
-	case !renderOutput:
-		// No explicit format and caller wants raw data.
-		url = fmt.Sprintf("wttr.in/%s?format=j1", location)
-		format = "json"
+		formatStr = "brief"
 	default:
-		// No explicit format, default to brief human-readable.
-		url = fmt.Sprintf("wttr.in/%s?0", location)
+		if !renderOutput {
+			url = fmt.Sprintf("wttr.in/%s?format=j1", location)
+			formatStr = "json"
+		} else {
+			url = fmt.Sprintf("wttr.in/%s?0", location)
+			formatStr = "brief"
+		}
 	}
 
 	if pc != nil {
 		pc.Log().Info("forecasting weather",
 			"location", location,
-			"format", format,
+			"format", formatStr,
 			"render_output", renderOutput,
 			"url", url,
 		)
@@ -129,7 +135,7 @@ func (s *weatherServer) Forecast(
 	// original structured data so downstream callers can parse it.
 	if renderOutput {
 		var display string
-		if format == "json" {
+		if formatStr == "json" {
 			if formatted := formatWeatherJSON(raw); formatted != "" {
 				display = formatted
 			}

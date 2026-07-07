@@ -109,7 +109,7 @@ func printScriptResult(resp *dotfilesdv1.RunScriptResponse) error {
 	for _, step := range resp.Steps {
 		prefix := fmt.Sprintf("[%d]", step.StepNumber)
 		switch step.StepKind {
-		case "exec":
+		case dotfilesdv1.StepKind_STEP_KIND_EXEC:
 			fmt.Printf("%s $ %s\n", prefix, step.SourceLine)
 			if step.Stdout != "" {
 				fmt.Print(step.Stdout)
@@ -120,11 +120,11 @@ func printScriptResult(resp *dotfilesdv1.RunScriptResponse) error {
 			if step.ExitCode != 0 {
 				fmt.Fprintf(os.Stderr, "%s exit code: %d\n", prefix, step.ExitCode)
 			}
-		case "confirm":
+		case dotfilesdv1.StepKind_STEP_KIND_CONFIRM:
 			fmt.Printf("%s @confirm %s → %s\n", prefix, step.SourceLine, step.FeedbackValue)
-		case "input":
+		case dotfilesdv1.StepKind_STEP_KIND_INPUT:
 			fmt.Printf("%s @input → %s\n", prefix, step.FeedbackValue)
-		case "choose":
+		case dotfilesdv1.StepKind_STEP_KIND_CHOOSE:
 			fmt.Printf("%s @choose → %s\n", prefix, step.FeedbackValue)
 		default:
 			fmt.Printf("%s %s\n", prefix, step.SourceLine)

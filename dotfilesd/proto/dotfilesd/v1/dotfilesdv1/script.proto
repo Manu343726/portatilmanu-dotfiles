@@ -35,19 +35,43 @@ message RunScriptRequest {
 // ---------------------------------------------------------------------------
 // Per-step result
 // ---------------------------------------------------------------------------
+
+// Kind of script step — determines how the step is executed.
+enum StepKind {
+  // Unspecified step kind (should not occur in practice).
+  STEP_KIND_UNSPECIFIED = 0;
+  // Execute a shell command and capture its output.
+  STEP_KIND_EXEC = 1;
+  // Prompt the user for a yes/no confirmation.
+  STEP_KIND_CONFIRM = 2;
+  // Prompt the user for text input.
+  STEP_KIND_INPUT = 3;
+  // Prompt the user to choose from a list of options.
+  STEP_KIND_CHOOSE = 4;
+}
+
 message StepResult {
+  // Index of this step within the script (1-based).
   int32 step_number = 1;
+  // The raw source line that generated this step.
   string source_line = 2;
-  string step_kind = 3;  // "exec", "confirm", "input", "choose"
+  StepKind step_kind = 3;
+  // Exit code of the shell command. 0 on success. Only meaningful for exec steps.
   int32 exit_code = 4;
+  // Standard output captured from the step's execution.
   string stdout = 5;
+  // Standard error captured from the step's execution.
   string stderr = 6;
+  // Value returned by the user for input/confirm/choose steps.
   string feedback_value = 7;
 }
 
 message RunScriptResponse {
+  // Results for each step in execution order.
   repeated StepResult steps = 1;
+  // True if every step completed without error.
   bool all_succeeded = 2;
+  // Overall script error message (empty on success).
   string error = 3;
 }
 
@@ -82,8 +106,12 @@ message ScriptEntry {
 }
 
 message ScriptParam {
+  // Parameter name (used as the variable name in scripts).
   string name = 1;
+  // Human-readable description of what this parameter controls.
   string description = 2;
+  // Whether this parameter must be provided.
   bool required = 3;
+  // Default value used when the parameter is not explicitly set.
   string default_value = 4;
 }

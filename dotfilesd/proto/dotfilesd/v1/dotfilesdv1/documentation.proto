@@ -21,10 +21,21 @@ message DocumentationRequest {
   string service_name = 1;
 }
 
+// Documentation format for rendering help text.
+enum DocFormat {
+  // Default markdown format with headings, tables, and code blocks.
+  DOC_FORMAT_UNSPECIFIED = 0;
+  // GitHub-Flavored Markdown with service/method sections.
+  DOC_FORMAT_MARKDOWN = 1;
+  // HTML rendered from the structured documentation.
+  DOC_FORMAT_HTML = 2;
+  // Unix man page format (roff).
+  DOC_FORMAT_MAN = 3;
+}
+
 message DocumentationResponse {
-  // Documentation format. Defaults to "markdown". Other formats may be
-  // supported in the future ("html", "man").
-  string format = 1;
+  // Documentation format. Unset means markdown.
+  DocFormat format = 1;
   // Documentation content in the requested format.
   string content = 2;
   // Structured documentation, populated when the plugin has embedded docs

@@ -19,9 +19,71 @@ type pcgordoServer struct {
 	client *ha.Client
 }
 
-func entityID(eid string) string         { return "button.pcgordo_" + eid }
-func satelliteID(eid string) string       { return "button.pcgordo_satellite_" + eid }
-func fullID(domain, name string) string   { return domain + "." + name }
+func entityID(eid string) string       { return "button.pcgordo_" + eid }
+func satelliteID(eid string) string     { return "button.pcgordo_satellite_" + eid }
+func fullID(domain, name string) string { return domain + "." + name }
+
+func parseDeviceClass(s string) pb.DeviceClass {
+	switch s {
+	case "temperature":
+		return pb.DeviceClass_DEVICE_CLASS_TEMPERATURE
+	case "power":
+		return pb.DeviceClass_DEVICE_CLASS_POWER
+	case "humidity":
+		return pb.DeviceClass_DEVICE_CLASS_HUMIDITY
+	case "pressure":
+		return pb.DeviceClass_DEVICE_CLASS_PRESSURE
+	case "battery":
+		return pb.DeviceClass_DEVICE_CLASS_BATTERY
+	case "energy":
+		return pb.DeviceClass_DEVICE_CLASS_ENERGY
+	case "current":
+		return pb.DeviceClass_DEVICE_CLASS_CURRENT
+	case "voltage":
+		return pb.DeviceClass_DEVICE_CLASS_VOLTAGE
+	case "speed":
+		return pb.DeviceClass_DEVICE_CLASS_SPEED
+	case "duration":
+		return pb.DeviceClass_DEVICE_CLASS_DURATION
+	case "monetary":
+		return pb.DeviceClass_DEVICE_CLASS_MONETARY
+	default:
+		return pb.DeviceClass_DEVICE_CLASS_UNSPECIFIED
+	}
+}
+
+func parsePCState(s string) pb.PCState {
+	switch s {
+	case "on", "online":
+		return pb.PCState_PC_STATE_ONLINE
+	default:
+		return pb.PCState_PC_STATE_OFFLINE
+	}
+}
+
+func parseMonitorPowerState(s string) pb.MonitorPowerState {
+	switch s {
+	case "on":
+		return pb.MonitorPowerState_MONITOR_POWER_STATE_ON
+	case "off":
+		return pb.MonitorPowerState_MONITOR_POWER_STATE_OFF
+	default:
+		return pb.MonitorPowerState_MONITOR_POWER_STATE_UNKNOWN
+	}
+}
+
+func parseTimestamp(s string) int64 {
+	if s == "" || s == "unknown" || s == "unavailable" {
+		return 0
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.Unix()
+	}
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+		return t.Unix()
+	}
+	return 0
+}
 
 func (s *pcgordoServer) callButton(ctx context.Context, entityID string) (*connect.Response[pb.ActionResult], error) {
 	_, err := s.client.CallService(ctx, ha.DefaultServiceCmd{
@@ -102,19 +164,19 @@ func (s *pcgordoServer) Status(ctx context.Context, req *connect.Request[pb.Empt
 			FriendlyName: name,
 			State:        st.State,
 			Unit:         unit,
-			DeviceClass:  dc,
+			DeviceClass:  parseDeviceClass(dc),
 		}
 		res.Entities = append(res.Entities, es)
 
 		switch {
 		case st.EntityId == "binary_sensor.pcgordo_zerotier_ping":
-			res.ZerotierPing = st.State
+			res.ZerotierPingReachable = st.State == "on"
 		case strings.HasSuffix(st.EntityId, "pc_state") || st.EntityId == "media_player.pcgordo_2":
-			res.PcState = st.State
+			res.PcState = parsePCState(st.State)
 		case strings.HasSuffix(st.EntityId, "_lastboot"):
-			res.LastBoot = st.State
+			res.LastBoot = parseTimestamp(st.State)
 		case strings.HasSuffix(st.EntityId, "_lastactive"):
-			res.LastActive = st.State
+			res.LastActive = parseTimestamp(st.State)
 		case strings.HasSuffix(st.EntityId, "_cpuload"):
 			fmt.Sscanf(st.State, "%f", &res.CpuLoad)
 		case strings.HasSuffix(st.EntityId, "_gpuload"):
@@ -128,21 +190,21 @@ func (s *pcgordoServer) Status(ctx context.Context, req *connect.Request[pb.Empt
 		case strings.HasSuffix(st.EntityId, "_activedesktop"):
 			res.ActiveDesktop = st.State
 		case strings.HasSuffix(st.EntityId, "_monitorpowerstate"):
-			res.MonitorPower = st.State
+			res.MonitorPower = parseMonitorPowerState(st.State)
 		}
 	}
-	if res.PcState == "" {
-		res.PcState = "offline"
+	if res.PcState == pb.PCState_PC_STATE_UNSPECIFIED {
+		res.PcState = pb.PCState_PC_STATE_OFFLINE
 	}
 
 	if pc := plugin.ExtractContext(ctx); pc != nil && pc.RenderOutput() {
 		w := pc.Stdout()
 		fmt.Fprintf(w, "PC State:   %s\n", res.PcState)
-		if res.LastBoot != "" {
-			fmt.Fprintf(w, "Last Boot:  %s\n", res.LastBoot)
+		if res.LastBoot != 0 {
+			fmt.Fprintf(w, "Last Boot:  %d\n", res.LastBoot)
 		}
-		if res.LastActive != "" {
-			fmt.Fprintf(w, "Last Active: %s\n", res.LastActive)
+		if res.LastActive != 0 {
+			fmt.Fprintf(w, "Last Active: %d\n", res.LastActive)
 		}
 		fmt.Fprintf(w, "CPU Load:   %.0f%%\n", res.CpuLoad)
 		if res.GpuLoad > 0 {
@@ -155,10 +217,10 @@ func (s *pcgordoServer) Status(ctx context.Context, req *connect.Request[pb.Empt
 		if res.ActiveWindow != "" {
 			fmt.Fprintf(w, "Active Win: %s\n", res.ActiveWindow)
 		}
-		if res.MonitorPower != "" {
+		if res.MonitorPower != pb.MonitorPowerState_MONITOR_POWER_STATE_UNSPECIFIED {
 			fmt.Fprintf(w, "Monitor:    %s\n", res.MonitorPower)
 		}
-		fmt.Fprintf(w, "ZeroTier:   %s\n", res.ZerotierPing)
+		fmt.Fprintf(w, "ZeroTier:   %t\n", res.ZerotierPingReachable)
 		fmt.Fprintf(w, "Entities:   %d\n", len(res.Entities))
 	}
 

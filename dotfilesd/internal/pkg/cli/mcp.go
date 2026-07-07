@@ -22,6 +22,21 @@ import (
 	"connectrpc.com/connect"
 )
 
+func stepKindShort(k dotfilesdv1.StepKind) string {
+	switch k {
+	case dotfilesdv1.StepKind_STEP_KIND_EXEC:
+		return "exec"
+	case dotfilesdv1.StepKind_STEP_KIND_CONFIRM:
+		return "confirm"
+	case dotfilesdv1.StepKind_STEP_KIND_INPUT:
+		return "input"
+	case dotfilesdv1.StepKind_STEP_KIND_CHOOSE:
+		return "choose"
+	default:
+		return "unknown"
+	}
+}
+
 // sudoPromptHTML is the MCP Apps webview for sudo password entry.
 //
 //go:embed sudo_prompt.html
@@ -913,7 +928,7 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		var lines []string
 		for _, step := range resp.Msg.Steps {
 			switch step.StepKind {
-			case "exec":
+			case dotfilesdv1.StepKind_STEP_KIND_EXEC:
 				l := fmt.Sprintf("[%d] $ %s", step.StepNumber, step.SourceLine)
 				lines = append(lines, l)
 				if step.Stdout != "" {
@@ -925,8 +940,8 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 				if step.ExitCode != 0 {
 					lines = append(lines, fmt.Sprintf("→ exit code %d", step.ExitCode))
 				}
-			case "confirm", "input", "choose":
-				lines = append(lines, fmt.Sprintf("[%d] @%s → %s", step.StepNumber, step.StepKind, step.FeedbackValue))
+			case dotfilesdv1.StepKind_STEP_KIND_CONFIRM, dotfilesdv1.StepKind_STEP_KIND_INPUT, dotfilesdv1.StepKind_STEP_KIND_CHOOSE:
+				lines = append(lines, fmt.Sprintf("[%d] @%s → %s", step.StepNumber, stepKindShort(step.StepKind), step.FeedbackValue))
 			}
 		}
 		text := strings.Join(lines, "\n")
@@ -1033,7 +1048,7 @@ func runMCPToolViaScript(id json.RawMessage, clients *Clients, scriptName string
 	var lines []string
 	for _, step := range resp.Msg.Steps {
 		switch step.StepKind {
-		case "exec":
+		case dotfilesdv1.StepKind_STEP_KIND_EXEC:
 			l := fmt.Sprintf("[%d] $ %s", step.StepNumber, step.SourceLine)
 			lines = append(lines, l)
 			if step.Stdout != "" {
@@ -1045,8 +1060,8 @@ func runMCPToolViaScript(id json.RawMessage, clients *Clients, scriptName string
 			if step.ExitCode != 0 {
 				lines = append(lines, fmt.Sprintf("→ exit code %d", step.ExitCode))
 			}
-		case "confirm", "input", "choose":
-			lines = append(lines, fmt.Sprintf("[%d] @%s → %s", step.StepNumber, step.StepKind, step.FeedbackValue))
+		case dotfilesdv1.StepKind_STEP_KIND_CONFIRM, dotfilesdv1.StepKind_STEP_KIND_INPUT, dotfilesdv1.StepKind_STEP_KIND_CHOOSE:
+			lines = append(lines, fmt.Sprintf("[%d] @%s → %s", step.StepNumber, stepKindShort(step.StepKind), step.FeedbackValue))
 		}
 	}
 	text := strings.Join(lines, "\n")

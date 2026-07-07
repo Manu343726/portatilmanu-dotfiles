@@ -2,7 +2,7 @@
 
 ASUS ROG Flow X13 with AMD iGPU + NVIDIA dGPU (supergfxctl `AsusMuxDgpu` mode).
 
-Internal display: `DP-0` (1920x1200 @ 120Hz)
+Internal display: `eDP` (1920x1200 @ 120Hz)
 External display: `DisplayPort-1-1` (2560x1440 @ 144Hz)
 
 ## Scripts

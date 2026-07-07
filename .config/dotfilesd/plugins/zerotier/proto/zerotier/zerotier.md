@@ -51,6 +51,8 @@ column selection and output format control for human-readable display.
 
 ### ListNetworksRequest
 
+ListNetworksRequest is empty. All accessible networks are returned.
+
 ### ListMembersRequest
 
 | Field | Type | Description |

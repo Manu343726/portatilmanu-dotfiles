@@ -78,6 +78,7 @@ enum OutputFormat {
 
 // ── Requests / Responses ─────────────────────────────────────────────────────
 
+// ListNetworksRequest is empty. All accessible networks are returned.
 message ListNetworksRequest {}
 
 message ListMembersRequest {

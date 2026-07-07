@@ -53,10 +53,19 @@ message CPUWidgetResponse {
   double percent = 2;
 }
 
+// Temperature unit for CPU temperature display.
+enum TemperatureUnit {
+  TEMPERATURE_UNIT_UNSPECIFIED = 0;
+  // Degrees Celsius.
+  TEMPERATURE_UNIT_CELSIUS = 1;
+  // Degrees Fahrenheit.
+  TEMPERATURE_UNIT_FAHRENHEIT = 2;
+}
+
 // CPUTempWidgetRequest configures the temperature unit.
 message CPUTempWidgetRequest {
-  // Temperature unit: "celsius" or "fahrenheit" (default: "celsius").
-  string unit = 1;
+  // Temperature unit. Unset means Celsius.
+  TemperatureUnit unit = 1;
 }
 
 // CPUTempWidgetResponse contains the temperature widget result.

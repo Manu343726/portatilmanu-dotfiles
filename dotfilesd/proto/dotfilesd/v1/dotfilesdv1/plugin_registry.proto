@@ -35,13 +35,18 @@ service PluginRegistryService {
 
 message RegistryGetPluginRequest {
   Session session = 100;
+  // Name of the plugin to look up.
   string plugin_name = 1;
 }
 
 message RegistryGetPluginResponse {
+  // Plugin identifier name (e.g. "weather").
   string name = 1;
+  // Human-readable display name (e.g. "Weather Service").
   string display_name = 2;
+  // Plugin version string.
   string version = 3;
+  // Plugin description from its front-matter.
   string description = 4;
   // Base URL of the plugin's RPC server (e.g. "http://127.0.0.1:12345").
   string url = 5;
@@ -65,8 +70,11 @@ message RegistryLoadPluginRequest {
 }
 
 message RegistryLoadPluginResponse {
+  // The loaded plugin's metadata.
   RegistryGetPluginResponse plugin = 1;
-  repeated string loaded_deps = 2; // dependencies loaded alongside
+  // Dependencies loaded alongside this plugin.
+  repeated string loaded_deps = 2;
+  // Error message if the plugin could not be loaded (empty on success).
   string error = 3;
 }
 
@@ -75,14 +83,18 @@ message RegistryUnloadPluginRequest {
 }
 
 message RegistryUnloadPluginResponse {
+  // Error message if the plugin could not be unloaded (empty on success).
   string error = 1;
 }
 
 message RegistryReloadPluginsRequest {}
 
 message RegistryReloadPluginsResponse {
+  // Names of plugins that were loaded during the reload.
   repeated string loaded = 1;
+  // Names of plugins that were unloaded during the reload.
   repeated string unloaded = 2;
+  // Error message if the reload encountered issues (empty on success).
   string error = 3;
 }
 
@@ -100,22 +112,32 @@ service PluginExecutorService {
 }
 
 message CallPluginMessage {
-  // Request fields (sent once at start by client):
+  // Target plugin name (e.g. "weather").
   string plugin_name = 1;
+  // Target service name (e.g. "WeatherService").
   string service = 2;
+  // Target method name (e.g. "Forecast").
   string method = 3;
+  // Serialized request body (protobuf binary).
   bytes request_body = 4;
-  string client_id = 5; // unique client identifier for stream multiplexing
-  bool render_output = 11; // true (default): plugin writes human-readable to stdout; false: return structured JSON
+  // Unique client identifier for stream multiplexing.
+  string client_id = 5;
+  // When true, plugin writes human-readable output to stdout.
+  // When false, returns structured JSON.
+  bool render_output = 11;
 
-  // Streaming data (sent any direction during the call):
-  bytes stdout_chunk = 6; // plugin → daemon → client
-  bytes stderr_chunk = 7; // plugin → daemon → client
-  bytes stdin_chunk = 8; // client → daemon → plugin
-  WindowSize window_size = 12; // client → daemon: terminal resize notification
+  // Stdout chunk streamed from the plugin.
+  bytes stdout_chunk = 6;
+  // Stderr chunk streamed from the plugin.
+  bytes stderr_chunk = 7;
+  // Stdin chunk sent to the plugin (for interactive sessions).
+  bytes stdin_chunk = 8;
+  // Terminal resize notification from the client.
+  WindowSize window_size = 12;
 
-  // Final response (plugin → daemon → client, set once at end):
+  // Serialized response body (protobuf binary).
   bytes response_body = 9;
+  // Error message if the call failed (empty on success).
   string error = 10;
 }
 
@@ -132,7 +154,7 @@ message WindowSize {
 
 // FieldKind mirrors protobuf field types.
 enum FieldKind {
-  FIELD_KIND_UNKNOWN = 0;
+  FIELD_KIND_UNSPECIFIED = 0;
   FIELD_KIND_DOUBLE = 1;
   FIELD_KIND_FLOAT = 2;
   FIELD_KIND_INT64 = 3;
@@ -154,16 +176,21 @@ enum FieldKind {
 
 // FieldLabel indicates whether a field is optional, required, or repeated.
 enum FieldLabel {
-  FIELD_LABEL_OPTIONAL = 0;
-  FIELD_LABEL_REQUIRED = 1;
-  FIELD_LABEL_REPEATED = 2;
+  FIELD_LABEL_UNSPECIFIED = 0;
+  FIELD_LABEL_OPTIONAL = 1;
+  FIELD_LABEL_REQUIRED = 2;
+  FIELD_LABEL_REPEATED = 3;
 }
 
 // FieldSchema describes a single field in a protobuf message.
 message FieldSchema {
-  string name = 1; // field name (e.g. "location")
+  // Field name (e.g. "location").
+  string name = 1;
+  // Human-readable description of the field.
   string description = 2;
+  // Protobuf field type kind.
   FieldKind kind = 3;
+  // Whether the field is optional, required, or repeated.
   FieldLabel label = 4;
 
   // For message/enum kinds, the fully-qualified type name.
@@ -179,7 +206,9 @@ message FieldSchema {
 
 // EnumValue describes a single enum value.
 message EnumValue {
+  // Enum value name (e.g. "COLOR_RED").
   string name = 1;
+  // Numeric value of this enum entry.
   int32 number = 2;
   // Description extracted from proto source comments.
   string description = 3;
@@ -187,8 +216,11 @@ message EnumValue {
 
 // EnumSchema describes a protobuf enum type.
 message EnumSchema {
-  string name = 1; // fully-qualified enum name (e.g. "weather.Unit")
+  // Fully-qualified enum name (e.g. "weather.Unit").
+  string name = 1;
+  // Human-readable description of the enum.
   string description = 2;
+  // Enum value definitions.
   repeated EnumValue values = 3;
 }
 
@@ -196,16 +228,23 @@ message EnumSchema {
 // field metadata. Nested messages and enums are inlined so clients have
 // everything they need without additional lookups.
 message MessageSchema {
-  string name = 1; // fully-qualified message name (e.g. "weather.ForecastRequest")
+  // Fully-qualified message name (e.g. "weather.ForecastRequest").
+  string name = 1;
+  // Human-readable description of the message.
   string description = 2;
+  // Fields declared directly on this message.
   repeated FieldSchema fields = 3;
-  repeated EnumSchema enums = 4; // nested enums defined inside this message
-  repeated MessageSchema messages = 5; // nested messages defined inside this message
+  // Enum types nested inside this message.
+  repeated EnumSchema enums = 4;
+  // Message types nested inside this message.
+  repeated MessageSchema messages = 5;
 }
 
 // MethodSchema describes an RPC method with full request/response schemas.
 message MethodSchema {
-  string name = 1; // method name (e.g. "Forecast")
+  // Method name (e.g. "Forecast").
+  string name = 1;
+  // Human-readable description of the method.
   string description = 2;
   // Full schema of the request message.
   MessageSchema request = 3;
@@ -222,6 +261,8 @@ message MethodSchema {
 message ServiceSchema {
   // Fully-qualified service name (e.g. "weather.WeatherService").
   string name = 1;
+  // Human-readable description of the service.
   string description = 2;
+  // RPC methods exposed by this service.
   repeated MethodSchema methods = 3;
 }

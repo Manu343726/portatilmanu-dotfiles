@@ -24,10 +24,14 @@ in the scripts/reload/ directory, not by this service.
 
 #### Reconfigure
 
+Reconfigure changes daemon runtime configuration (e.g. log level). Changes take effect immediately.
+
 - **Request:** `dotfilesd.v1.ReconfigureRequest`
 - **Response:** `dotfilesd.v1.ReconfigureResponse`
 
 #### Restart
+
+Restart gracefully restarts the daemon process.
 
 - **Request:** `dotfilesd.v1.RestartRequest`
 - **Response:** `dotfilesd.v1.RestartResponse`
@@ -40,14 +44,14 @@ in the scripts/reload/ directory, not by this service.
 | Field | Type | Description |
 |-------|------|-------------|
 | `session` | dotfilesd.v1.Session |  |
-| `log_level` | dotfilesd.v1.LogLevel |  |
+| `log_level` | dotfilesd.v1.LogLevel | New log level to apply. The change takes effect immediately. |
 
 ### ReconfigureResponse
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | bool |  |
-| `message` | string |  |
+| `success` | bool | Whether the reconfiguration was applied successfully. |
+| `message` | string | Human-readable status message or error description. |
 
 ### RestartRequest
 
@@ -59,7 +63,7 @@ in the scripts/reload/ directory, not by this service.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `message` | string |  |
+| `message` | string | Human-readable status message (e.g. "restart initiated"). |
 
 
 ## Enums
@@ -69,9 +73,9 @@ in the scripts/reload/ directory, not by this service.
 | Name | Number | Description |
 |------|--------|-------------|
 | `LOG_LEVEL_UNSPECIFIED` | 0 |  |
-| `LOG_LEVEL_TRACE` | 1 |  |
-| `LOG_LEVEL_DEBUG` | 2 |  |
-| `LOG_LEVEL_INFO` | 3 |  |
-| `LOG_LEVEL_WARN` | 4 |  |
-| `LOG_LEVEL_ERROR` | 5 |  |
+| `LOG_LEVEL_TRACE` | 1 | Verbose diagnostic information, includes all internal state changes. |
+| `LOG_LEVEL_DEBUG` | 2 | Detailed debugging information useful for development. |
+| `LOG_LEVEL_INFO` | 3 | Normal operational messages. |
+| `LOG_LEVEL_WARN` | 4 | Warning conditions that should be reviewed. |
+| `LOG_LEVEL_ERROR` | 5 | Error conditions that require attention. |
 

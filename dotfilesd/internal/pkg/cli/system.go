@@ -83,27 +83,35 @@ func RunDiagnostics(clients *Clients, sessionID string, params DiagParams) error
 	slog.Debug("diagnostics requested", "session_id", sessionID, "params", params)
 
 	req := connect.NewRequest(&dotfilesdv1.QueryTreeRequest{
-		ShowIdle:     params.ShowIdle,
-		IncludeTypes: params.Types,
-		StatusFilter: params.Status,
-		LabelRegex:   params.Label,
+		ShowIdle: params.ShowIdle,
 	})
 
-	// Parse attrs.
-	if len(params.Attrs) > 0 {
-		req.Msg.AttrFilters = make(map[string]string, len(params.Attrs))
-		for _, pair := range params.Attrs {
-			k, v, ok := strings.Cut(pair, "=")
-			if !ok {
-				return fmt.Errorf("invalid attr filter %q: expected key=value", pair)
-			}
-			req.Msg.AttrFilters[k] = v
+	// Populate filter sub-message if any filter params are set.
+	if len(params.Types) > 0 || params.Status != "" || params.Label != "" || len(params.Attrs) > 0 || params.TimeWindow > 0 {
+		f := &dotfilesdv1.DiagnosticsFilter{}
+		for _, t := range params.Types {
+			f.IncludeTypes = append(f.IncludeTypes, nodeTypeFromShort(t))
 		}
-	}
-
-	// Convert time window to proto Duration.
-	if params.TimeWindow > 0 {
-		req.Msg.TimeWindow = durationpb.New(params.TimeWindow)
+		if params.Status != "" {
+			f.StatusFilter = nodeStatusFromString(params.Status)
+		}
+		if params.Label != "" {
+			f.LabelRegex = params.Label
+		}
+		if len(params.Attrs) > 0 {
+			f.AttrFilters = make(map[string]string, len(params.Attrs))
+			for _, pair := range params.Attrs {
+				k, v, ok := strings.Cut(pair, "=")
+				if !ok {
+					return fmt.Errorf("invalid attr filter %q: expected key=value", pair)
+				}
+				f.AttrFilters[k] = v
+			}
+		}
+		if params.TimeWindow > 0 {
+			f.TimeWindow = durationpb.New(params.TimeWindow)
+		}
+		req.Msg.Filter = f
 	}
 
 	resp, err := clients.DiagQuery.QueryTree(context.Background(), req)
@@ -123,18 +131,15 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []str
 		branch = "└── "
 	}
 
-	typeTag := typeLabel(n.Type)
+	typeTag := nodeTypeName(n.Type)
 
 	// Node header line: [type] label (status)
 	label := n.Label
-	statusLabel := ""
-	if n.Status != "" {
-		statusLabel = n.Status
-	}
+	statusLabel := nodeStatusName(n.Status)
 
 	// Mark this client as "yourself" if it matches the current CLI client ID.
 	selfMarker := ""
-	if n.Type == "client" && selfClientID != "" && n.Label == stripClientPrefix(selfClientID) {
+	if n.Type == dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT && selfClientID != "" && n.Label == stripClientPrefix(selfClientID) {
 		selfMarker = " " + color.Greenf("← you")
 		selfMarker = " " + color.Greenf("← you")
 	}
@@ -192,10 +197,10 @@ func printTree(n *dotfilesdv1.DiagNode, prefix string, isLast bool, fields []str
 func conciseSummary(n *dotfilesdv1.DiagNode, typeTag string) string {
 	a := n.Attrs
 	switch n.Type {
-	case "daemon", "plugin":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_DAEMON, dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN:
 		return ""
 
-	case "client":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT:
 		ct := nullget(a, "client_type", "?")
 		switch ct {
 		case "mcp":
@@ -211,30 +216,17 @@ func conciseSummary(n *dotfilesdv1.DiagNode, typeTag string) string {
 			return color.Dimf("(no command)")
 		}
 
-	case "session":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION:
 		return ""
 
-	case "exec":
-		if n.Status == "finished" {
-			dur := nullget(a, "duration", "")
-			s := fmt.Sprintf("exit=%s", nullget(a, "exit_code", "?"))
-			if dur != "" {
-				s += " dur:" + dur
-			}
-			if nullget(a, "exit_code", "0") == "0" {
-				return color.Dimf("[%s]", s)
-			}
-			return color.Redf("[%s]", s)
-		}
-		return color.Yellowf("(running)")
-
-	case "executor":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_EXECUTOR:
 		return ""
 
-	case "bg_task":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_BG_TASK:
 		return ""
 
 	default:
+		// For "exec" (old-style string type) — check via attrs or fallback.
 		return ""
 	}
 }
@@ -258,26 +250,79 @@ func stripClientPrefix(id string) string {
 	return id
 }
 
-// typeLabel returns a human-readable label for a node type.
-func typeLabel(t string) string {
+// nodeTypeName returns a human-readable label for a node type.
+func nodeTypeName(t dotfilesdv1.DiagNodeType) string {
 	switch t {
-	case "root":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT:
 		return "runtime"
-	case "daemon":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_DAEMON:
 		return "daemon"
-	case "plugin":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN:
 		return "plugin"
-	case "session":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION:
 		return "session"
-	case "client":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT:
 		return "client"
-	case "executor", "plugin-rpc":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_EXECUTOR:
 		return "plugin"
-	case "shell":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SHELL:
 		return "shell"
-	case "bg_task":
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_BG_TASK:
 		return "bgtask"
 	default:
-		return t
+		return "unknown"
+	}
+}
+
+func nodeTypeFromShort(s string) dotfilesdv1.DiagNodeType {
+	switch s {
+	case "root":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT
+	case "daemon":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_DAEMON
+	case "plugin":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN
+	case "session":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION
+	case "client":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT
+	case "executor", "exec", "plugin-rpc":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_EXECUTOR
+	case "shell":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SHELL
+	case "bg_task":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_BG_TASK
+	default:
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_UNSPECIFIED
+	}
+}
+
+func nodeStatusName(s dotfilesdv1.DiagNodeStatus) string {
+	switch s {
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_ACTIVE:
+		return "active"
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_PENDING:
+		return "pending"
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_FINISHED:
+		return "finished"
+	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_CRASHED:
+		return "crashed"
+	default:
+		return ""
+	}
+}
+
+func nodeStatusFromString(s string) dotfilesdv1.DiagNodeStatus {
+	switch s {
+	case "active":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_ACTIVE
+	case "pending":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_PENDING
+	case "finished":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_FINISHED
+	case "crashed":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_CRASHED
+	default:
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_UNSPECIFIED
 	}
 }

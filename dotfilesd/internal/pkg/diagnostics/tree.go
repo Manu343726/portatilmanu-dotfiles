@@ -65,9 +65,9 @@ func ReconstructTree(state *StateCache, timeWindow time.Duration, filters ...Fil
 
 	// Phase 4 & 5: DFS assembly and root wrap.
 	root := &dotfilesdv1.DiagNode{
-		Type:   "root",
+		Type:   dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT,
 		Label:  "dotfilesd runtime",
-		Status: "active",
+		Status: dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_ACTIVE,
 		Attrs: map[string]string{
 			"node_count": fmt.Sprintf("%d", nodeCount),
 		},
@@ -123,9 +123,9 @@ func filterSnapshot(
 // buildNode recursively assembles a DiagNode from a ResourceState and its children.
 func buildNode(res *ResourceState, childrenOf map[string][]*ResourceState) *dotfilesdv1.DiagNode {
 	node := &dotfilesdv1.DiagNode{
-		Type:   res.Type,
+		Type:   diagNodeTypeFromString(res.Type),
 		Label:  res.Label,
-		Status: string(res.Status),
+		Status: diagNodeStatusFromString(string(res.Status)),
 	}
 	node.Attrs = buildAttrs(res)
 
@@ -178,6 +178,44 @@ func buildAttrs(res *ResourceState) map[string]string {
 }
 
 // formatDuration returns a human-readable duration string.
+func diagNodeTypeFromString(s string) dotfilesdv1.DiagNodeType {
+	switch s {
+	case "root":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT
+	case "daemon":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_DAEMON
+	case "client":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT
+	case "executor":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_EXECUTOR
+	case "session":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION
+	case "plugin":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN
+	case "bg_task":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_BG_TASK
+	case "shell":
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SHELL
+	default:
+		return dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_UNSPECIFIED
+	}
+}
+
+func diagNodeStatusFromString(s string) dotfilesdv1.DiagNodeStatus {
+	switch s {
+	case "active":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_ACTIVE
+	case "pending":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_PENDING
+	case "finished":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_FINISHED
+	case "crashed":
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_CRASHED
+	default:
+		return dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_UNSPECIFIED
+	}
+}
+
 func formatDuration(d time.Duration) string {
 	if d < time.Millisecond {
 		return fmt.Sprintf("%dµs", d.Microseconds())

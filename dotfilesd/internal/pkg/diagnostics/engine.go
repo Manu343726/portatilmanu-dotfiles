@@ -198,15 +198,15 @@ func (e *Engine) PushSnapshot(node *dotfilesdv1.DiagNode) {
 }
 
 func (e *Engine) applySnapshot(node *dotfilesdv1.DiagNode, parentID string) {
-	id := node.GetType() + ":" + node.GetLabel()
+	id := fmt.Sprintf("%d:%s", node.GetType(), node.GetLabel())
 	if parentID == "" {
-		id = node.GetType()
+		id = node.GetType().String()
 	}
 
 	startedAt := time.Now()
 	rs := &ResourceState{
 		ID:        id,
-		Type:      node.GetType(),
+		Type:      node.GetType().String(),
 		Label:     node.GetLabel(),
 		ParentID:  parentID,
 		Status:    StatusActive,

@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-int="DP-0"
+int="eDP"
 ext=$(xrandr | awk '/ connected / && !/^(eDP|DP-0)/ {print $1}' | head -1)
 
 if [[ -z "$ext" ]]; then

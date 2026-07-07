@@ -7,6 +7,68 @@ import "google/protobuf/duration.proto";
 option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 
 // ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+// Type of node in the daemon state tree.
+enum DiagNodeType {
+  DIAG_NODE_TYPE_UNSPECIFIED = 0;
+  // Root node — the top of the state tree.
+  DIAG_NODE_TYPE_ROOT = 1;
+  // Daemon component (core daemon).
+  DIAG_NODE_TYPE_DAEMON = 2;
+  // CLI client connection.
+  DIAG_NODE_TYPE_CLIENT = 3;
+  // Executor process (command execution).
+  DIAG_NODE_TYPE_EXECUTOR = 4;
+  // Active session (client↔daemon interaction).
+  DIAG_NODE_TYPE_SESSION = 5;
+  // Loaded plugin instance.
+  DIAG_NODE_TYPE_PLUGIN = 6;
+  // Background task.
+  DIAG_NODE_TYPE_BG_TASK = 7;
+  // Interactive shell session.
+  DIAG_NODE_TYPE_SHELL = 8;
+}
+
+// Status of a node in the daemon state tree.
+enum DiagNodeStatus {
+  DIAG_NODE_STATUS_UNSPECIFIED = 0;
+  DIAG_NODE_STATUS_ACTIVE = 1;
+  DIAG_NODE_STATUS_PENDING = 2;
+  DIAG_NODE_STATUS_FINISHED = 3;
+  DIAG_NODE_STATUS_CRASHED = 4;
+}
+
+// Type of diagnostic event.
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  // Resource lifecycle — created, started, finished, crashed.
+  EVENT_TYPE_LIFECYCLE = 1;
+  // Metric data point recorded.
+  EVENT_TYPE_METRIC = 2;
+  // Human-readable log message.
+  EVENT_TYPE_LOG = 3;
+  // Error or warning condition.
+  EVENT_TYPE_ERROR = 4;
+  // User-defined custom event.
+  EVENT_TYPE_CUSTOM = 5;
+}
+
+// Field to sort query results by.
+enum SortField {
+  SORT_FIELD_UNSPECIFIED = 0;
+  // Sort by the time the resource started.
+  SORT_FIELD_STARTED_AT = 1;
+  // Sort by the resource type.
+  SORT_FIELD_TYPE = 2;
+  // Sort by the human-readable label.
+  SORT_FIELD_LABEL = 3;
+  // Sort by the node status.
+  SORT_FIELD_STATUS = 4;
+}
+
+// ─────────────────────────────────────────────
 // Core state tree
 // ─────────────────────────────────────────────
 
@@ -14,12 +76,38 @@ option go_package = "dotfilesd/proto/dotfilesd/v1/dotfilesdv1";
 // Each node has a type label, a human-readable description, optional metadata,
 // and child nodes forming a parent-child hierarchy.
 message DiagNode {
-  string type = 1; // node type: "root", "daemon", "client", "executor",
-  // "session", "plugin", "bg_task", "shell"
-  string label = 2; // human-readable name
-  string status = 3; // "active", "pending", "finished", "crashed"
-  map<string, string> attrs = 4; // key-value metadata
+  // Node type in the daemon state tree.
+  DiagNodeType type = 1;
+  // Human-readable name for this node.
+  string label = 2;
+  // Current lifecycle status of this node.
+  DiagNodeStatus status = 3;
+  // Key-value metadata about this node.
+  map<string, string> attrs = 4;
+  // Child nodes forming the state hierarchy.
   repeated DiagNode children = 5;
+}
+
+// ─────────────────────────────────────────────
+// Filters
+// ─────────────────────────────────────────────
+
+// Shared filter criteria for querying the diagnostics state tree.
+// All conditions are combined with AND logic.
+message DiagnosticsFilter {
+  // Only include nodes matching these types. Empty means include all types.
+  repeated DiagNodeType include_types = 1;
+  // Filter by label using a regex pattern. Empty means no filter.
+  string label_regex = 2;
+  // Only include nodes matching this status. Unset means no filter.
+  DiagNodeStatus status_filter = 3;
+  // Key=value filter on node attributes. Only exact matches are kept.
+  map<string, string> attr_filters = 4;
+  // Time window for finished/crashed nodes. Takes precedence over show_idle.
+  //   0 or unset        -> active-only (default)
+  //   positive duration -> include finished nodes within this window
+  //   -1 / "inf"        -> no pruning (like show_idle=true)
+  google.protobuf.Duration time_window = 5;
 }
 
 // ─────────────────────────────────────────────
@@ -27,20 +115,32 @@ message DiagNode {
 // ─────────────────────────────────────────────
 
 message DiagEvent {
+  // Unique event identifier.
   string id = 1;
-  int64 timestamp_ns = 2; // unix nanos
-  string type = 3; // EventType string
-  string resource = 4; // e.g. "plugin:weather"
-  string parent = 5; // parent resource ID for tree reconstruction, empty = root
+  // Unix timestamp (nanoseconds since epoch).
+  int64 timestamp_ns = 2;
+  // Type of event.
+  EventType type = 3;
+  // Resource this event belongs to (e.g. "plugin:weather").
+  string resource = 4;
+  // Parent resource ID for tree reconstruction. Empty means root.
+  string parent = 5;
+  // Key-value labels for filtering and grouping.
   map<string, string> labels = 6;
+  // Human-readable event message.
   string message = 7;
+  // Key-value attributes with additional event details.
   map<string, string> attrs = 8;
 }
 
 message MetricPoint {
+  // Unix timestamp (nanoseconds since epoch) when this point was recorded.
   int64 timestamp_ns = 1;
+  // Metric name (e.g. "cpu_percent").
   string name = 2;
+  // Metric value as a double-precision float.
   double value = 3;
+  // Key-value labels for filtering and grouping metrics.
   map<string, string> labels = 4;
 }
 
@@ -57,8 +157,11 @@ service DiagnosticsPostService {
   rpc PostSnapshot(DiagNode) returns (PostSnapshotResponse);
 }
 
+// Empty response acknowledging the event was recorded.
 message PostEventResponse {}
+// Empty response acknowledging the metric was recorded.
 message PostMetricResponse {}
+// Empty response acknowledging the snapshot was recorded.
 message PostSnapshotResponse {}
 
 // ─────────────────────────────────────────────
@@ -80,50 +183,59 @@ service DiagnosticsQueryService {
 }
 
 message QueryTreeRequest {
-  // Include only nodes matching these filters (AND).
-  repeated string include_types = 1; // e.g. ["daemon", "plugin"]
-  string label_regex = 2; // filter by label pattern
-  string status_filter = 3; // e.g. "running", "bg_worker"
-  map<string, string> attr_filters = 4; // key=value filter on attrs
+  // Shared filter criteria. All conditions are combined with AND logic.
+  // Unset filter means return all active nodes.
+  DiagnosticsFilter filter = 1;
   // Show idle/inactive nodes too (default: active only).
-  bool show_idle = 5;
-  // Time window for finished/crashed nodes (takes precedence over show_idle).
-  //   0 or unset        → active-only (default)
-  //   positive duration → include finished nodes within this window
-  //   -1 / "inf"        → no pruning (like show_idle=true)
-  google.protobuf.Duration time_window = 6;
+  // Deprecated: use filter.time_window instead.
+  bool show_idle = 2;
 }
 
 message QueryTreeResponse {
+  // Root node of the filtered state tree.
   DiagNode root = 1;
 }
 
 message QueryHistoryRequest {
-  repeated string types = 1; // event types to include
-  string resource_regex = 2; // filter by resource ID pattern
-  int64 since_ns = 3; // only events after this timestamp
-  int64 until_ns = 4; // only events before this timestamp
-  int32 limit = 5; // max results (0 = default 100)
+  // Event types to include. Empty means include all types.
+  repeated EventType types = 1;
+  // Filter by resource ID pattern. Empty means no filter.
+  string resource_regex = 2;
+  // Only return events after this timestamp (nanoseconds). 0 means no lower bound.
+  int64 since_ns = 3;
+  // Only return events before this timestamp (nanoseconds). 0 means no upper bound.
+  int64 until_ns = 4;
+  // Maximum number of events to return. 0 means use the default (100).
+  int32 limit = 5;
 }
 
 message QueryHistoryResponse {
+  // Events matching the query, in chronological order.
   repeated DiagEvent events = 1;
 }
 
 message QueryMetricsRequest {
-  string name_regex = 1; // metric name pattern
-  map<string, string> labels = 2; // label filter
+  // Filter by metric name pattern. Empty means no filter.
+  string name_regex = 1;
+  // Filter by key-value labels. Only exact matches are kept.
+  map<string, string> labels = 2;
+  // Only return points after this timestamp (nanoseconds). 0 means no lower bound.
   int64 since_ns = 3;
+  // Only return points before this timestamp (nanoseconds). 0 means no upper bound.
   int64 until_ns = 4;
+  // Maximum number of points to return. 0 means use the default (100).
   int32 limit = 5;
 }
 
 message QueryMetricsResponse {
+  // Metric data points matching the query.
   repeated MetricPoint points = 1;
 }
 
+// Request to subscribe to a stream of real-time diagnostic events.
 message StreamEventsRequest {
-  repeated string types = 1; // event types to subscribe to
+  // Event types to subscribe to. Empty means subscribe to all types.
+  repeated EventType types = 1;
 }
 
 // ─────────────────────────────────────────────
@@ -131,37 +243,45 @@ message StreamEventsRequest {
 // ─────────────────────────────────────────────
 
 message QueryResourcesRequest {
-  // All filter fields are identical to QueryTreeRequest.
-  repeated string include_types = 1; // e.g. ["daemon", "plugin"]
-  string label_regex = 2; // filter by label pattern
-  string status_filter = 3; // e.g. "running", "bg_worker"
-  map<string, string> attr_filters = 4; // key=value filter on attrs
-  // Time window for finished/crashed nodes.
-  //   0 or unset        → active-only
-  //   positive duration → include finished nodes within this window
-  //   -1 / "inf"        → no pruning
-  google.protobuf.Duration time_window = 6;
-  // Sort order for results.
-  string sort_by = 7; // "started_at", "type", "label", "status"
-  bool sort_desc = 8; // descending order (default: ascending)
-  int32 limit = 9; // max results (0 = no limit)
+  // Shared filter criteria. All conditions are combined with AND logic.
+  // Unset filter means return all active nodes.
+  DiagnosticsFilter filter = 1;
+  // Field to sort results by. Unset means sort by started_at.
+  SortField sort_by = 7;
+  // Sort in descending order (default: ascending).
+  bool sort_desc = 8;
+  // Maximum number of resources to return. 0 means no limit.
+  int32 limit = 9;
 }
 
 message QueryResourcesResponse {
+  // Resources matching the query.
   repeated ResourceState resources = 1;
-  int32 total_count = 2; // total matching before limit
+  // Total number of matching resources before applying the limit.
+  int32 total_count = 2;
 }
 
 message ResourceState {
+  // Unique resource identifier.
   string id = 1;
-  string type = 2;
+  // Node type in the daemon state tree.
+  DiagNodeType type = 2;
+  // Human-readable resource name.
   string label = 3;
+  // Parent resource ID for tree reconstruction.
   string parent_id = 4;
-  string status = 5;
+  // Current lifecycle status.
+  DiagNodeStatus status = 5;
+  // Unix timestamp (nanoseconds) of resource creation.
   int64 created_at_ns = 6;
+  // Unix timestamp (nanoseconds) when execution started.
   int64 started_at_ns = 7;
-  int64 finished_at_ns = 8; // 0 if still active
-  int64 duration_ns = 9; // 0 if still active
+  // Unix timestamp (nanoseconds) when execution finished. 0 if still active.
+  int64 finished_at_ns = 8;
+  // Execution duration in nanoseconds. 0 if still active.
+  int64 duration_ns = 9;
+  // Key-value metadata attributes.
   map<string, string> attrs = 10;
+  // Exit code of the process. Only meaningful for executor/shell node types.
   int32 exit_code = 11;
 }

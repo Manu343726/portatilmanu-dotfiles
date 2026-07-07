@@ -1,3 +1,7 @@
+// tui-diag — Standalone tview-based diagnostics TUI.
+//
+// Connects directly to the dotfilesd daemon via Connect RPC and renders
+// an interactive htop-like tree/table browser with live updates.
 package main
 
 import (
@@ -6,20 +10,15 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"dotfilesd/plugin"
 	dotfilesdv1 "dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
 	dotfilesdv1connect "dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
-	pb "plugins/tuidiag/proto/tuidiag"
-	"plugins/tuidiag/proto/tuidiag/tuidiagconnect"
 
 	"connectrpc.com/connect"
 	"github.com/gdamore/tcell/v2"
-	"github.com/gdamore/tcell/v2/terminfo"
 	"github.com/rivo/tview"
 )
 
@@ -35,6 +34,7 @@ type resourceState struct {
 type localCache struct {
 	mu        sync.RWMutex
 	resources map[string]*resourceState
+	events    []*dotfilesdv1.DiagEvent
 }
 
 func newCache() *localCache {
@@ -44,6 +44,11 @@ func newCache() *localCache {
 func (c *localCache) applyEvent(evt *dotfilesdv1.DiagEvent) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	c.events = append(c.events, evt)
+	if len(c.events) > 1000 {
+		c.events = c.events[len(c.events)-1000:]
+	}
 
 	res, ok := c.resources[evt.Resource]
 	if !ok {
@@ -140,95 +145,34 @@ func filterMatch(r *resourceState, f filterSet, now int64) bool {
 	return true
 }
 
-// ─── TtyStream: wraps plugin.PtyTtyConn as tcell.Tty ───────────────────────
-// The PTY-backed TTYConn gives proper terminal semantics — terminfo works,
-// SIGWINCH propagates, and WindowSize reflects the actual terminal dimensions.
-
-type tviewPty struct {
-	conn        plugin.TTYConn
-	width       int
-	height      int
-	resizeCb    func()
-}
-
-func newTviewPty(ctx plugin.Context, termWidth, termHeight int) (*tviewPty, error) {
-	conn, err := ctx.PtyTtyConn()
-	if err != nil {
-		return nil, err
-	}
-	// Use the terminal dimensions from the CLI, with reasonable fallbacks.
-	if termWidth <= 0 {
-		termWidth = 132
-	}
-	if termHeight <= 0 {
-		termHeight = 43
-	}
-	// Inform the PTY of the initial terminal size.
-	_ = conn.Resize(termWidth, termHeight)
-	return &tviewPty{conn: conn, width: termWidth, height: termHeight}, nil
-}
-
-func (t *tviewPty) Start() error           { return nil }
-func (t *tviewPty) Stop() error            { return nil }
-func (t *tviewPty) Drain() error           { return nil }
-func (t *tviewPty) Close() error           { return t.conn.Close() }
-func (t *tviewPty) Read(b []byte) (int, error)   { return t.conn.Read(b) }
-func (t *tviewPty) Write(b []byte) (int, error)  { return t.conn.Write(b) }
-
-func (t *tviewPty) NotifyResize(cb func()) {
-	t.resizeCb = cb
-}
-
-func (t *tviewPty) Resize(width, height int) {
-	t.width = width
-	t.height = height
-	_ = t.conn.Resize(width, height)
-	if t.resizeCb != nil {
-		t.resizeCb()
-	}
-}
-
-func (t *tviewPty) WindowSize() (tcell.WindowSize, error) {
-	// Query the PTY for actual dimensions — this picks up resize events
-	// forwarded from the CLI via TtyPacket.WindowWidth/Height → pty.Setsize.
-	if w, h, err := t.conn.Getsize(); err == nil && w > 0 && h > 0 {
-		t.width, t.height = w, h
-		return tcell.WindowSize{Height: h, Width: w}, nil
-	}
-	return tcell.WindowSize{Height: t.height, Width: t.width}, nil
-}
-
 // ─── tview TUI ──────────────────────────────────────────────────────────────
 
 type diagUI struct {
-	app          *tview.Application
-	statusBar    *tview.TextView
-	pages        *tview.Pages
-	treeWidget   *tview.TreeView
-	tableWidget  *tview.Table
-	searchInput  *tview.InputField
-	footer       *tview.TextView
-	mainFlex     *tview.Flex
+	app            *tview.Application
+	statusBar      *tview.TextView
+	pages          *tview.Pages
+	treeWidget     *tview.TreeView
+	tableWidget    *tview.Table
+	searchInput    *tview.InputField
+	footer         *tview.TextView
+	mainFlex       *tview.Flex
 
-	cache        *localCache
-	queryClient  dotfilesdv1connect.DiagnosticsQueryServiceClient
-	ctx          context.Context
-	token        string
+	cache          *localCache
+	queryClient    dotfilesdv1connect.DiagnosticsQueryServiceClient
+	ctx            context.Context
 
-	filters      filterSet
-	viewMode     int
-	eventCount   int
-	stopCh       chan struct{}
+	filters        filterSet
+	viewMode       int
+	eventCount     int
 }
 
-func newDiagUI(ctx context.Context, cache *localCache, qc dotfilesdv1connect.DiagnosticsQueryServiceClient, token string) *diagUI {
+func newDiagUI(ctx context.Context, cache *localCache, qc dotfilesdv1connect.DiagnosticsQueryServiceClient) *diagUI {
 	d := &diagUI{
 		app:         tview.NewApplication(),
 		cache:       cache,
 		queryClient: qc,
 		ctx:         ctx,
-		token:       token,
-		stopCh:      make(chan struct{}, 1),
+		viewMode:    0,
 	}
 	d.buildUI()
 	return d
@@ -237,7 +181,8 @@ func newDiagUI(ctx context.Context, cache *localCache, qc dotfilesdv1connect.Dia
 func (d *diagUI) buildUI() {
 	d.statusBar = tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("[::b] tui-diag [::-]| [gray]connecting...[]")
+		SetTextAlign(tview.AlignLeft).
+		SetText("[::b] tui-diag [::-]| [::d]connecting...[::-]")
 
 	d.searchInput = tview.NewInputField().
 		SetLabel("/ ").
@@ -253,9 +198,13 @@ func (d *diagUI) buildUI() {
 
 	d.footer = tview.NewTextView().
 		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft).
 		SetText("[gray] Tab:switch  /:search  q:quit  t:type  s:status  i:idle  h:help[]")
 
-	d.treeWidget = tview.NewTreeView().SetGraphics(true).SetTopLevel(0)
+	d.treeWidget = tview.NewTreeView().
+		SetGraphics(true).
+		SetTopLevel(0)
+
 	d.treeWidget.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyTab {
 			d.switchToView(1)
@@ -265,7 +214,11 @@ func (d *diagUI) buildUI() {
 		return d.handleKey(ev)
 	})
 
-	d.tableWidget = tview.NewTable().SetFixed(2, 0).SetSelectable(true, false)
+	d.tableWidget = tview.NewTable().
+		SetFixed(2, 0).
+		SetSelectable(true, false).
+		SetSeparator(tview.Borders.Vertical)
+
 	d.tableWidget.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyTab {
 			d.switchToView(0)
@@ -285,25 +238,9 @@ func (d *diagUI) buildUI() {
 		AddItem(d.searchInput, 1, 0, false).
 		AddItem(d.footer, 1, 0, false)
 
-	d.app.SetRoot(d.mainFlex, true).SetFocus(d.treeWidget).EnableMouse(false)
-
-	// Global input capture: 'q' quits regardless of which widget has focus.
-	d.app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		if ev.Key() == tcell.KeyRune {
-			switch ev.Rune() {
-			case 'q', 'Q':
-				select {
-				case d.stopCh <- struct{}{}:
-				default:
-				}
-				return nil
-			case '/':
-				d.app.SetFocus(d.searchInput)
-				return nil
-			}
-		}
-		return ev
-	})
+	d.app.SetRoot(d.mainFlex, true).
+		SetFocus(d.treeWidget).
+		EnableMouse(false)
 }
 
 func (d *diagUI) switchToView(mode int) {
@@ -325,10 +262,7 @@ func (d *diagUI) handleKey(ev *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyRune:
 		switch ev.Rune() {
 		case 'q', 'Q':
-			select {
-			case d.stopCh <- struct{}{}:
-			default:
-			}
+			d.app.Stop()
 			return nil
 		case '/':
 			d.app.SetFocus(d.searchInput)
@@ -384,17 +318,17 @@ func (d *diagUI) showHelp() {
 		"q         quit\n" +
 		"h         this help\n" +
 		"\n[gray]Press Esc to close[]"
+
 	modal := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(tview.NewTextView().SetDynamicColors(true).SetText(text), 0, 1, false)
+		AddItem(tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).SetText(text), 0, 1, false)
 	modal.SetBorder(true).SetTitle(" Help ")
 
-	prevRoot := d.mainFlex
-	prevCapture := d.app.GetInputCapture()
-	d.app.SetRoot(modal, true)
+	mainRoot := d.mainFlex
+	d.app.SetRoot(modal, false)
 	d.app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		if ev.Key() == tcell.KeyEsc || ev.Key() == tcell.KeyEnter {
-			d.app.SetRoot(prevRoot, true)
-			d.app.SetInputCapture(prevCapture)
+			d.app.SetRoot(mainRoot, true)
+			d.app.SetInputCapture(nil)
 			d.app.SetFocus(d.treeWidget)
 			return nil
 		}
@@ -412,7 +346,9 @@ func (d *diagUI) refreshTree() {
 	all := d.cache.filteredResources(d.filters)
 
 	root := tview.NewTreeNode("dotfilesd runtime").
-		SetSelectable(false).SetColor(tcell.ColorWhite).SetExpanded(true)
+		SetSelectable(false).
+		SetColor(tcell.ColorWhite).
+		SetExpanded(true)
 
 	childMap := make(map[string][]*resourceState)
 	for _, r := range all {
@@ -432,6 +368,7 @@ func (d *diagUI) refreshTree() {
 	var addNodes func(parent *tview.TreeNode, children []*resourceState)
 	addNodes = func(parent *tview.TreeNode, children []*resourceState) {
 		for _, r := range children {
+			label := nodeType(r.Type) + ":" + r.Label
 			statusTag := ""
 			switch r.Status {
 			case "active", "bg_worker", "running":
@@ -455,8 +392,10 @@ func (d *diagUI) refreshTree() {
 				attrs += " [gray]" + dur + "[]"
 			}
 
-			tn := tview.NewTreeNode(r.Type+":"+r.Label+statusTag+attrs).
-				SetReference(r).SetExpanded(true).SetColor(nodeColor(r))
+			tn := tview.NewTreeNode(label + statusTag + attrs).
+				SetReference(r).
+				SetExpanded(true).
+				SetColor(nodeColor(r))
 
 			if kids := childMap[r.ID]; len(kids) > 0 {
 				addNodes(tn, kids)
@@ -472,45 +411,8 @@ func (d *diagUI) refreshTree() {
 
 	d.treeWidget.SetRoot(root)
 	if len(root.GetChildren()) > 0 {
-		initial := findInitialNode(root)
-		if initial != nil {
-			d.treeWidget.SetCurrentNode(initial)
-		} else {
-			d.treeWidget.SetCurrentNode(root.GetChildren()[0])
-		}
+		d.treeWidget.SetCurrentNode(root.GetChildren()[0])
 	}
-}
-
-// findInitialNode walks the tree to find the most relevant initial selection:
-// prefers a "plugin-rpc" or "executor" node (active RPC calls = "exec calls"),
-// then falls back to the last "session" node (most recent activity).
-func findInitialNode(root *tview.TreeNode) *tview.TreeNode {
-	var lastSession *tview.TreeNode
-	var rpcNode *tview.TreeNode
-
-	var walk func(n *tview.TreeNode)
-	walk = func(n *tview.TreeNode) {
-		ref := n.GetReference()
-		if r, ok := ref.(*resourceState); ok {
-			switch r.Type {
-			case "plugin-rpc", "executor", "plugin":
-				if rpcNode == nil {
-					rpcNode = n
-				}
-			case "session":
-				lastSession = n
-			}
-		}
-		for _, child := range n.GetChildren() {
-			walk(child)
-		}
-	}
-	walk(root)
-
-	if rpcNode != nil {
-		return rpcNode
-	}
-	return lastSession
 }
 
 func cacheHas(all []*resourceState, id string) bool {
@@ -532,10 +434,12 @@ func nodeColor(r *resourceState) tcell.Color {
 		return tcell.ColorYellow
 	case "client":
 		return tcell.ColorDarkCyan
-	case "executor", "plugin-rpc":
+	case "executor":
 		return tcell.ColorGreen
 	case "bg_task":
 		return tcell.ColorDarkMagenta
+	case "root":
+		return tcell.ColorGray
 	default:
 		return tcell.ColorGray
 	}
@@ -548,15 +452,22 @@ func (d *diagUI) refreshTable() {
 	headers := []string{"TYPE", "LABEL", "STATUS", "STARTED", "DURATION"}
 	for ci, h := range headers {
 		d.tableWidget.SetCell(0, ci, &tview.TableCell{
-			Text: " " + h + " ", Color: tcell.ColorWhite, Attributes: tcell.AttrBold,
-			Align: tview.AlignCenter, Expansion: 1,
+			Text:       " " + h + " ",
+			Color:      tcell.ColorWhite,
+			Attributes: tcell.AttrBold,
+			Align:      tview.AlignCenter,
+			Expansion:  1,
 		})
 	}
 
 	for ri, r := range all {
 		row := ri + 1
-		d.tableWidget.SetCell(row, 0, tview.NewTableCell(r.Type).SetTextColor(nodeColor(r)).SetExpansion(1))
-		d.tableWidget.SetCell(row, 1, tview.NewTableCell(r.Label).SetTextColor(tcell.ColorWhite).SetExpansion(2))
+		d.tableWidget.SetCell(row, 0, tview.NewTableCell(r.Type).
+			SetTextColor(nodeColor(r)).
+			SetExpansion(1))
+		d.tableWidget.SetCell(row, 1, tview.NewTableCell(r.Label).
+			SetTextColor(tcell.ColorWhite).
+			SetExpansion(2))
 
 		sc := tcell.ColorGray
 		switch r.Status {
@@ -569,13 +480,15 @@ func (d *diagUI) refreshTable() {
 		case "pending":
 			sc = tcell.ColorYellow
 		}
-		d.tableWidget.SetCell(row, 2, tview.NewTableCell(r.Status).SetTextColor(sc).SetExpansion(1))
+		d.tableWidget.SetCell(row, 2, tview.NewTableCell(r.Status).
+			SetTextColor(sc).SetExpansion(1))
 
 		startedStr := "-"
 		if r.StartedAt > 0 {
 			startedStr = formatAge(time.Since(time.Unix(0, r.StartedAt)))
 		}
-		d.tableWidget.SetCell(row, 3, tview.NewTableCell(startedStr).SetTextColor(tcell.ColorGray).SetExpansion(1))
+		d.tableWidget.SetCell(row, 3, tview.NewTableCell(startedStr).
+			SetTextColor(tcell.ColorGray).SetExpansion(1))
 
 		durStr := "-"
 		if r.DurationNs > 0 {
@@ -583,7 +496,8 @@ func (d *diagUI) refreshTable() {
 		} else if r.Status == "active" && r.StartedAt > 0 {
 			durStr = formatAge(time.Since(time.Unix(0, r.StartedAt)))
 		}
-		d.tableWidget.SetCell(row, 4, tview.NewTableCell(durStr).SetTextColor(tcell.ColorGray).SetExpansion(1))
+		d.tableWidget.SetCell(row, 4, tview.NewTableCell(durStr).
+			SetTextColor(tcell.ColorGray).SetExpansion(1))
 	}
 }
 
@@ -620,34 +534,21 @@ func (d *diagUI) updateStatusBar() {
 
 	d.statusBar.SetText(fmt.Sprintf("[::b] tui-diag [::-]| [gray]%d events  %d nodes[]  | [green]%s[]  |  %s",
 		d.eventCount, len(d.cache.resources),
-		map[int]string{0: "Tree", 1: "Table"}[d.viewMode], parts))
+		map[int]string{0: "Tree", 1: "Table"}[d.viewMode],
+		parts))
 }
 
 func (d *diagUI) run() error {
-	stopCtx, cancelEvents := context.WithCancel(d.ctx)
-	defer cancelEvents()
-	d.ctx = stopCtx
 	go d.subscribeEvents()
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		d.app.QueueUpdateDraw(d.refreshViews)
 	}()
-	// Start a goroutine that watches for quit signal and handles
-	// stop outside the event loop, to avoid any queue-ordering issues.
-	go func() {
-		<-d.stopCh
-		cancelEvents()
-		d.app.Stop()
-	}()
 	return d.app.Run()
 }
 
 func (d *diagUI) subscribeEvents() {
-	req := connect.NewRequest(&dotfilesdv1.StreamEventsRequest{})
-	if d.token != "" {
-		req.Header().Set("X-Dotfiles-Context-Token", d.token)
-	}
-	stream, err := d.queryClient.StreamEvents(d.ctx, req)
+	stream, err := d.queryClient.StreamEvents(d.ctx, connect.NewRequest(&dotfilesdv1.StreamEventsRequest{}))
 	if err != nil {
 		return
 	}
@@ -659,108 +560,22 @@ func (d *diagUI) subscribeEvents() {
 	}
 }
 
-// ─── daemon connection ──────────────────────────────────────────────────────
-
-func newQueryClient(httpClient *http.Client, daemonURL string) dotfilesdv1connect.DiagnosticsQueryServiceClient {
-	return dotfilesdv1connect.NewDiagnosticsQueryServiceClient(httpClient, daemonURL)
-}
-
-// ─── plugin service ────────────────────────────────────────────────────────
-
-type tuiDiagSvc struct{}
-
-func (s *tuiDiagSvc) Watch(ctx context.Context, req *connect.Request[pb.WatchRequest]) (*connect.Response[pb.WatchResponse], error) {
-	pc := plugin.ExtractContext(ctx)
-	if pc == nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("no plugin context"))
-	}
-
-	daemonURL := os.Getenv("EXECUTION_CONTEXT_URL")
-	if daemonURL == "" {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("EXECUTION_CONTEXT_URL not set"))
-	}
-	daemonToken := os.Getenv("EXECUTION_CONTEXT_TOKEN")
-	httpClient := pc.DaemonClient()
-	queryClient := newQueryClient(httpClient, daemonURL)
-
-	ti, err := terminfo.LookupTerminfo(os.Getenv("TERM"))
-	if err != nil {
-		ti, _ = terminfo.LookupTerminfo("xterm-256color")
-	}
-
-	ttyPty, err := newTviewPty(pc, int(req.Msg.TerminalSize.GetWidth()), int(req.Msg.TerminalSize.GetHeight()))
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("pty tty: %w", err))
-	}
-
-	screen, err := tcell.NewTerminfoScreenFromTtyTerminfo(ttyPty, ti)
-	if err != nil {
-		ttyPty.Close()
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("terminal init: %w", err))
-	}
-
-	cache := newCache()
-	queryReq := connect.NewRequest(&dotfilesdv1.QueryTreeRequest{
-		ShowIdle: req.Msg.ShowIdle,
-	})
-	if daemonToken != "" {
-		queryReq.Header().Set("X-Dotfiles-Context-Token", daemonToken)
-	}
-	treeResp, err := queryClient.QueryTree(ctx, queryReq)
-	if err == nil {
-		populateCache(cache, treeResp.Msg.Root)
-	}
-
-	diag := newDiagUI(ctx, cache, queryClient, daemonToken)
-	diag.app.SetScreen(screen)
-
-	switch req.Msg.InitialTypeFilter {
-	case pb.DiagTypeFilter_DIAG_TYPE_FILTER_PLUGIN:
-		diag.filters.typeFilter = "plugin"
-	case pb.DiagTypeFilter_DIAG_TYPE_FILTER_EXECUTOR:
-		diag.filters.typeFilter = "executor"
-	case pb.DiagTypeFilter_DIAG_TYPE_FILTER_DAEMON:
-		diag.filters.typeFilter = "daemon"
-	case pb.DiagTypeFilter_DIAG_TYPE_FILTER_SESSION:
-		diag.filters.typeFilter = "session"
-	case pb.DiagTypeFilter_DIAG_TYPE_FILTER_BG_TASK:
-		diag.filters.typeFilter = "bg_task"
-	}
-	switch req.Msg.InitialStatusFilter {
-	case pb.DiagStatusFilter_DIAG_STATUS_FILTER_ACTIVE:
-		diag.filters.statusFilter = "active"
-	case pb.DiagStatusFilter_DIAG_STATUS_FILTER_FINISHED:
-		diag.filters.statusFilter = "finished"
-	case pb.DiagStatusFilter_DIAG_STATUS_FILTER_CRASHED:
-		diag.filters.statusFilter = "crashed"
-	case pb.DiagStatusFilter_DIAG_STATUS_FILTER_PENDING:
-		diag.filters.statusFilter = "pending"
-	}
-	diag.filters.showIdle = req.Msg.ShowIdle
-
-	if err := diag.run(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("tui: %w", err))
-	}
-
-	return connect.NewResponse(&pb.WatchResponse{}), nil
-}
-
-func nodeTypeString(t dotfilesdv1.DiagNodeType) string {
+func diagNodeTypeToString(t dotfilesdv1.DiagNodeType) string {
 	switch t {
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT:
+		return "root"
 	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_DAEMON:
 		return "daemon"
-	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN:
-		return "plugin"
-	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION:
-		return "session"
 	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_CLIENT:
 		return "client"
 	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_EXECUTOR:
 		return "executor"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SESSION:
+		return "session"
+	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_PLUGIN:
+		return "plugin"
 	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_BG_TASK:
 		return "bg_task"
-	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_ROOT:
-		return "root"
 	case dotfilesdv1.DiagNodeType_DIAG_NODE_TYPE_SHELL:
 		return "shell"
 	default:
@@ -768,7 +583,7 @@ func nodeTypeString(t dotfilesdv1.DiagNodeType) string {
 	}
 }
 
-func nodeStatusString(s dotfilesdv1.DiagNodeStatus) string {
+func diagNodeStatusToString(s dotfilesdv1.DiagNodeStatus) string {
 	switch s {
 	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_ACTIVE:
 		return "active"
@@ -779,7 +594,48 @@ func nodeStatusString(s dotfilesdv1.DiagNodeStatus) string {
 	case dotfilesdv1.DiagNodeStatus_DIAG_NODE_STATUS_CRASHED:
 		return "crashed"
 	default:
-		return ""
+		return "unknown"
+	}
+}
+
+// ─── daemon URL ─────────────────────────────────────────────────────────────
+
+func daemonURL() string {
+	if url := os.Getenv("DOTFILESD_URL"); url != "" {
+		return url
+	}
+	if port := os.Getenv("DOTFILESD_PORT"); port != "" {
+		return "http://127.0.0.1:" + port
+	}
+	return "http://127.0.0.1:9105"
+}
+
+// ─── main ───────────────────────────────────────────────────────────────────
+
+func main() {
+	url := daemonURL()
+
+	queryClient := dotfilesdv1connect.NewDiagnosticsQueryServiceClient(
+		http.DefaultClient,
+		url,
+	)
+
+	ctx := context.Background()
+
+	treeResp, err := queryClient.QueryTree(ctx, connect.NewRequest(&dotfilesdv1.QueryTreeRequest{}))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "connect to daemon at %s: %v\n", url, err)
+		os.Exit(1)
+	}
+
+	cache := newCache()
+	populateCache(cache, treeResp.Msg.Root)
+
+	diag := newDiagUI(ctx, cache, queryClient)
+
+	if err := diag.run(); err != nil {
+		fmt.Fprintf(os.Stderr, "tui error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -792,19 +648,23 @@ func populateCache(cache *localCache, node *dotfilesdv1.DiagNode) {
 		if n == nil {
 			return
 		}
-		nt := nodeTypeString(n.Type)
-		id := nt + ":" + n.Label
+		typeStr := diagNodeTypeToString(n.Type)
+		id := typeStr + ":" + n.Label
 		res := &resourceState{
-			ID: id, Type: nt, Label: n.Label, ParentID: parentID,
-			Status: nodeStatusString(n.Status), Attrs: make(map[string]string),
+			ID:       id,
+			Type:     typeStr,
+			Label:    n.Label,
+			ParentID: parentID,
+			Status:   diagNodeStatusToString(n.Status),
+			Attrs:    make(map[string]string),
 		}
 		if nsStr := n.Attrs["running_for_ns"]; nsStr != "" {
-			if ns, err := strconv.ParseInt(nsStr, 10, 64); err == nil {
+			if ns, err := parseInt64(nsStr); err == nil {
 				res.StartedAt = time.Now().UnixNano() - ns
 			}
 		}
 		if nsStr := n.Attrs["duration_ns"]; nsStr != "" {
-			if ns, err := strconv.ParseInt(nsStr, 10, 64); err == nil {
+			if ns, err := parseInt64(nsStr); err == nil {
 				res.DurationNs = ns
 			}
 		}
@@ -819,26 +679,13 @@ func populateCache(cache *localCache, node *dotfilesdv1.DiagNode) {
 	walk(node, "")
 }
 
-// ─── main ──────────────────────────────────────────────────────────────────
-
-func main() {
-	svc := &tuiDiagSvc{}
-	path, handler := tuidiagconnect.NewTuiDiagServiceHandler(svc)
-
-	plugin.Serve(plugin.Config{
-		Name:        "tuidiag",
-		DisplayName: "TUI Diagnostics",
-		Version:     "1.0.0",
-		Description: "Interactive htop-like diagnostics browser using tview",
-		Services: []plugin.Service{
-			{
-				Name:               "tuidiag.TuiDiagService",
-				Description:        "Interactive TUI diagnostics browser",
-				Path:               path,
-				Handler:            handler,
-				PluginAccessible:   false,
-				InteractiveMethods: []string{"Watch"},
-			},
-		},
-	})
+func parseInt64(s string) (int64, error) {
+	var n int64
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("not a number: %s", s)
+		}
+		n = n*10 + int64(c-'0')
+	}
+	return n, nil
 }

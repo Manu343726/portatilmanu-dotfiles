@@ -58,6 +58,8 @@ from the user (e.g. a value for a shell variable, git identity config).
 
 #### RequestInput
 
+RequestInput prompts the user for text input and returns their response.
+
 - **Request:** `dotfilesd.v1.InputRequest`
 - **Response:** `dotfilesd.v1.InputResponse`
 
@@ -68,6 +70,8 @@ confirmation before proceeding (e.g. destructive file operation).
 
 #### RequestConfirm
 
+RequestConfirm prompts the user for a yes/no confirmation and returns their choice.
+
 - **Request:** `dotfilesd.v1.ConfirmRequest`
 - **Response:** `dotfilesd.v1.ConfirmResponse`
 
@@ -77,6 +81,8 @@ ChooseService is called by the daemon when it needs the user to pick
 from a list of options (e.g. select a git branch, choose a target).
 
 #### RequestChoose
+
+RequestChoose prompts the user to pick from a list of options and returns their selection.
 
 - **Request:** `dotfilesd.v1.ChooseRequest`
 - **Response:** `dotfilesd.v1.ChooseResponse`
@@ -97,7 +103,7 @@ from a list of options (e.g. select a git branch, choose a target).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session_id` | string |  |
+| `session_id` | string | Session ID associated with this feedback request. |
 | `value` | string | The value provided by the user (or the default). |
 
 ### ConfirmRequest
@@ -112,7 +118,7 @@ from a list of options (e.g. select a git branch, choose a target).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session_id` | string |  |
+| `session_id` | string | Session ID associated with this confirmation request. |
 | `confirmed` | bool | Whether the user confirmed. |
 
 ### ChooseRequest
@@ -128,7 +134,7 @@ from a list of options (e.g. select a git branch, choose a target).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `session_id` | string |  |
+| `session_id` | string | Session ID associated with this choice request. |
 | `selected_index` | int32 | Index of the selected option, -1 if cancelled. |
 | `selected_option` | string | The selected option text (empty if cancelled). |
 

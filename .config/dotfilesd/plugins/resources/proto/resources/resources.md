@@ -22,6 +22,11 @@
   - [DiskSnapshot](#disksnapshot)
   - [DiskIOSnapshot](#diskiosnapshot)
   - [ProcessInfo](#processinfo)
+- [Enums](#enums)
+  - [SortOrder](#sortorder)
+  - [ResourceType](#resourcetype)
+  - [Unit](#unit)
+  - [ProcessState](#processstate)
 
 ## Services
 
@@ -91,7 +96,7 @@ Request to list top processes by resource usage.
 | Field | Type | Description |
 |-------|------|-------------|
 | `count` | int32 | Number of processes to return (default: 10). |
-| `sort` | string | Sort order: "cpu" for CPU usage, "mem" for memory usage (default: "cpu"). |
+| `sort` | resources.SortOrder | Sort order for process listing. Unset means CPU sort. |
 
 ### TopResponse
 
@@ -109,7 +114,7 @@ Request to query detailed process information.
 |-------|------|-------------|
 | `pid` | int32 | Filter to a specific process PID. Empty means list all processes. |
 | `count` | int32 | Number of processes to return (default: 20). |
-| `sort` | string | Sort order: "cpu" or "mem" (default: "cpu"). |
+| `sort` | resources.SortOrder | Sort order for process listing. Unset means CPU sort. |
 
 ### PSResponse
 
@@ -125,7 +130,7 @@ Request for historical resource data.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `resource` | string | Resource to query: "ram", "cpu", or "disk" (default: "ram"). |
+| `resource` | resources.ResourceType | Resource to query. Unset means RAM. |
 | `count` | int32 | Number of data points to return (default: 20, max: 100). |
 
 ### HistoryResponse
@@ -135,8 +140,8 @@ HistoryResponse contains time-series data for a resource.
 | Field | Type | Description |
 |-------|------|-------------|
 | `values` | repeated double | Data point values in chronological order (oldest first). |
-| `resource` | string | The resource these values correspond to ("ram", "cpu", or "disk"). |
-| `unit` | string | Unit of measurement for the values ("%" for all resources). |
+| `resource` | resources.ResourceType | The resource these values correspond to. |
+| `unit` | resources.Unit | Unit of measurement for the values. |
 
 ### RAMSnapshot
 
@@ -196,5 +201,53 @@ ProcessInfo describes a running process.
 | `cpu_percent` | double | CPU usage percentage. |
 | `mem_percent` | double | Memory usage percentage. |
 | `mem_mb` | double | Memory usage in MB. |
-| `state` | string | Process state (R, S, D, Z, etc.). |
+| `state` | resources.ProcessState | Process state. |
+
+
+## Enums
+
+### SortOrder
+
+Sort order for process listing.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `SORT_ORDER_UNSPECIFIED` | 0 |  |
+| `SORT_ORDER_CPU` | 1 | Sort by CPU usage (highest first). |
+| `SORT_ORDER_MEMORY` | 2 | Sort by memory usage (highest first). |
+
+### ResourceType
+
+Type of system resource for historical data queries.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `RESOURCE_TYPE_UNSPECIFIED` | 0 |  |
+| `RESOURCE_TYPE_RAM` | 1 | RAM/memory usage data. |
+| `RESOURCE_TYPE_CPU` | 2 | CPU utilization data. |
+| `RESOURCE_TYPE_DISK` | 3 | Disk usage data. |
+
+### Unit
+
+Unit of measurement for metric values.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `UNIT_UNSPECIFIED` | 0 |  |
+| `UNIT_PERCENT` | 1 | Percentage value (0-100). |
+
+### ProcessState
+
+Linux process state as reported by the kernel.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `PROCESS_STATE_UNSPECIFIED` | 0 |  |
+| `PROCESS_STATE_RUNNING` | 1 | Currently running or runnable. |
+| `PROCESS_STATE_SLEEPING` | 2 | Sleeping in an interruptible wait. |
+| `PROCESS_STATE_DISK_SLEEP` | 3 | Uninterruptible disk sleep (D state). |
+| `PROCESS_STATE_ZOMBIE` | 4 | Zombie — terminated but not yet reaped by parent. |
+| `PROCESS_STATE_STOPPED` | 5 | Stopped (SIGSTOP or TTY input). |
+| `PROCESS_STATE_TRACE_STOP` | 6 | Tracing stop (ptrace). |
+| `PROCESS_STATE_DEAD` | 7 | Dead (should not be visible). |
 

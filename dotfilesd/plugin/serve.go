@@ -157,9 +157,9 @@ func Serve(cfg Config) {
 			if diagParent != "" {
 				rpcName := extractMethodName(r.URL.Path)
 				rpcID := fmt.Sprintf("plugin-rpc:%s_%x", rpcName, time.Now().UnixNano())
-				c.pushDiagEvent("plugin_rpc_open", rpcID, diagParent, rpcName, nil)
+				c.pushDiagEvent(dotfilesdv1.EventType_EVENT_TYPE_LIFECYCLE, "plugin_rpc_open", rpcID, diagParent, rpcName, nil)
 				c.diagParent = rpcID
-				defer c.pushDiagEvent("plugin_rpc_close", rpcID, diagParent, rpcName, nil)
+				defer c.pushDiagEvent(dotfilesdv1.EventType_EVENT_TYPE_LIFECYCLE, "plugin_rpc_close", rpcID, diagParent, rpcName, nil)
 			}
 
 			ctx = &c

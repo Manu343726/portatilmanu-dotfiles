@@ -40,12 +40,21 @@ message CurrentResponse {
   DiskIOSnapshot disk_io = 4;
 }
 
+// Sort order for process listing.
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  // Sort by CPU usage (highest first).
+  SORT_ORDER_CPU = 1;
+  // Sort by memory usage (highest first).
+  SORT_ORDER_MEMORY = 2;
+}
+
 // Request to list top processes by resource usage.
 message TopRequest {
   // Number of processes to return (default: 10).
   int32 count = 1;
-  // Sort order: "cpu" for CPU usage, "mem" for memory usage (default: "cpu").
-  string sort = 2;
+  // Sort order for process listing. Unset means CPU sort.
+  SortOrder sort = 2;
 }
 
 // TopResponse contains the list of top processes.
@@ -60,8 +69,8 @@ message PSRequest {
   int32 pid = 1;
   // Number of processes to return (default: 20).
   int32 count = 2;
-  // Sort order: "cpu" or "mem" (default: "cpu").
-  string sort = 3;
+  // Sort order for process listing. Unset means CPU sort.
+  SortOrder sort = 3;
 }
 
 // PSResponse contains detailed process information.
@@ -70,10 +79,28 @@ message PSResponse {
   repeated ProcessInfo processes = 1;
 }
 
+// Type of system resource for historical data queries.
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  // RAM/memory usage data.
+  RESOURCE_TYPE_RAM = 1;
+  // CPU utilization data.
+  RESOURCE_TYPE_CPU = 2;
+  // Disk usage data.
+  RESOURCE_TYPE_DISK = 3;
+}
+
+// Unit of measurement for metric values.
+enum Unit {
+  UNIT_UNSPECIFIED = 0;
+  // Percentage value (0-100).
+  UNIT_PERCENT = 1;
+}
+
 // Request for historical resource data.
 message HistoryRequest {
-  // Resource to query: "ram", "cpu", or "disk" (default: "ram").
-  string resource = 1;
+  // Resource to query. Unset means RAM.
+  ResourceType resource = 1;
   // Number of data points to return (default: 20, max: 100).
   int32 count = 2;
 }
@@ -82,10 +109,10 @@ message HistoryRequest {
 message HistoryResponse {
   // Data point values in chronological order (oldest first).
   repeated double values = 1;
-  // The resource these values correspond to ("ram", "cpu", or "disk").
-  string resource = 2;
-  // Unit of measurement for the values ("%" for all resources).
-  string unit = 3;
+  // The resource these values correspond to.
+  ResourceType resource = 2;
+  // Unit of measurement for the values.
+  Unit unit = 3;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +173,25 @@ message DiskIOSnapshot {
   double write_bytes_per_sec = 5;
 }
 
+// Linux process state as reported by the kernel.
+enum ProcessState {
+  PROCESS_STATE_UNSPECIFIED = 0;
+  // Currently running or runnable.
+  PROCESS_STATE_RUNNING = 1;
+  // Sleeping in an interruptible wait.
+  PROCESS_STATE_SLEEPING = 2;
+  // Uninterruptible disk sleep (D state).
+  PROCESS_STATE_DISK_SLEEP = 3;
+  // Zombie — terminated but not yet reaped by parent.
+  PROCESS_STATE_ZOMBIE = 4;
+  // Stopped (SIGSTOP or TTY input).
+  PROCESS_STATE_STOPPED = 5;
+  // Tracing stop (ptrace).
+  PROCESS_STATE_TRACE_STOP = 6;
+  // Dead (should not be visible).
+  PROCESS_STATE_DEAD = 7;
+}
+
 // ProcessInfo describes a running process.
 message ProcessInfo {
   // Process ID.
@@ -158,6 +204,6 @@ message ProcessInfo {
   double mem_percent = 4;
   // Memory usage in MB.
   double mem_mb = 5;
-  // Process state (R, S, D, Z, etc.).
-  string state = 6;
+  // Process state.
+  ProcessState state = 6;
 }
