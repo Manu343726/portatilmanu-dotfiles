@@ -504,7 +504,7 @@ func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.
 		ssid = readWiFiSSID(iface)
 	}
 
-	c := pctColor(pct)
+	c := pctColor(100 - pct)
 	text := fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", c, pct, ssid, bar(pct))
 
 	if pc != nil {
@@ -650,7 +650,7 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 	if iface := findWiFiInterface(); iface != "" {
 		pct := readWiFiSignal(iface)
 		ssid := readWiFiSSID(iface)
-		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(pct), pct, ssid, bar(pct)))
+		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(100-pct), pct, ssid, bar(pct)))
 		b.WriteString("#[default] ")
 	}
 
