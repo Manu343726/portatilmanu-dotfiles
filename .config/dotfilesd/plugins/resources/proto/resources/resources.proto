@@ -208,6 +208,19 @@ message CPUTempSnapshot {
   double temp_celsius = 1;
 }
 
+// Battery charge/discharge status as reported by the power supply subsystem.
+enum BatteryStatus {
+  BATTERY_STATUS_UNSPECIFIED = 0;
+  // Battery is currently charging.
+  BATTERY_STATUS_CHARGING = 1;
+  // Battery is discharging (on battery power).
+  BATTERY_STATUS_DISCHARGING = 2;
+  // Battery is fully charged.
+  BATTERY_STATUS_FULL = 3;
+  // Battery is not charging but also not full (e.g. charge threshold).
+  BATTERY_STATUS_NOT_CHARGING = 4;
+}
+
 // BatterySnapshot captures the battery status at a point in time.
 message BatterySnapshot {
   // Battery charge level as percentage (0-100).
@@ -216,6 +229,15 @@ message BatterySnapshot {
   bool charging = 2;
   // Whether the AC power adapter is plugged in.
   bool plugged = 3;
+  // Raw battery charge/discharge status from sysfs.
+  BatteryStatus status = 4;
+  // Current energy remaining in microamp-hours (µAh).
+  int64 energy_now = 5;
+  // Full charge energy capacity in microamp-hours (µAh).
+  int64 energy_full = 6;
+  // Current power draw in microwatts (µW). Positive for discharge,
+  // negative is not used — interpret via `status`.
+  int64 power_now = 7;
 }
 
 // ProcessInfo describes a running process.

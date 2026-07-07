@@ -29,6 +29,7 @@
   - [ResourceType](#resourcetype)
   - [Unit](#unit)
   - [ProcessState](#processstate)
+  - [BatteryStatus](#batterystatus)
 
 ## Services
 
@@ -211,6 +212,10 @@ BatterySnapshot captures the battery status at a point in time.
 | `percent` | double | Battery charge level as percentage (0-100). |
 | `charging` | bool | Whether the battery is currently being charged. |
 | `plugged` | bool | Whether the AC power adapter is plugged in. |
+| `status` | resources.BatteryStatus | Raw battery charge/discharge status from sysfs. |
+| `energy_now` | int64 | Current energy remaining in microamp-hours (µAh). |
+| `energy_full` | int64 | Full charge energy capacity in microamp-hours (µAh). |
+| `power_now` | int64 | Current power draw in microwatts (µW). Positive for discharge, negative is not used — interpret via `status`. |
 
 ### ProcessInfo
 
@@ -275,4 +280,16 @@ Linux process state as reported by the kernel.
 | `PROCESS_STATE_STOPPED` | 5 | Stopped (SIGSTOP or TTY input). |
 | `PROCESS_STATE_TRACE_STOP` | 6 | Tracing stop (ptrace). |
 | `PROCESS_STATE_DEAD` | 7 | Dead (should not be visible). |
+
+### BatteryStatus
+
+Battery charge/discharge status as reported by the power supply subsystem.
+
+| Name | Number | Description |
+|------|--------|-------------|
+| `BATTERY_STATUS_UNSPECIFIED` | 0 |  |
+| `BATTERY_STATUS_CHARGING` | 1 | Battery is currently charging. |
+| `BATTERY_STATUS_DISCHARGING` | 2 | Battery is discharging (on battery power). |
+| `BATTERY_STATUS_FULL` | 3 | Battery is fully charged. |
+| `BATTERY_STATUS_NOT_CHARGING` | 4 | Battery is not charging but also not full (e.g. charge threshold). |
 

@@ -55,9 +55,13 @@ type CPUTempSnapshot struct {
 }
 
 type BatterySnapshot struct {
-	Percent  float64
-	Charging bool
-	Plugged  bool
+	Percent    float64
+	Charging   bool
+	Plugged    bool
+	Status     string
+	EnergyNow  int64
+	EnergyFull int64
+	PowerNow   int64
 }
 
 type ProcessInfo struct {
@@ -256,9 +260,13 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 			TempCelsius: cpuTemp.TempCelsius,
 		},
 		Battery: &pb.BatterySnapshot{
-			Percent:  battery.Percent,
-			Charging: battery.Charging,
-			Plugged:  battery.Plugged,
+			Percent:    battery.Percent,
+			Charging:   battery.Charging,
+			Plugged:    battery.Plugged,
+			Status:     batteryStatusToProto(battery.Status),
+			EnergyNow:  battery.EnergyNow,
+			EnergyFull: battery.EnergyFull,
+			PowerNow:   battery.PowerNow,
 		},
 	}), nil
 }
@@ -608,13 +616,41 @@ func collectBattery() BatterySnapshot {
 
 			statusPath := "/sys/class/power_supply/" + name + "/status"
 			if data, err := os.ReadFile(statusPath); err == nil {
-				status := strings.TrimSpace(string(data))
-				bat.Charging = status == "Charging"
+				bat.Status = strings.TrimSpace(string(data))
+				bat.Charging = bat.Status == "Charging"
+			}
+
+			for _, f := range []struct {
+				path string
+				dst  *int64
+			}{
+				{"/sys/class/power_supply/" + name + "/energy_now", &bat.EnergyNow},
+				{"/sys/class/power_supply/" + name + "/energy_full", &bat.EnergyFull},
+				{"/sys/class/power_supply/" + name + "/power_now", &bat.PowerNow},
+			} {
+				if data, err := os.ReadFile(f.path); err == nil {
+					*f.dst, _ = strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+				}
 			}
 		}
 	}
 
 	return bat
+}
+
+func batteryStatusToProto(s string) pb.BatteryStatus {
+	switch s {
+	case "Charging":
+		return pb.BatteryStatus_BATTERY_STATUS_CHARGING
+	case "Discharging":
+		return pb.BatteryStatus_BATTERY_STATUS_DISCHARGING
+	case "Full":
+		return pb.BatteryStatus_BATTERY_STATUS_FULL
+	case "Not charging":
+		return pb.BatteryStatus_BATTERY_STATUS_NOT_CHARGING
+	default:
+		return pb.BatteryStatus_BATTERY_STATUS_UNSPECIFIED
+	}
 }
 
 func main() {

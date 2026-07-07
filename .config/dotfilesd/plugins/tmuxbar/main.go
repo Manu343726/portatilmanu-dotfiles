@@ -51,6 +51,21 @@ type tmuxBarServer struct {
 	cpuTempState    CPUTempState
 }
 
+func batteryStatusString(s respb.BatteryStatus) string {
+	switch s {
+	case respb.BatteryStatus_BATTERY_STATUS_CHARGING:
+		return "Charging"
+	case respb.BatteryStatus_BATTERY_STATUS_DISCHARGING:
+		return "Discharging"
+	case respb.BatteryStatus_BATTERY_STATUS_FULL:
+		return "Full"
+	case respb.BatteryStatus_BATTERY_STATUS_NOT_CHARGING:
+		return "Not charging"
+	default:
+		return "Unknown"
+	}
+}
+
 func bar(pct int) string {
 	n := barSegments
 	filled := (pct*n + 99) / 100
@@ -234,33 +249,16 @@ func (s *tmuxBarServer) BatteryWidget(ctx context.Context, req *connect.Request[
 		return connect.NewResponse(&pb.BatteryWidgetResponse{Text: "BAT N/A"}), nil
 	}
 
-	// Resources plugin provides battery snapshot via sysfs. For the full
-	// battery_info() output we also need energy_now/energy_full/power_now
-	// for time-remaining calculation, which resources doesn't expose yet.
-	// Read those directly from sysfs (lightweight, not a resource computation).
 	bt := r.Msg.Battery
 	if bt == nil {
 		return connect.NewResponse(&pb.BatteryWidgetResponse{Text: "BAT N/A"}), nil
 	}
 
 	pct := int(bt.Percent)
-	status := "Unknown"
-	plugged := bt.Plugged
-	var powerNow, energyNow, energyFull int64
-
-	// Read additional battery details for time-remaining calculation.
-	if raw, err := os.ReadFile("/sys/class/power_supply/BAT0/status"); err == nil {
-		status = strings.TrimSpace(string(raw))
-	}
-	if raw, err := os.ReadFile("/sys/class/power_supply/BAT0/power_now"); err == nil {
-		fmt.Sscanf(strings.TrimSpace(string(raw)), "%d", &powerNow)
-	}
-	if raw, err := os.ReadFile("/sys/class/power_supply/BAT0/energy_now"); err == nil {
-		fmt.Sscanf(strings.TrimSpace(string(raw)), "%d", &energyNow)
-	}
-	if raw, err := os.ReadFile("/sys/class/power_supply/BAT0/energy_full"); err == nil {
-		fmt.Sscanf(strings.TrimSpace(string(raw)), "%d", &energyFull)
-	}
+	status := batteryStatusString(bt.Status)
+	powerNow := bt.PowerNow
+	energyNow := bt.EnergyNow
+	energyFull := bt.EnergyFull
 
 	btBar := batteryBar(pct)
 	lc := batteryLabelColor(pct)
@@ -290,7 +288,7 @@ func (s *tmuxBarServer) BatteryWidget(ctx context.Context, req *connect.Request[
 	}
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.BatteryWidget", "pct", pct, "status", status, "plugged", plugged)
+		pc.Log().Info("▶ TmuxBar.BatteryWidget", "pct", pct, "status", status, "plugged", bt.Plugged)
 	}
 
 	if pc != nil && pc.RenderOutput() {
