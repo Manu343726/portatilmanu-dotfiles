@@ -454,6 +454,7 @@ func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.
 func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, host, timeStr, dateStr string) string {
 	var b strings.Builder
 
+	// ASUS profile
 	switch r.AsusProfile {
 	case respb.ASUSProfile_ASUS_PROFILE_PERF:
 		b.WriteString("#[fg=#E8871A]PERF#[default] ")
@@ -463,6 +464,7 @@ func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, ho
 		b.WriteString("#[fg=#66D9EF]QUIET#[default] ")
 	}
 
+	// GPU profile
 	switch r.GpuProfile {
 	case respb.GPUProfile_GPU_PROFILE_EGPU:
 		b.WriteString("#[fg=#AE81FF]EGPU#[default] ")
@@ -475,6 +477,7 @@ func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, ho
 	}
 	b.WriteString(" ")
 
+	// Battery
 	if bt := r.Battery; bt != nil {
 		pct := int(bt.Percent)
 		status := batteryStatusString(bt.Status)
@@ -505,12 +508,14 @@ func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, ho
 		b.WriteString("#[default] ")
 	}
 
+	// CPU
 	if cpu := r.Cpu; cpu != nil {
 		pct := int(cpu.TotalPercent)
 		b.WriteString(fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", pctColor(pct), pct, r.TopCpuProcess, bar(pct)))
 		b.WriteString("#[default] ")
 	}
 
+	// CPU temp
 	if t := r.CpuTemp; t != nil {
 		temp := int(t.TempCelsius)
 		var pct int
@@ -533,6 +538,7 @@ func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, ho
 		b.WriteString("#[default] ")
 	}
 
+	// RAM
 	if ram := r.Ram; ram != nil {
 		pct := int(ram.Percent)
 		usedGiB := ram.UsedMb / 1024
@@ -540,24 +546,29 @@ func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, ho
 		b.WriteString("#[default] ")
 	}
 
+	// WiFi
 	if w := r.Wifi; w != nil && w.Percent > 0 {
 		ipct := int(w.Percent)
 		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(100-ipct), ipct, w.Ssid, bar(ipct)))
 		b.WriteString("#[default] ")
 	}
 
+	// Thin separator before time
 	b.WriteString("#[fg=#E8E8E2,bg=#272822,none]   ")
 	b.WriteString(timeStr)
 	b.WriteString(" #[fg=#E8E8E2,bg=#272822,none]   ")
 	b.WriteString(dateStr)
 
+	// Powerline arrow to red section for layout
 	b.WriteString(" #[fg=#E82572,bg=#272822,none]#[fg=#A6E22E,bg=#E82572,none] ")
 	b.WriteString(r.KeyboardLayout)
 
+	// Powerline arrow to light section for username
 	b.WriteString(" #[fg=#E8E8E2,bg=#E82572,none]#[fg=#272822,bg=#E8E8E2,bold] ")
 	b.WriteString(username)
 	b.WriteString(root)
 
+	// Powerline arrow back to dark section for hostname
 	b.WriteString(" #[fg=#272822,bg=#E8E8E2,none]#[fg=#E8E8E2,bg=#272822,none] ")
 	b.WriteString(host)
 	b.WriteString(" ")
