@@ -808,6 +808,7 @@ func enrichEnumValues(es *dotfilesdv1.EnumSchema, nestedEnums []*dotfilesdv1.Enu
 		)
 		return
 	}
+	es.Description = ed.Description
 	byName := map[string]*dotfilesdv1.EnumValueDoc{}
 	for _, vd := range ed.Values {
 		byName[vd.Name] = vd

@@ -87,6 +87,7 @@ Global Flags:
 {{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if index .Annotations "enum_values"}}
 
 Enum values:
+
 {{index .Annotations "enum_values"}}{{end}}{{if .HasHelpSubCommands}}
 
 Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}

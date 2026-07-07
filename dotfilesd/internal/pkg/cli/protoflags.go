@@ -225,11 +225,10 @@ func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 	for _, name := range names {
 		es := enums[name]
 		short := enumShortName(name)
-		desc := ""
+		fmt.Fprintf(&b, "  %s:\n", short)
 		if es.Description != "" {
-			desc = ": " + es.Description
+			fmt.Fprintf(&b, "    %s\n\n", strings.ReplaceAll(es.Description, "\n", " "))
 		}
-		fmt.Fprintf(&b, "  %s%s\n", short, desc)
 		for _, e := range entries[name] {
 			if e.desc != "" {
 				fmt.Fprintf(&b, "    %-*s%s\n", pad, e.display, e.desc)
@@ -237,6 +236,7 @@ func enumAppendix(enums map[string]*dotfilesdv1.EnumSchema) string {
 				fmt.Fprintf(&b, "    %s\n", e.display)
 			}
 		}
+		fmt.Fprintln(&b)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
