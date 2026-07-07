@@ -25,31 +25,8 @@ const barFilled = "◼"
 const barEmpty = "◻"
 const barSegments = 10
 
-type CPUTempState struct {
-	mu  sync.Mutex
-	min float64
-	max float64
-}
-
-func (s *CPUTempState) update(temp float64) (min, max float64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.min == 0 && s.max == 0 {
-		s.min = temp
-		s.max = temp
-	}
-	if temp < s.min {
-		s.min = temp
-	}
-	if temp > s.max {
-		s.max = temp
-	}
-	return s.min, s.max
-}
-
 type tmuxBarServer struct {
 	resourcesClient resourcesconnect.ResourcesServiceClient
-	cpuTempState    CPUTempState
 	cache           widgetCache
 }
 
@@ -225,22 +202,12 @@ func (s *tmuxBarServer) CPUTempWidget(ctx context.Context, req *connect.Request[
 		return connect.NewResponse(&pb.CPUTempWidgetResponse{Text: "TEMP N/A"}), nil
 	}
 
-	temp := int(r.Msg.CpuTemp.GetTempCelsius())
-	var pct int
-	if temp > 0 {
-		min, max := s.cpuTempState.update(float64(temp))
-		range_ := max - min
-		if range_ <= 0 {
-			pct = 50
-		} else {
-			pct = int((float64(temp) - min) * 100 / range_)
-		}
-		if pct < 0 {
-			pct = 0
-		}
-		if pct > 100 {
-			pct = 100
-		}
+	t := r.Msg.CpuTemp
+	pct := 0
+	temp := 0
+	if t != nil {
+		temp = int(t.TempCelsius)
+		pct = int(t.BarPct)
 	}
 
 	c := pctColor(pct)
@@ -451,7 +418,7 @@ func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.
 	}), nil
 }
 
-func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, host, timeStr, dateStr string) string {
+func renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string) string {
 	var b strings.Builder
 
 	// ASUS profile
@@ -516,24 +483,9 @@ func renderBar(r *respb.CurrentResponse, state *CPUTempState, username, root, ho
 	}
 
 	// CPU temp
-	if t := r.CpuTemp; t != nil {
+	if t := r.CpuTemp; t != nil && t.TempCelsius > 0 {
+		pct := int(t.BarPct)
 		temp := int(t.TempCelsius)
-		var pct int
-		if temp > 0 {
-			min, max := state.update(float64(temp))
-			range_ := max - min
-			if range_ <= 0 {
-				pct = 50
-			} else {
-				pct = int((float64(temp) - min) * 100 / range_)
-			}
-			if pct < 0 {
-				pct = 0
-			}
-			if pct > 100 {
-				pct = 100
-			}
-		}
 		b.WriteString(fmt.Sprintf("TEMP %s%3d°C %s#[default]", pctColor(pct), temp, bar(pct)))
 		b.WriteString("#[default] ")
 	}
@@ -661,7 +613,7 @@ func main() {
 					for stream.Receive() {
 						msg := stream.Msg()
 						now := time.Now()
-						bar := renderBar(msg, &svc.cpuTempState, username, root, host, now.Format("15:04"), now.Format("02 Jan"))
+						bar := renderBar(msg, username, root, host, now.Format("15:04"), now.Format("02 Jan"))
 						svc.cache.set(bar)
 						exec.Command("tmux", "refresh-client", "-S").Run()
 					}

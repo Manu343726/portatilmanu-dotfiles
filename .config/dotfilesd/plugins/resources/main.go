@@ -53,6 +53,31 @@ type DiskIOSnapshot struct {
 
 type CPUTempSnapshot struct {
 	TempCelsius float64
+	MinCelsius  float64
+	MaxCelsius  float64
+	BarPct      float64
+}
+
+type cpuTempTracker struct {
+	mu  sync.Mutex
+	min float64
+	max float64
+}
+
+func (t *cpuTempTracker) track(temp float64) (min, max float64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.min == 0 && t.max == 0 {
+		t.min = temp
+		t.max = temp
+	}
+	if temp < t.min {
+		t.min = temp
+	}
+	if temp > t.max {
+		t.max = temp
+	}
+	return t.min, t.max
 }
 
 type BatterySnapshot struct {
@@ -213,6 +238,7 @@ type resourcesServer struct {
 	subMu        sync.Mutex
 	subID        int64
 	lastResponse *pb.CurrentResponse
+	cpuTempTrack cpuTempTracker
 }
 
 func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
@@ -248,6 +274,9 @@ func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
 		},
 		CpuTemp: &pb.CPUTempSnapshot{
 			TempCelsius: cpuTemp.TempCelsius,
+			MinCelsius:  cpuTemp.MinCelsius,
+			MaxCelsius:  cpuTemp.MaxCelsius,
+			BarPct:      cpuTemp.BarPct,
 		},
 		Battery: &pb.BatterySnapshot{
 			Percent:    battery.Percent,
@@ -301,7 +330,7 @@ func fieldsChanged(f *pb.WatchFilter, old, cur *pb.CurrentResponse) bool {
 		}
 	}
 	if f.CpuTemp && old.CpuTemp != nil && cur.CpuTemp != nil {
-		if abs(cur.CpuTemp.TempCelsius-old.CpuTemp.TempCelsius) > 0.5 {
+		if cur.CpuTemp.BarPct != old.CpuTemp.BarPct {
 			return true
 		}
 	}
@@ -559,13 +588,13 @@ func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.H
 	}), nil
 }
 
-func collectAll(state *SharedState) {
+func collectAll(state *SharedState, tracker *cpuTempTracker) {
 	snap := systemSnapshot{
 		ram:     collectRAM(),
 		cpu:     collectCPU(),
 		disk:    collectDisk(),
 		diskIO:  collectDiskIO(),
-		cpuTemp: collectCPUTemp(),
+		cpuTemp: collectCPUTempWithTracker(tracker),
 		battery: collectBattery(),
 		wifi:    collectWiFi(),
 	}
@@ -768,6 +797,30 @@ func collectCPUTemp() CPUTempSnapshot {
 	}
 
 	return CPUTempSnapshot{}
+}
+
+func collectCPUTempWithTracker(t *cpuTempTracker) CPUTempSnapshot {
+	snap := collectCPUTemp()
+	if snap.TempCelsius <= 0 {
+		return snap
+	}
+	min, max := t.track(snap.TempCelsius)
+	snap.MinCelsius = min
+	snap.MaxCelsius = max
+	range_ := max - min
+	if range_ <= 0 {
+		snap.BarPct = 50
+	} else {
+		pct := (snap.TempCelsius - min) * 100 / range_
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 100 {
+			pct = 100
+		}
+		snap.BarPct = pct
+	}
+	return snap
 }
 
 func collectBattery() BatterySnapshot {
@@ -1008,7 +1061,7 @@ func main() {
 		},
 		Background: func(ctx plugin.Context, stop <-chan struct{}) {
 			poller.Run(stop, func() {
-				collectAll(state)
+				collectAll(state, &svc.cpuTempTrack)
 				svc.broadcast()
 			})
 		},

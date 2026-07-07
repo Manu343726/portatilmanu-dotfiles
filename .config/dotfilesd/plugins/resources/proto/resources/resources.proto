@@ -260,6 +260,13 @@ enum ProcessState {
 message CPUTempSnapshot {
   // CPU temperature in degrees Celsius.
   double temp_celsius = 1;
+  // Minimum observed temperature since plugin start.
+  double min_celsius = 2;
+  // Maximum observed temperature since plugin start.
+  double max_celsius = 3;
+  // Bar percentage (0-100) within the observed [min, max] range.
+  // Used by tmuxbar for color and bar graph thresholds.
+  double bar_pct = 4;
 }
 
 // Battery charge/discharge status as reported by the power supply subsystem.
