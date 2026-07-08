@@ -637,6 +637,16 @@ func collectRAM() RAMSnapshot {
 	}
 }
 
+type cpuJiffies struct {
+	user   float64
+	nice   float64
+	system float64
+	idle   float64
+	iowait float64
+}
+
+var prevCPU *cpuJiffies
+
 func collectCPU() CPUSnapshot {
 	data, err := os.ReadFile("/proc/stat")
 	if err != nil {
@@ -666,13 +676,32 @@ func collectCPU() CPUSnapshot {
 	idle, _ := strconv.ParseFloat(fields[4], 64)
 	iowait, _ := strconv.ParseFloat(fields[5], 64)
 
-	total := user + nice + system + idle + iowait
-	active := total - idle
+	if prevCPU == nil {
+		prevCPU = &cpuJiffies{user, nice, system, idle, iowait}
+		return CPUSnapshot{
+			NumCores: runtime.NumCPU(),
+		}
+	}
+
+	deltaUser := user - prevCPU.user
+	deltaNice := nice - prevCPU.nice
+	deltaSystem := system - prevCPU.system
+	deltaIdle := idle - prevCPU.idle
+	deltaIOwait := iowait - prevCPU.iowait
+
+	prevCPU = &cpuJiffies{user, nice, system, idle, iowait}
+
+	total := deltaUser + deltaNice + deltaSystem + deltaIdle + deltaIOwait
+	active := total - deltaIdle
+
+	if total == 0 {
+		return CPUSnapshot{NumCores: runtime.NumCPU()}
+	}
 
 	percent := math.Round(active/total*100*10) / 10
-	userPercent := math.Round((user+nice)/total*100*10) / 10
-	sysPercent := math.Round(system/total*100*10) / 10
-	ioPercent := math.Round(iowait/total*100*10) / 10
+	userPercent := math.Round((deltaUser+deltaNice)/total*100*10) / 10
+	sysPercent := math.Round(deltaSystem/total*100*10) / 10
+	ioPercent := math.Round(deltaIOwait/total*100*10) / 10
 
 	return CPUSnapshot{
 		TotalPercent:  percent,
