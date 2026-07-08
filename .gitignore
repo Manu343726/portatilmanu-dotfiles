@@ -33,6 +33,10 @@
 /.local/bin/dotfilesd
 /.local/bin/dotfilesctl
 
+# sycl-sandbox
+!/Projects/sycl-sandbox/
+/Projects/sycl-sandbox/build/
+
 # dotfilesd source
 !/dotfilesd/
 
