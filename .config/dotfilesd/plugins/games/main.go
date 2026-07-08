@@ -1,19 +1,12 @@
 // Games plugin — TUI games (solitaire, minesweeper, 2048, battleship, chess).
 //
-// Each game runs as a terminal-based interactive session. The plugin writes
-// the game board to Context.Stdout() and reads player input from Context.Stdin().
+// Each game runs as a terminal-based interactive session using tview widgets.
 package main
 
 import (
-	"bufio"
 	"context"
-	"fmt"
-	"io"
 	"math"
 	"math/rand"
-	"strconv"
-	"strings"
-	"time"
 
 	"dotfilesd/plugin"
 	pb "plugins/games/proto/games"
@@ -22,38 +15,11 @@ import (
 	"connectrpc.com/connect"
 )
 
-
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-func reset() string           { return "\033[0m" }
-func bold(s string) string    { return "\033[1m" + s + reset() }
-func green(s string) string   { return "\033[32m" + s + reset() }
-func red(s string) string     { return "\033[31m" + s + reset() }
-func yellow(s string) string  { return "\033[33m" + s + reset() }
-func blue(s string) string    { return "\033[34m" + s + reset() }
-func cyan(s string) string    { return "\033[36m" + s + reset() }
-func dim(s string) string     { return "\033[2m" + s + reset() }
-func clearScreen(w io.Writer) { fmt.Fprint(w, "\033[2J\033[H") }
-
-func parseCoord(s string) (x, y int, ok bool) {
-	s = strings.TrimSpace(strings.ToLower(s))
-	if len(s) < 2 {
-		return 0, 0, false
-	}
-	x = int(s[0] - 'a')
-	y, err := strconv.Atoi(s[1:])
-	if err != nil || y < 1 || y > 10 || x < 0 || x > 9 {
-		return 0, 0, false
-	}
-	return x, y - 1, true
-}
-
 // ─── Minesweeper ────────────────────────────────────────────────────────────
 
 type msGame struct {
-	w, h, bombs, flags, cx, cy int
-	g                          [][]struct {
+	w, h, bombs, flags int
+	g                  [][]struct {
 		bomb bool
 		st   int8
 		n    int8
@@ -62,7 +28,7 @@ type msGame struct {
 }
 
 func newMS(w, h, bombs int) *msGame {
-	m := &msGame{w: w, h: h, bombs: bombs, flags: bombs, cx: w / 2, cy: h / 2}
+	m := &msGame{w: w, h: h, bombs: bombs, flags: bombs}
 	m.g = make([][]struct {
 		bomb bool
 		st   int8
@@ -127,104 +93,6 @@ func (m *msGame) win() bool {
 		}
 	}
 	return true
-}
-
-func (m *msGame) render(w io.Writer) {
-	clearScreen(w)
-	fmt.Fprintln(w, bold(" MINESWEEPER  ")+dim("WASD/arrows R F Q"))
-	fmt.Fprintf(w, " %s\n\n", dim(fmt.Sprintf("Bombs:%d Flags:%d", m.bombs, m.flags)))
-	fmt.Fprint(w, "  ")
-	for x := 0; x < m.w; x++ {
-		fmt.Fprintf(w, " %d", x%10)
-	}
-	fmt.Fprintln(w)
-	for y := 0; y < m.h; y++ {
-		fmt.Fprintf(w, " %2d", y)
-		for x := 0; x < m.w; x++ {
-			b := m.g[y][x]
-			if m.cx == x && m.cy == y {
-				fmt.Fprint(w, bold("["))
-			} else {
-				fmt.Fprint(w, " ")
-			}
-			switch b.st {
-			case 0:
-				fmt.Fprint(w, dim("."))
-			case 2:
-				fmt.Fprint(w, red("F"))
-			case 1:
-				if b.bomb {
-					fmt.Fprint(w, red("*"))
-				} else if b.n == 0 {
-					fmt.Fprint(w, " ")
-				} else {
-					cs := []string{"", cyan("1"), green("2"), red("3"), blue("4"), red("5"), cyan("6"), dim("7"), dim("8")}
-					if int(b.n) < len(cs) {
-						fmt.Fprint(w, cs[b.n])
-					} else {
-						fmt.Fprint(w, b.n)
-					}
-				}
-			}
-			if m.cx == x && m.cy == y {
-				fmt.Fprint(w, bold("]"))
-			} else {
-				fmt.Fprint(w, " ")
-			}
-		}
-		fmt.Fprintln(w)
-	}
-	if m.over {
-		fmt.Fprintln(w, red("\nGAME OVER"))
-	} else if m.won {
-		fmt.Fprintln(w, green("\nYOU WIN!"))
-	}
-}
-
-func (m *msGame) run(ctx plugin.Context) bool {
-	r := bufio.NewReader(ctx.Stdin())
-	for !m.over && !m.won {
-		m.render(ctx.Stdout())
-		b, e := r.ReadByte()
-		if e != nil {
-			return false
-		}
-		switch strings.ToLower(string(b)) {
-		case "q":
-			return false
-		case "w":
-			if m.cy > 0 {
-				m.cy--
-			}
-		case "s":
-			if m.cy < m.h-1 {
-				m.cy++
-			}
-		case "a":
-			if m.cx > 0 {
-				m.cx--
-			}
-		case "d":
-			if m.cx < m.w-1 {
-				m.cx++
-			}
-		case "r":
-			if m.g[m.cy][m.cx].st == 0 {
-				m.reveal(m.cx, m.cy)
-				m.won = m.win()
-			}
-		case "f":
-			if m.g[m.cy][m.cx].st == 0 {
-				m.g[m.cy][m.cx].st = 2
-				m.flags--
-			} else if m.g[m.cy][m.cx].st == 2 {
-				m.g[m.cy][m.cx].st = 0
-				m.flags++
-			}
-		}
-	}
-	m.render(ctx.Stdout())
-	return m.won
 }
 
 // ─── 2048 ───────────────────────────────────────────────────────────────────
@@ -341,92 +209,11 @@ func (s *g2048State) can() bool {
 	return false
 }
 
-func (s *g2048State) render(w io.Writer) {
-	clearScreen(w)
-	fmt.Fprintf(w, " %s  %s%d\n\n", bold("2048"), dim("Score:"), s.sc)
-	for y := 0; y < 4; y++ {
-		for x := 0; x < 4; x++ {
-			v := s.g[y][x]
-			c := dim
-			switch {
-			case v == 0:
-				fmt.Fprint(w, dim("   ."))
-				continue
-			case v <= 8:
-				c = cyan
-			case v <= 128:
-				c = yellow
-			default:
-				c = red
-			}
-			fmt.Fprint(w, c(fmt.Sprintf("%4d", v))+" ")
-		}
-		fmt.Fprintln(w, "\n")
-	}
-	fmt.Fprintln(w, dim("WASD Q"))
-	if s.ov {
-		fmt.Fprintln(w, red("\nGAME OVER"))
-	} else if s.wn {
-		fmt.Fprintln(w, green("\nYOU WIN!"))
-	}
-}
-
-func (s *g2048State) run(ctx plugin.Context) bool {
-	r := bufio.NewReader(ctx.Stdin())
-	for !s.ov && !s.wn {
-		s.render(ctx.Stdout())
-		b, e := r.ReadByte()
-		if e != nil {
-			return false
-		}
-		l := strings.ToLower(string(b))
-		if l == "q" {
-			return false
-		}
-		md := false
-		switch l {
-		case "w":
-			md = s.mv(0, 1)
-		case "s":
-			md = s.mv(0, -1)
-		case "a":
-			md = s.mv(1, 0)
-		case "d":
-			md = s.mv(-1, 0)
-		}
-		if md {
-			s.sp()
-			if !s.can() {
-				s.ov = true
-			}
-			for y := 0; y < 4 && !s.wn; y++ {
-				for x := 0; x < 4 && !s.wn; x++ {
-					if s.g[y][x] >= 2048 {
-						s.wn = true
-					}
-				}
-			}
-		}
-	}
-	s.render(ctx.Stdout())
-	return s.wn
-}
-
 // ─── Solitaire ──────────────────────────────────────────────────────────────
 
 type card struct {
 	s, r int8
 	f    bool
-}
-
-func (c card) str() string {
-	ss := []string{"♠", "♥", "♦", "♣"}
-	rs := []string{"", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"}
-	s := rs[c.r] + ss[c.s]
-	if c.s == 1 || c.s == 2 {
-		return red(s)
-	}
-	return s
 }
 
 type solGame struct {
@@ -541,99 +328,6 @@ func (g *solGame) auto() {
 	}
 }
 
-func (g *solGame) render(w io.Writer) {
-	clearScreen(w)
-	fmt.Fprintln(w, bold(" SOLITAIRE"))
-	fmt.Fprint(w, " ")
-	if len(g.st) > 0 {
-		fmt.Fprint(w, dim("[#]"))
-	} else {
-		fmt.Fprint(w, dim("[ ]"))
-	}
-	fmt.Fprint(w, "  ")
-	if len(g.wst) > 0 {
-		fmt.Fprint(w, g.wst[len(g.wst)-1].str())
-	} else {
-		fmt.Fprint(w, dim("[ ]"))
-	}
-	fmt.Fprint(w, "  ")
-	for i := 0; i < 4; i++ {
-		if len(g.fd[i]) > 0 {
-			fmt.Fprint(w, g.ft(i).str()+" ")
-		} else {
-			fmt.Fprint(w, dim("[ ] "))
-		}
-	}
-	fmt.Fprintln(w, "\n")
-	for r := 0; ; r++ {
-		e := true
-		var l string
-		for c := 0; c < 7; c++ {
-			if r < len(g.tb[c]) {
-				if g.tb[c][r].f {
-					l += " " + g.tb[c][r].str() + " "
-				} else {
-					l += dim(" [#] ")
-				}
-				e = false
-			} else {
-				l += "     "
-			}
-		}
-		if e {
-			break
-		}
-		fmt.Fprintln(w, l)
-	}
-	fmt.Fprintln(w, "\n"+dim("D|1-7|w <n>|<s> <d> [n]|Q"))
-}
-
-func (g *solGame) run(ctx plugin.Context) bool {
-	r := bufio.NewReader(ctx.Stdin())
-	for !g.ov && !g.wn {
-		g.render(ctx.Stdout())
-		fmt.Fprint(ctx.Stdout(), "> ")
-		l, e := r.ReadString('\n')
-		if e != nil {
-			return false
-		}
-		l = strings.TrimSpace(strings.ToLower(l))
-		if l == "q" {
-			return false
-		}
-		switch {
-		case l == "d":
-			g.draw()
-		case l >= "1" && l <= "7":
-			n, _ := strconv.Atoi(l)
-			if c := g.tp(n - 1); c != nil && c.f && g.fdx(*c) >= 0 {
-				g.auto()
-			}
-		default:
-			ps := strings.Fields(l)
-			if len(ps) == 2 && ps[0] == "w" {
-				n, _ := strconv.Atoi(ps[1])
-				if len(g.wst) > 0 && g.can(g.wst[len(g.wst)-1], n-1) {
-					g.tb[n-1] = append(g.tb[n-1], g.wst[len(g.wst)-1])
-					g.wst = g.wst[:len(g.wst)-1]
-				}
-			} else if len(ps) >= 2 {
-				s, _ := strconv.Atoi(ps[0])
-				d, _ := strconv.Atoi(ps[1])
-				n := 1
-				if len(ps) >= 3 {
-					n, _ = strconv.Atoi(ps[2])
-				}
-				g.move(s-1, d-1, n)
-			}
-		}
-		g.auto()
-		g.wn = len(g.fd[0]) == 13 && len(g.fd[1]) == 13 && len(g.fd[2]) == 13 && len(g.fd[3]) == 13
-	}
-	g.render(ctx.Stdout())
-	return g.wn
-}
-
 func (g *solGame) move(c, d, n int) bool {
 	if c == d || c < 0 || c > 6 || d < 0 || d > 6 || n < 1 || n > len(g.tb[c]) {
 		return false
@@ -651,10 +345,9 @@ func (g *solGame) move(c, d, n int) bool {
 // ─── Battleship ────────────────────────────────────────────────────────────
 
 type bsState struct {
-	pg, ag [10][10]int8
-	pl     [5]bool
-	ph     int
-	ov, wn bool
+	pg, ag     [10][10]int8
+	ph         int
+	ov, wn     bool
 }
 
 func newBS() *bsState { s := &bsState{}; s.placeAI(); return s }
@@ -706,145 +399,6 @@ func (s *bsState) placeAI() {
 			}
 		}
 	}
-}
-
-func (s *bsState) gs(g *[10][10]int8, h bool) string {
-	var b strings.Builder
-	fmt.Fprint(&b, "  ")
-	for x := 0; x < 10; x++ {
-		fmt.Fprintf(&b, " %s", string(rune('A'+x)))
-	}
-	b.WriteByte('\n')
-	for y := 0; y < 10; y++ {
-		fmt.Fprintf(&b, "%2d", y+1)
-		for x := 0; x < 10; x++ {
-			switch g[y][x] {
-			case 0:
-				fmt.Fprint(&b, " .")
-			case 1:
-				if h {
-					fmt.Fprint(&b, " .")
-				} else {
-					fmt.Fprint(&b, " "+blue("#"))
-				}
-			case 2:
-				fmt.Fprint(&b, " "+red("X"))
-			case 3:
-				fmt.Fprint(&b, " "+dim("o"))
-			}
-		}
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-func (s *bsState) render(w io.Writer) {
-	clearScreen(w)
-	fmt.Fprintln(w, bold(" BATTLESHIP"))
-	if s.ph < 5 {
-		ns := []string{"Carrier(5)", "Battleship(4)", "Cruiser(3)", "Submarine(3)", "Destroyer(2)"}
-		fmt.Fprintln(w, dim("\nPlace ships (A1 H/V, R random, Q):"))
-		fmt.Fprint(w, s.gs(&s.pg, false))
-		fmt.Fprintf(w, dim("  %s\n"), ns[s.ph])
-	} else {
-		fmt.Fprintln(w, dim("\nYou:"))
-		fmt.Fprint(w, s.gs(&s.pg, false))
-		fmt.Fprintln(w, dim("\nEnemy:"))
-		fmt.Fprint(w, s.gs(&s.ag, true))
-		if s.ov {
-			fmt.Fprintln(w, red("\nYou lost!"))
-		} else if s.wn {
-			fmt.Fprintln(w, green("\nYou won!"))
-		}
-	}
-}
-
-func (s *bsState) run(ctx plugin.Context) bool {
-	r := bufio.NewReader(ctx.Stdin())
-	sz := []int{5, 4, 3, 3, 2}
-	for s.ph < 5 {
-		s.render(ctx.Stdout())
-		fmt.Fprint(ctx.Stdout(), "> ")
-		l, e := r.ReadString('\n')
-		if e != nil {
-			return false
-		}
-		l = strings.TrimSpace(strings.ToLower(l))
-		if l == "q" {
-			return false
-		}
-		if l == "r" {
-			for i := s.ph; i < 5; i++ {
-				for {
-					x, y := rand.Intn(10), rand.Intn(10)
-					h := rand.Intn(2) == 0
-					if s.can(&s.pg, x, y, sz[i], h) {
-						s.p(&s.pg, x, y, sz[i], h)
-						s.pl[i] = true
-						break
-					}
-				}
-			}
-			s.ph = 5
-			break
-		}
-		ps := strings.Fields(l)
-		if len(ps) >= 2 {
-			x, y, ok := parseCoord(ps[0])
-			if !ok {
-				continue
-			}
-			h := true
-			if len(ps) >= 3 && (ps[2] == "v" || ps[2] == "vertical") {
-				h = false
-			}
-			if s.can(&s.pg, x, y, sz[s.ph], h) {
-				s.p(&s.pg, x, y, sz[s.ph], h)
-				s.ph++
-			}
-		}
-	}
-	for !s.ov && !s.wn {
-		s.render(ctx.Stdout())
-		fmt.Fprint(ctx.Stdout(), "> ")
-		l, e := r.ReadString('\n')
-		if e != nil {
-			return false
-		}
-		l = strings.TrimSpace(strings.ToLower(l))
-		if l == "q" {
-			return false
-		}
-		x, y, ok := parseCoord(l)
-		if !ok || s.ag[y][x] >= 2 {
-			continue
-		}
-		if s.ag[y][x] == 1 {
-			s.ag[y][x] = 2
-		} else {
-			s.ag[y][x] = 3
-		}
-		if s.sunk(&s.ag) {
-			s.wn = true
-			break
-		}
-		for {
-			ax, ay := rand.Intn(10), rand.Intn(10)
-			if s.pg[ay][ax] < 2 {
-				if s.pg[ay][ax] == 1 {
-					s.pg[ay][ax] = 2
-				} else {
-					s.pg[ay][ax] = 3
-				}
-				if s.sunk(&s.pg) {
-					s.ov = true
-				}
-				break
-			}
-		}
-	}
-	s.render(ctx.Stdout())
-	return s.wn
 }
 
 // ─── Chess ──────────────────────────────────────────────────────────────────
@@ -1244,123 +798,6 @@ func (g *chState) ai() {
 	}
 }
 
-func (g *chState) im(w int8) string {
-	m := map[int8]string{cP: "P", cN: "N", cB: "B", cR: "R", cQ: "Q", cK: "K"}
-	s := m[w]
-	if w < 0 {
-		return strings.ToLower(s)
-	}
-	return s
-}
-
-func (g *chState) render(w io.Writer) {
-	clearScreen(w)
-	fmt.Fprintf(w, " %s", bold("CHESS"))
-	if g.t == 1 {
-		fmt.Fprint(w, dim(" White"))
-	} else {
-		fmt.Fprint(w, dim(" Black"))
-	}
-	fmt.Fprintln(w, dim(" to move"))
-	fmt.Fprintln(w)
-	fmt.Fprint(w, "  ")
-	for x := 0; x < 8; x++ {
-		fmt.Fprintf(w, " %s", string(rune('a'+x)))
-	}
-	fmt.Fprintln(w)
-	for y := 0; y < 8; y++ {
-		fmt.Fprintf(w, "%d", 8-y)
-		for x := 0; x < 8; x++ {
-			p := g.b[y][x]
-			s := " " + g.im(p)
-			if (x+y)%2 == 0 {
-				s = dim(s)
-			}
-			if p > 0 {
-				s = green(s)
-			} else if p < 0 {
-				s = red(s)
-			}
-			fmt.Fprint(w, s)
-		}
-		fmt.Fprintf(w, "%d\n", 8-y)
-	}
-	fmt.Fprint(w, "  ")
-	for x := 0; x < 8; x++ {
-		fmt.Fprintf(w, " %s", string(rune('a'+x)))
-	}
-	fmt.Fprintln(w, "\n")
-	if g.t == 1 {
-		fmt.Fprintln(w, dim("e2 e4|O-O|O-O-O|Q"))
-	}
-	if g.ov {
-		if g.wi > 0 {
-			fmt.Fprintln(w, green("\nWhite wins!"))
-		} else {
-			fmt.Fprintln(w, green("\nBlack wins!"))
-		}
-		fmt.Fprintln(w, dim("Enter"))
-		return
-	}
-}
-
-func (g *chState) run(ctx plugin.Context) bool {
-	r := bufio.NewReader(ctx.Stdin())
-	for !g.ov {
-		g.render(ctx.Stdout())
-		if g.t == -1 {
-			time.Sleep(150e6)
-			g.ai()
-			if g.ov {
-				break
-			}
-			continue
-		}
-		fmt.Fprint(ctx.Stdout(), "> ")
-		l, e := r.ReadString('\n')
-		if e != nil {
-			return false
-		}
-		l = strings.TrimSpace(l)
-		if l == "q" || l == "Q" {
-			return false
-		}
-		if l == "o-o" || l == "O-O" {
-			y := int8(7)
-			if g.t == -1 {
-				y = 0
-			}
-			if g.lg(4, y, 6, y) {
-				g.ap(4, y, 6, y)
-			}
-			continue
-		}
-		if l == "o-o-o" || l == "O-O-O" {
-			y := int8(7)
-			if g.t == -1 {
-				y = 0
-			}
-			if g.lg(4, y, 2, y) {
-				g.ap(4, y, 2, y)
-			}
-			continue
-		}
-		ps := strings.Fields(l)
-		if len(ps) >= 2 && len(ps[0]) >= 2 && len(ps[1]) >= 2 {
-			x1 := int8(ps[0][0] - 'a')
-			y1 := int8(8 - (ps[0][1] - '0'))
-			x2 := int8(ps[1][0] - 'a')
-			y2 := int8(8 - (ps[1][1] - '0'))
-			if g.ib(x1, y1) && g.ib(x2, y2) && g.lg(x1, y1, x2, y2) {
-				g.ap(x1, y1, x2, y2)
-			}
-		}
-	}
-	g.render(ctx.Stdout())
-	r.ReadString('\n')
-	return g.wi > 0
-}
-
 // ─── service implementations ────────────────────────────────────────────────
 
 type msSvc struct{}
@@ -1383,7 +820,7 @@ func (s *msSvc) Play(ctx context.Context, req *connect.Request[pb.MinesweeperReq
 	if b >= w*h {
 		b = w*h - 1
 	}
-	won := newMS(w, h, b).run(pc)
+	won := runMinesweeper(pc, w, h, b)
 	return r(map[bool]string{true: "You won minesweeper!", false: "Boom!"}[won])
 }
 
@@ -1394,7 +831,7 @@ func (s *tSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) (
 	if pc == nil {
 		return r("no context")
 	}
-	won := new2048().run(pc)
+	won := run2048(pc)
 	return r(map[bool]string{true: "2048 reached!", false: "Game over"}[won])
 }
 
@@ -1405,7 +842,7 @@ func (s *solSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest])
 	if pc == nil {
 		return r("no context")
 	}
-	won := newSol().run(pc)
+	won := runSolitaire(pc)
 	return r(map[bool]string{true: "Solitaire completed!", false: "Game over"}[won])
 }
 
@@ -1416,7 +853,7 @@ func (s *bsSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) 
 	if pc == nil {
 		return r("no context")
 	}
-	won := newBS().run(pc)
+	won := runBattleship(pc)
 	return r(map[bool]string{true: "All ships sunk!", false: "Fleet destroyed"}[won])
 }
 
@@ -1427,7 +864,7 @@ func (s *chSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) 
 	if pc == nil {
 		return r("no context")
 	}
-	won := newCh().run(pc)
+	won := runChess(pc)
 	return r(map[bool]string{true: "Checkmate!", false: "AI wins"}[won])
 }
 
