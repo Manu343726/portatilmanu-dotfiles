@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -28,11 +29,12 @@ type RAMSnapshot struct {
 }
 
 type CPUSnapshot struct {
-	TotalPercent  float64
-	UserPercent   float64
-	SystemPercent float64
-	IOwaitPercent float64
-	NumCores      int
+	TotalPercent   float64
+	UserPercent    float64
+	SystemPercent  float64
+	IOwaitPercent  float64
+	NumCores       int
+	PerCorePercent []float64
 }
 
 type DiskSnapshot struct {
@@ -97,12 +99,18 @@ type WiFiSnapshot struct {
 }
 
 type ProcessInfo struct {
-	PID        int
-	Name       string
-	CPUPercent float64
-	MemPercent float64
-	MemMB      float64
-	State      string
+	PID         int
+	Name        string
+	CPUPercent  float64
+	MemPercent  float64
+	MemMB       float64
+	State       string
+	ThreadCount int
+	User        string
+	Priority    int
+	Nice        int
+	Time        int64
+	Command     string
 }
 
 type SharedState struct {
@@ -122,6 +130,15 @@ type SharedState struct {
 	topMemProcess   string
 
 	pollCount int64
+
+	loadAvg1          float64
+	loadAvg5          float64
+	loadAvg15         float64
+	uptimeSeconds     float64
+	processCount      int
+	threadCount       int
+	runningProcCount  int
+	processes         []ProcessInfo
 
 	// History ring buffers (100 entries each)
 	ramHistory      []float64
@@ -144,13 +161,21 @@ func newSharedState() *SharedState {
 }
 
 type systemSnapshot struct {
-	ram    RAMSnapshot
-	cpu    CPUSnapshot
-	disk   DiskSnapshot
-	diskIO DiskIOSnapshot
-	cpuTemp CPUTempSnapshot
-	battery BatterySnapshot
-	wifi    WiFiSnapshot
+	ram             RAMSnapshot
+	cpu             CPUSnapshot
+	disk            DiskSnapshot
+	diskIO          DiskIOSnapshot
+	cpuTemp         CPUTempSnapshot
+	battery         BatterySnapshot
+	wifi            WiFiSnapshot
+	loadAvg1        float64
+	loadAvg5        float64
+	loadAvg15       float64
+	uptimeSeconds   float64
+	processCount    int
+	threadCount     int
+	runningProcCount int
+	processes       []ProcessInfo
 }
 
 func (s *SharedState) update(snap systemSnapshot) {
@@ -168,6 +193,14 @@ func (s *SharedState) update(snap systemSnapshot) {
 	s.keyboardLayout = collectKeyboardLayout()
 	s.topCPUProcess = collectTopCPUProcess()
 	s.topMemProcess = collectTopMemProcess()
+	s.loadAvg1 = snap.loadAvg1
+	s.loadAvg5 = snap.loadAvg5
+	s.loadAvg15 = snap.loadAvg15
+	s.uptimeSeconds = snap.uptimeSeconds
+	s.processCount = snap.processCount
+	s.threadCount = snap.threadCount
+	s.runningProcCount = snap.runningProcCount
+	s.processes = snap.processes
 
 	s.ramHistory = appendRing(s.ramHistory, snap.ram.Percent, s.maxHistory)
 	s.cpuHistory = appendRing(s.cpuHistory, snap.cpu.TotalPercent, s.maxHistory)
@@ -184,11 +217,12 @@ func appendRing(buf []float64, val float64, max int) []float64 {
 	return buf
 }
 
-func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot, WiFiSnapshot, pb.ASUSProfile, pb.GPUProfile, string, string, string) {
+func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot, WiFiSnapshot, pb.ASUSProfile, pb.GPUProfile, string, string, string, float64, float64, float64, float64, int, int, int, []ProcessInfo) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.ram, s.cpu, s.disk, s.diskIO, s.cpuTemp, s.battery, s.wifi,
-		s.asusProfile, s.gpuProfile, s.keyboardLayout, s.topCPUProcess, s.topMemProcess
+		s.asusProfile, s.gpuProfile, s.keyboardLayout, s.topCPUProcess, s.topMemProcess,
+		s.loadAvg1, s.loadAvg5, s.loadAvg15, s.uptimeSeconds, s.processCount, s.threadCount, s.runningProcCount, s.processes
 }
 
 func (s *SharedState) getHistory(resource pb.ResourceType, count int) []float64 {
@@ -242,7 +276,7 @@ type resourcesServer struct {
 }
 
 func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
-	ram, cpu, disk, diskIO, cpuTemp, battery, wifi, asusProfile, gpuProfile, keyboardLayout, topCPUProc, topMemProc := s.state.get()
+	ram, cpu, disk, diskIO, cpuTemp, battery, wifi, asusProfile, gpuProfile, keyboardLayout, topCPUProc, topMemProc, loadAvg1, loadAvg5, loadAvg15, uptimeSec, procCount, threadCount, runningProcCount, _ := s.state.get()
 
 	return &pb.CurrentResponse{
 		Ram: &pb.RAMSnapshot{
@@ -252,11 +286,12 @@ func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
 			Percent:     ram.Percent,
 		},
 		Cpu: &pb.CPUSnapshot{
-			TotalPercent:  cpu.TotalPercent,
-			UserPercent:   cpu.UserPercent,
-			SystemPercent: cpu.SystemPercent,
-			IowaitPercent: cpu.IOwaitPercent,
-			NumCores:      int32(cpu.NumCores),
+			TotalPercent:   cpu.TotalPercent,
+			UserPercent:    cpu.UserPercent,
+			SystemPercent:  cpu.SystemPercent,
+			IowaitPercent:  cpu.IOwaitPercent,
+			NumCores:       int32(cpu.NumCores),
+			PerCorePercent: cpu.PerCorePercent,
 		},
 		Disk: &pb.DiskSnapshot{
 			MountPoint: disk.MountPoint,
@@ -292,11 +327,18 @@ func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
 			Percent:   wifi.Percent,
 			Ssid:      wifi.SSID,
 		},
-		AsusProfile:    asusProfile,
-		GpuProfile:     gpuProfile,
-		KeyboardLayout: keyboardLayout,
-		TopCpuProcess:  topCPUProc,
-		TopMemProcess:  topMemProc,
+		AsusProfile:       asusProfile,
+		GpuProfile:        gpuProfile,
+		KeyboardLayout:    keyboardLayout,
+		TopCpuProcess:     topCPUProc,
+		TopMemProcess:     topMemProc,
+		LoadAverage_1:      loadAvg1,
+		LoadAverage_5:      loadAvg5,
+		LoadAverage_15:     loadAvg15,
+		UptimeSeconds:     uptimeSec,
+		ProcessCount:      int32(procCount),
+		ThreadCount:       int32(threadCount),
+		RunningProcessCount: int32(runningProcCount),
 	}
 }
 
@@ -435,7 +477,7 @@ func (s *resourcesServer) ensureFreshData() {
 
 func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.CurrentRequest]) (*connect.Response[pb.CurrentResponse], error) {
 	s.ensureFreshData()
-	ram, cpu, disk, diskIO, cpuTemp, battery, _, _, _, _, _, _ := s.state.get()
+	ram, cpu, disk, diskIO, cpuTemp, battery, _, _, _, _, _, _, loadAvg1, loadAvg5, loadAvg15, uptimeSec, procCount, _, runningProcCount, _ := s.state.get()
 
 	pc := plugin.ExtractContext(ctx)
 	if pc != nil {
@@ -472,12 +514,15 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 				batteryStr += " (discharging)"
 			}
 		}
-		fmt.Fprintf(pc.Stdout(), " RAM: %.0f/%.0f MB (%.0f%%) | CPU: %.0f%% (%.0f%% user, %.0f%% sys, %.0f%% iowait) | Disk: %.1f/%.1f GB (%.0f%%) on %s | Disk I/O: %.0f r/s %.0f w/s on %s%s\n",
+		loadStr := fmt.Sprintf(" | Load: %.2f %.2f %.2f", loadAvg1, loadAvg5, loadAvg15)
+		uptimeStr := fmt.Sprintf(" | Uptime: %.0fs", uptimeSec)
+		tasksStr := fmt.Sprintf(" | Tasks: %d (%d running)", procCount, runningProcCount)
+		fmt.Fprintf(pc.Stdout(), " RAM: %.0f/%.0f MB (%.0f%%) | CPU: %.0f%% (%.0f%% user, %.0f%% sys, %.0f%% iowait) | Disk: %.1f/%.1f GB (%.0f%%) on %s | Disk I/O: %.0f r/s %.0f w/s on %s%s%s%s%s\n",
 			ram.UsedMB, ram.TotalMB, ram.Percent,
 			cpu.TotalPercent, cpu.UserPercent, cpu.SystemPercent, cpu.IOwaitPercent,
 			disk.UsedGB, disk.TotalGB, disk.Percent, disk.MountPoint,
 			diskIO.ReadsPerSec, diskIO.WritesPerSec, diskIO.Device,
-			batteryStr,
+			batteryStr, loadStr, uptimeStr, tasksStr,
 		)
 	}
 
@@ -486,8 +531,12 @@ func (s *resourcesServer) Current(ctx context.Context, req *connect.Request[pb.C
 
 func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRequest]) (*connect.Response[pb.TopResponse], error) {
 	s.ensureFreshData()
-	ram, cpu, disk, _, _, _, _, _, _, _, _, _ := s.state.get()
-	_ = disk
+	_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, processes := s.state.get()
+
+	count := int(req.Msg.Count)
+	if count <= 0 {
+		count = 10
+	}
 
 	pc := plugin.ExtractContext(ctx)
 	if pc != nil {
@@ -496,37 +545,65 @@ func (s *resourcesServer) Top(ctx context.Context, req *connect.Request[pb.TopRe
 			"peer", peer.Addr,
 			"protocol", peer.Protocol,
 			"render_output", pc.RenderOutput(),
-			"count", req.Msg.Count,
+			"count", count,
 			"sort", req.Msg.Sort,
 		)
 	}
 
-	processes := []*pb.ProcessInfo{
-		{
-			Pid:        1,
-			Name:       "system",
-			MemPercent: ram.Percent,
-			MemMb:      ram.UsedMB,
-		},
+	sorted := sortProcesses(processes, req.Msg.Sort)
+	if len(sorted) > count {
+		sorted = sorted[:count]
 	}
 
-	if cpu.TotalPercent > 0 {
-		processes = append(processes, &pb.ProcessInfo{
-			Pid:        0,
-			Name:       "cpu",
-			CpuPercent: cpu.TotalPercent,
-		})
+	resp := make([]*pb.ProcessInfo, len(sorted))
+	for i, p := range sorted {
+		resp[i] = processInfoToProto(p)
+	}
+
+	if pc != nil && pc.RenderOutput() {
+		fmt.Fprintf(pc.Stdout(), "%-6s %-8s %3s %3s %6s %6s %8s %-s\n",
+			"PID", "USER", "PRI", "NI", "CPU%", "MEM%", "TIME", "COMMAND")
+		for _, p := range resp {
+			fmt.Fprintf(pc.Stdout(), "%-6d %-8s %3d %3d %6.1f %6.1f %8s %-s\n",
+				p.Pid, p.User, p.Priority, p.Nice,
+				p.CpuPercent, p.MemPercent, formatTimePS(p.Time), p.Command)
+		}
 	}
 
 	return connect.NewResponse(&pb.TopResponse{
-		Processes: processes,
+		Processes: resp,
 	}), nil
+}
+
+func sortProcesses(procs []ProcessInfo, sortBy pb.SortOrder) []ProcessInfo {
+	out := make([]ProcessInfo, len(procs))
+	copy(out, procs)
+	for i := 0; i < len(out); i++ {
+		for j := i + 1; j < len(out); j++ {
+			var less bool
+			switch sortBy {
+			case pb.SortOrder_SORT_ORDER_MEMORY:
+				less = out[i].MemPercent < out[j].MemPercent
+			default:
+				less = out[i].CPUPercent < out[j].CPUPercent
+			}
+			if less {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+	return out
 }
 
 func (s *resourcesServer) PS(ctx context.Context, req *connect.Request[pb.PSRequest]) (*connect.Response[pb.PSResponse], error) {
 	s.ensureFreshData()
-	ram, cpu, _, _, _, _, _, _, _, _, _, _ := s.state.get()
-	_ = cpu
+	_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, processes := s.state.get()
+
+	pid := int(req.Msg.Pid)
+	count := int(req.Msg.Count)
+	if count <= 0 {
+		count = 20
+	}
 
 	pc := plugin.ExtractContext(ctx)
 	if pc != nil {
@@ -535,21 +612,94 @@ func (s *resourcesServer) PS(ctx context.Context, req *connect.Request[pb.PSRequ
 			"peer", peer.Addr,
 			"protocol", peer.Protocol,
 			"render_output", pc.RenderOutput(),
-			"pid", req.Msg.Pid,
-			"count", req.Msg.Count,
+			"pid", pid,
+			"count", count,
 		)
 	}
 
+	list := processes
+	if pid > 0 {
+		filtered := make([]ProcessInfo, 0)
+		for _, p := range processes {
+			if p.PID == pid {
+				filtered = append(filtered, p)
+				break
+			}
+		}
+		list = filtered
+	} else {
+		list = sortProcesses(processes, req.Msg.Sort)
+	}
+	if len(list) > count {
+		list = list[:count]
+	}
+
+	resp := make([]*pb.ProcessInfo, len(list))
+	for i, p := range list {
+		resp[i] = processInfoToProto(p)
+	}
+
+	if pc != nil && pc.RenderOutput() {
+		fmt.Fprintf(pc.Stdout(), "%-6s %-8s %3s %3s %6s %6s %8s %-s\n",
+			"PID", "USER", "PRI", "NI", "CPU%", "MEM%", "TIME", "COMMAND")
+		for _, p := range resp {
+			fmt.Fprintf(pc.Stdout(), "%-6d %-8s %3d %3d %6.1f %6.1f %8s %-s\n",
+				p.Pid, p.User, p.Priority, p.Nice,
+				p.CpuPercent, p.MemPercent, formatTimePS(p.Time), p.Command)
+		}
+	}
+
 	return connect.NewResponse(&pb.PSResponse{
-		Processes: []*pb.ProcessInfo{
-			{
-				Pid:        1,
-				Name:       "system",
-				MemPercent: ram.Percent,
-				MemMb:      ram.UsedMB,
-			},
-		},
+		Processes: resp,
 	}), nil
+}
+
+func formatTimePS(jiffies int64) string {
+	cs := jiffies * 10 / 100 // centiseconds
+	s := cs / 100
+	cs %= 100
+	m := s / 60
+	s %= 60
+	if m >= 60 {
+		h := m / 60
+		m %= 60
+		return fmt.Sprintf("%dh%02dm%02ds", h, m, s)
+	}
+	return fmt.Sprintf("%02d:%02d.%02d", m, s, cs)
+}
+
+func processInfoToProto(p ProcessInfo) *pb.ProcessInfo {
+	state := pb.ProcessState_PROCESS_STATE_UNSPECIFIED
+	switch p.State {
+	case "R":
+		state = pb.ProcessState_PROCESS_STATE_RUNNING
+	case "S":
+		state = pb.ProcessState_PROCESS_STATE_SLEEPING
+	case "D":
+		state = pb.ProcessState_PROCESS_STATE_DISK_SLEEP
+	case "Z":
+		state = pb.ProcessState_PROCESS_STATE_ZOMBIE
+	case "T":
+		state = pb.ProcessState_PROCESS_STATE_STOPPED
+	case "t":
+		state = pb.ProcessState_PROCESS_STATE_TRACE_STOP
+	case "X":
+		state = pb.ProcessState_PROCESS_STATE_DEAD
+	}
+	return &pb.ProcessInfo{
+		Pid:         int32(p.PID),
+		Name:        p.Name,
+		CpuPercent:  p.CPUPercent,
+		MemPercent:  p.MemPercent,
+		MemMb:       p.MemMB,
+		State:       state,
+		ThreadCount: int32(p.ThreadCount),
+		User:        p.User,
+		Priority:    int32(p.Priority),
+		Nice:        int32(p.Nice),
+		Time:        p.Time,
+		Command:     p.Command,
+	}
 }
 
 func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.HistoryRequest]) (*connect.Response[pb.HistoryResponse], error) {
@@ -589,14 +739,24 @@ func (s *resourcesServer) History(ctx context.Context, req *connect.Request[pb.H
 }
 
 func collectAll(state *SharedState, tracker *cpuTempTracker) {
+	loadAvg1, loadAvg5, loadAvg15 := collectLoadAvg()
+	procCount, threadCount, runningProcCount := collectProcessCounts()
 	snap := systemSnapshot{
-		ram:     collectRAM(),
-		cpu:     collectCPU(),
-		disk:    collectDisk(),
-		diskIO:  collectDiskIO(),
-		cpuTemp: collectCPUTempWithTracker(tracker),
-		battery: collectBattery(),
-		wifi:    collectWiFi(),
+		ram:             collectRAM(),
+		cpu:             collectCPU(),
+		disk:            collectDisk(),
+		diskIO:          collectDiskIO(),
+		cpuTemp:         collectCPUTempWithTracker(tracker),
+		battery:         collectBattery(),
+		wifi:            collectWiFi(),
+		loadAvg1:        loadAvg1,
+		loadAvg5:        loadAvg5,
+		loadAvg15:       loadAvg15,
+		uptimeSeconds:   collectUptime(),
+		processCount:    procCount,
+		threadCount:     threadCount,
+		runningProcCount: runningProcCount,
+		processes:       collectProcesses(),
 	}
 	state.update(snap)
 }
@@ -637,7 +797,7 @@ func collectRAM() RAMSnapshot {
 	}
 }
 
-type cpuJiffies struct {
+type coreJiffies struct {
 	user   float64
 	nice   float64
 	system float64
@@ -645,7 +805,12 @@ type cpuJiffies struct {
 	iowait float64
 }
 
-var prevCPU *cpuJiffies
+type cpuAllJiffies struct {
+	total coreJiffies
+	cores []coreJiffies
+}
+
+var prevCPUJiffies *cpuAllJiffies
 
 func collectCPU() CPUSnapshot {
 	data, err := os.ReadFile("/proc/stat")
@@ -653,63 +818,351 @@ func collectCPU() CPUSnapshot {
 		return CPUSnapshot{NumCores: runtime.NumCPU()}
 	}
 
-	var cpuLine string
+	var totalLine string
+	var coreLines []string
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.HasPrefix(line, "cpu ") {
-			cpuLine = line
-			break
+			totalLine = line
+		} else if strings.HasPrefix(line, "cpu") && len(line) > 3 && line[3] >= '0' && line[3] <= '9' {
+			coreLines = append(coreLines, line)
 		}
 	}
 
-	if cpuLine == "" {
+	parseCore := func(line string) (coreJiffies, bool) {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			return coreJiffies{}, false
+		}
+		u, _ := strconv.ParseFloat(fields[1], 64)
+		n, _ := strconv.ParseFloat(fields[2], 64)
+		s, _ := strconv.ParseFloat(fields[3], 64)
+		i, _ := strconv.ParseFloat(fields[4], 64)
+		w, _ := strconv.ParseFloat(fields[5], 64)
+		return coreJiffies{u, n, s, i, w}, true
+	}
+
+	totalCur, ok := parseCore(totalLine)
+	if !ok {
 		return CPUSnapshot{NumCores: runtime.NumCPU()}
 	}
 
-	fields := strings.Fields(cpuLine)
-	if len(fields) < 5 {
-		return CPUSnapshot{NumCores: runtime.NumCPU()}
+	coresCur := make([]coreJiffies, 0, len(coreLines))
+	for _, line := range coreLines {
+		if c, ok := parseCore(line); ok {
+			coresCur = append(coresCur, c)
+		}
 	}
 
-	user, _ := strconv.ParseFloat(fields[1], 64)
-	nice, _ := strconv.ParseFloat(fields[2], 64)
-	system, _ := strconv.ParseFloat(fields[3], 64)
-	idle, _ := strconv.ParseFloat(fields[4], 64)
-	iowait, _ := strconv.ParseFloat(fields[5], 64)
-
-	if prevCPU == nil {
-		prevCPU = &cpuJiffies{user, nice, system, idle, iowait}
+	if prevCPUJiffies == nil {
+		prevCPUJiffies = &cpuAllJiffies{total: totalCur, cores: coresCur}
+		perCore := make([]float64, len(coresCur))
 		return CPUSnapshot{
-			NumCores: runtime.NumCPU(),
+			NumCores:       runtime.NumCPU(),
+			PerCorePercent: perCore,
 		}
 	}
 
-	deltaUser := user - prevCPU.user
-	deltaNice := nice - prevCPU.nice
-	deltaSystem := system - prevCPU.system
-	deltaIdle := idle - prevCPU.idle
-	deltaIOwait := iowait - prevCPU.iowait
+	du := totalCur.user - prevCPUJiffies.total.user
+	dn := totalCur.nice - prevCPUJiffies.total.nice
+	ds := totalCur.system - prevCPUJiffies.total.system
+	di := totalCur.idle - prevCPUJiffies.total.idle
+	dw := totalCur.iowait - prevCPUJiffies.total.iowait
 
-	prevCPU = &cpuJiffies{user, nice, system, idle, iowait}
+	totalJiffies := du + dn + ds + di + dw
+	activeJiffies := totalJiffies - di
 
-	total := deltaUser + deltaNice + deltaSystem + deltaIdle + deltaIOwait
-	active := total - deltaIdle
-
-	if total == 0 {
-		return CPUSnapshot{NumCores: runtime.NumCPU()}
+	perCore := make([]float64, len(coresCur))
+	for i := range coresCur {
+		if i >= len(prevCPUJiffies.cores) {
+			continue
+		}
+		cdu := coresCur[i].user - prevCPUJiffies.cores[i].user
+		cdn := coresCur[i].nice - prevCPUJiffies.cores[i].nice
+		cds := coresCur[i].system - prevCPUJiffies.cores[i].system
+		cdi := coresCur[i].idle - prevCPUJiffies.cores[i].idle
+		cdw := coresCur[i].iowait - prevCPUJiffies.cores[i].iowait
+		ct := cdu + cdn + cds + cdi + cdw
+		ca := ct - cdi
+		if ct > 0 {
+			perCore[i] = math.Round(ca/ct*100*10) / 10
+		}
 	}
 
-	percent := math.Round(active/total*100*10) / 10
-	userPercent := math.Round((deltaUser+deltaNice)/total*100*10) / 10
-	sysPercent := math.Round(deltaSystem/total*100*10) / 10
-	ioPercent := math.Round(deltaIOwait/total*100*10) / 10
+	prevCPUJiffies = &cpuAllJiffies{total: totalCur, cores: coresCur}
+
+	if totalJiffies == 0 {
+		return CPUSnapshot{
+			NumCores:       runtime.NumCPU(),
+			PerCorePercent: perCore,
+		}
+	}
+
+	percent := math.Round(activeJiffies/totalJiffies*100*10) / 10
+	userPercent := math.Round((du+dn)/totalJiffies*100*10) / 10
+	sysPercent := math.Round(ds/totalJiffies*100*10) / 10
+	ioPercent := math.Round(dw/totalJiffies*100*10) / 10
 
 	return CPUSnapshot{
-		TotalPercent:  percent,
-		UserPercent:   userPercent,
-		SystemPercent: sysPercent,
-		IOwaitPercent: ioPercent,
-		NumCores:      runtime.NumCPU(),
+		TotalPercent:   percent,
+		UserPercent:    userPercent,
+		SystemPercent:  sysPercent,
+		IOwaitPercent:  ioPercent,
+		NumCores:       runtime.NumCPU(),
+		PerCorePercent: perCore,
 	}
+}
+
+func collectLoadAvg() (float64, float64, float64) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return 0, 0, 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 3 {
+		return 0, 0, 0
+	}
+	la1, _ := strconv.ParseFloat(fields[0], 64)
+	la5, _ := strconv.ParseFloat(fields[1], 64)
+	la15, _ := strconv.ParseFloat(fields[2], 64)
+	return la1, la5, la15
+}
+
+func collectUptime() float64 {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 1 {
+		return 0
+	}
+	uptime, _ := strconv.ParseFloat(fields[0], 64)
+	return uptime
+}
+
+func collectProcessCounts() (total, threads, running int) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0, 0, 0
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		_, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		total++
+		statusData, err := os.ReadFile("/proc/" + e.Name() + "/status")
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(statusData), "\n") {
+			if strings.HasPrefix(line, "Threads:") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					n, _ := strconv.Atoi(fields[1])
+					threads += n
+				}
+				break
+			}
+		}
+	}
+
+	statData, err := os.ReadFile("/proc/stat")
+	if err == nil {
+		for _, line := range strings.Split(string(statData), "\n") {
+			if strings.HasPrefix(line, "procs_running ") {
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					running, _ = strconv.Atoi(fields[1])
+				}
+			}
+		}
+	}
+	return total, threads, running
+}
+
+var uidCache map[int]string
+
+func uidToUser(uid int) string {
+	if uidCache == nil {
+		uidCache = make(map[int]string)
+	}
+	if u, ok := uidCache[uid]; ok {
+		return u
+	}
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		u := fmt.Sprintf("%d", uid)
+		uidCache[uid] = u
+		return u
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) < 3 {
+			continue
+		}
+		u, _ := strconv.Atoi(fields[2])
+		if u == uid {
+			uidCache[uid] = fields[0]
+			return fields[0]
+		}
+	}
+	u := fmt.Sprintf("%d", uid)
+	uidCache[uid] = u
+	return u
+}
+
+var prevProcTimes map[int]int64
+var prevProcPollTime time.Time
+
+func collectProcesses() []ProcessInfo {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil
+	}
+
+	if prevProcTimes == nil {
+		prevProcTimes = make(map[int]int64)
+	}
+	now := time.Now()
+	elapsed := now.Sub(prevProcPollTime)
+	hertz := 100.0
+	elapsedJiffies := elapsed.Seconds() * hertz
+	_ = elapsedJiffies
+
+	totalRAM := 0.0
+	if r := collectRAM(); r.TotalMB > 0 {
+		totalRAM = r.TotalMB
+	}
+
+	var result []ProcessInfo
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+
+		statData, err := os.ReadFile("/proc/" + e.Name() + "/stat")
+		if err != nil {
+			continue
+		}
+
+		// Parse /proc/[pid]/stat
+		statStr := string(statData)
+
+		rparen := strings.LastIndex(statStr, ")")
+		if rparen < 0 {
+			continue
+		}
+		afterParen := strings.TrimSpace(statStr[rparen+1:])
+		statFields := strings.Fields(afterParen)
+		if len(statFields) < 44 {
+			continue
+		}
+
+		// comm is between first '(' and last ')'
+		lparen := strings.Index(statStr, "(")
+		comm := ""
+		if lparen >= 0 && rparen > lparen {
+			comm = statStr[lparen+1 : rparen]
+		}
+		if comm == "" {
+			comm = "?"
+		}
+
+		state := statFields[0]
+		if state == "" {
+			state = "?"
+		}
+
+		// Fields in /proc/[pid]/stat (0-indexed after comm):
+		// 0: state, 1: ppid, 2: pgrp, 3: session, 4: tty_nr, 5: tpgid
+		// 6: flags, 7: minflt, 8: cminflt, 9: majflt, 10: cmajflt
+		// 11: utime, 12: stime, 13: cutime, 14: cstime
+		// 15: priority, 16: nice, 17: num_threads, 18: itrealvalue
+		// 19: starttime
+		utime, _ := strconv.ParseFloat(statFields[11], 64)
+		stime, _ := strconv.ParseFloat(statFields[12], 64)
+		priority, _ := strconv.Atoi(statFields[15])
+		nice, _ := strconv.Atoi(statFields[16])
+		numThreads, _ := strconv.Atoi(statFields[17])
+
+		timeJiffies := int64(utime + stime)
+
+		// Read /proc/[pid]/status for Uid
+		uid := 0
+		vmRSS := 0.0
+		statusData, err := os.ReadFile("/proc/" + e.Name() + "/status")
+		if err == nil {
+			for _, line := range strings.Split(string(statusData), "\n") {
+				if strings.HasPrefix(line, "Uid:") {
+					f := strings.Fields(line)
+					if len(f) >= 2 {
+						uid, _ = strconv.Atoi(f[1])
+					}
+				} else if strings.HasPrefix(line, "VmRSS:") {
+					f := strings.Fields(line)
+					if len(f) >= 2 {
+						v, _ := strconv.ParseFloat(f[1], 64)
+						vmRSS = v / 1024 // kB -> MB
+					}
+				}
+			}
+		}
+
+		// Read /proc/[pid]/cmdline
+		cmdline := comm
+		cmdData, err := os.ReadFile("/proc/" + e.Name() + "/cmdline")
+		if err == nil && len(cmdData) > 0 {
+			// Replace null bytes with spaces, trim trailing null
+			clean := strings.ReplaceAll(string(cmdData), "\x00", " ")
+			clean = strings.TrimRight(clean, " ")
+			if clean != "" {
+				cmdline = clean
+			}
+		}
+
+		cpuPct := 0.0
+		if elapsedJiffies > 0 {
+			if prevTime, ok := prevProcTimes[pid]; ok {
+				procDelta := timeJiffies - prevTime
+				cpuPct = math.Round(float64(procDelta)/elapsedJiffies*100*10) / 10
+			}
+		}
+		prevProcTimes[pid] = timeJiffies
+
+		memPct := 0.0
+		memMB := vmRSS
+		if totalRAM > 0 && vmRSS > 0 {
+			memPct = math.Round(vmRSS/totalRAM*100*10) / 10
+		}
+
+		result = append(result, ProcessInfo{
+			PID:         pid,
+			Name:        comm,
+			CPUPercent:  cpuPct,
+			MemPercent:  memPct,
+			MemMB:       math.Round(memMB*10) / 10,
+			State:       state,
+			ThreadCount: numThreads,
+			User:        uidToUser(uid),
+			Priority:    priority,
+			Nice:        nice,
+			Time:        timeJiffies,
+			Command:     cmdline,
+		})
+	}
+
+	prevProcPollTime = now
+
+	return result
 }
 
 func collectDisk() DiskSnapshot {

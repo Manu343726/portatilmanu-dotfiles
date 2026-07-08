@@ -144,6 +144,13 @@ CurrentResponse contains the latest snapshot of all resources.
 | `top_cpu_process` | string | Name of the process with highest CPU usage. |
 | `top_mem_process` | string | Name of the process with highest memory usage. |
 | `poll_count` | int64 | Monotonic counter incremented on each poll cycle. Tmuxbar plugin uses this to detect fresh data and trigger refresh-client. |
+| `load_average_1` | double | System load average over the last 1 minute. |
+| `load_average_5` | double | System load average over the last 5 minutes. |
+| `load_average_15` | double | System load average over the last 15 minutes. |
+| `uptime_seconds` | double | System uptime in seconds since boot. |
+| `process_count` | int32 | Total number of processes on the system. |
+| `thread_count` | int32 | Total number of threads on the system. |
+| `running_process_count` | int32 | Number of processes currently running (state R). |
 
 ### TopRequest
 
@@ -221,6 +228,7 @@ CPUSnapshot captures CPU utilization at a point in time.
 | `system_percent` | double | CPU time spent in kernel space as percentage. |
 | `iowait_percent` | double | CPU time waiting for I/O operations as percentage. |
 | `num_cores` | int32 | Number of logical CPU cores detected. |
+| `per_core_percent` | repeated double | Per-core CPU usage percentages, indexed from 0. Length equals num_cores. |
 
 ### DiskSnapshot
 
@@ -253,6 +261,9 @@ CPUTempSnapshot captures the CPU temperature from onboard thermal sensors.
 | Field | Type | Description |
 |-------|------|-------------|
 | `temp_celsius` | double | CPU temperature in degrees Celsius. |
+| `min_celsius` | double | Minimum observed temperature since plugin start. |
+| `max_celsius` | double | Maximum observed temperature since plugin start. |
+| `bar_pct` | double | Bar percentage (0-100) within the observed [min, max] range. Used by tmuxbar for color and bar graph thresholds. |
 
 ### BatterySnapshot
 
@@ -290,6 +301,12 @@ ProcessInfo describes a running process.
 | `mem_percent` | double | Memory usage percentage. |
 | `mem_mb` | double | Memory usage in MB. |
 | `state` | resources.ProcessState | Process state. |
+| `thread_count` | int32 | Number of threads in the process. |
+| `user` | string | Username of the process owner. |
+| `priority` | int32 | Kernel scheduling priority. |
+| `nice` | int32 | Nice value (lower = higher priority). |
+| `time` | int64 | Cumulative CPU time consumed (jiffies). |
+| `command` | string | Full command line (argv). |
 
 
 ## Enums

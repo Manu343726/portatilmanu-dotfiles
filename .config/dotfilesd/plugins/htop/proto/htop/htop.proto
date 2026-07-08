@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package htop;
+
+option go_package = "plugins/htop/proto/htop";
+
+service HtopService {
+  rpc Open(OpenRequest) returns (OpenResponse);
+}
+
+message TerminalSize {
+  int32 width = 1;
+  int32 height = 2;
+}
+
+message OpenRequest {
+  TerminalSize terminal_size = 1;
+}
+
+message OpenResponse {}
