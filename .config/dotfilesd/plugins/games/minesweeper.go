@@ -57,17 +57,31 @@ func runMinesweeper(ctx plugin.Context, w, h, bombs int) bool {
 
 	numColors := []tcell.Color{MonoGray, MonoBlue, MonoGreen, MonoRed, MonoOrange, MonoRed, MonoBlue, MonoGray, MonoGray}
 
+	padCols := 4
+	padCell := tview.NewTableCell("   ").
+		SetBackgroundColor(tcell.NewRGBColor(0x27, 0x28, 0x22))
+
 	rebuild := func() {
 		table.Clear()
+
+		headerBg := tcell.NewRGBColor(0x27, 0x28, 0x22)
+
+		for y := 0; y <= h; y++ {
+			for p := 0; p < padCols; p++ {
+				table.SetCell(y, p, padCell)
+				table.SetCell(y, w+1+padCols+p, padCell)
+			}
+		}
+
 		for x := 0; x < w; x++ {
-			table.SetCell(0, x+1, tview.NewTableCell(strconv.Itoa(x%10)).
+			table.SetCell(0, padCols+1+x, tview.NewTableCell(strconv.Itoa(x%10)).
 				SetAlign(tview.AlignCenter).SetTextColor(MonoGray).
-				SetBackgroundColor(tcell.NewRGBColor(0x27, 0x28, 0x22)))
+				SetBackgroundColor(headerBg))
 		}
 		for y := 0; y < h; y++ {
-			table.SetCell(y+1, 0, tview.NewTableCell(strconv.Itoa(y%10)).
+			table.SetCell(y+1, padCols, tview.NewTableCell(strconv.Itoa(y%10)).
 				SetAlign(tview.AlignCenter).SetTextColor(MonoGray).
-				SetBackgroundColor(tcell.NewRGBColor(0x27, 0x28, 0x22)))
+				SetBackgroundColor(headerBg))
 			for x := 0; x < w; x++ {
 				b := game.g[y][x]
 				text := " "
@@ -99,7 +113,7 @@ func runMinesweeper(ctx plugin.Context, w, h, bombs int) bool {
 					}
 				}
 
-				table.SetCell(y+1, x+1, tview.NewTableCell(" "+text+" ").
+				table.SetCell(y+1, padCols+1+x, tview.NewTableCell(" "+text+" ").
 					SetTextColor(color).SetBackgroundColor(bg).SetAlign(tview.AlignCenter))
 			}
 		}
@@ -224,8 +238,8 @@ func runMinesweeper(ctx plugin.Context, w, h, bombs int) bool {
 	flex.AddItem(status, 1, 0, false)
 	flex.AddItem(main, 0, 1, true)
 
-	ga.app.SetRoot(flex, true)
 	rebuild()
+	ga.app.SetRoot(flex, true)
 
 	if err := ga.app.Run(); err != nil {
 		return false

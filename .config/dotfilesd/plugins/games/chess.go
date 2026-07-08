@@ -56,15 +56,26 @@ func runChess(ctx plugin.Context) bool {
 	whitePiece := tcell.NewRGBColor(0xF8, 0xF8, 0xF2)
 	blackPiece := tcell.NewRGBColor(0x80, 0x80, 0x80)
 
+	padCols := 4
+	padCell := tview.NewTableCell("   ").
+		SetBackgroundColor(tcell.NewRGBColor(0x27, 0x28, 0x22))
+
 	rebuild := func() {
 		table.Clear()
+		for y := 0; y < 9; y++ {
+			for p := 0; p < padCols; p++ {
+				table.SetCell(y, p, padCell)
+				table.SetCell(y, 8+1+padCols+p, padCell)
+			}
+		}
+
 		for x := 0; x < 8; x++ {
-			table.SetCell(0, x+1, tview.NewTableCell(" "+string(rune('a'+x))+" ").
+			table.SetCell(0, padCols+1+x, tview.NewTableCell(" "+string(rune('a'+x))+" ").
 				SetAlign(tview.AlignCenter).SetTextColor(MonoGray).
 				SetBackgroundColor(tcell.NewRGBColor(0x27, 0x28, 0x22)))
 		}
 		for y := 0; y < 8; y++ {
-			table.SetCell(y+1, 0, tview.NewTableCell(" "+string(rune('8'-y))+" ").
+			table.SetCell(y+1, padCols, tview.NewTableCell(" "+string(rune('8'-y))+" ").
 				SetAlign(tview.AlignCenter).SetTextColor(MonoGray).
 				SetBackgroundColor(tcell.NewRGBColor(0x27, 0x28, 0x22)))
 			for x := 0; x < 8; x++ {
@@ -87,7 +98,7 @@ func runChess(ctx plugin.Context) bool {
 					bg = selSq
 				}
 
-				table.SetCell(y+1, x+1, tview.NewTableCell(text).
+				table.SetCell(y+1, padCols+1+x, tview.NewTableCell(text).
 					SetTextColor(color).SetBackgroundColor(bg).SetAlign(tview.AlignCenter))
 			}
 		}
