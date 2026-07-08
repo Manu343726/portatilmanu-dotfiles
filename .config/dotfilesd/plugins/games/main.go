@@ -1,12 +1,20 @@
-// Games plugin — TUI games (solitaire, minesweeper, 2048, battleship, chess).
+// Games plugin — TUI games (solitaire, minesweeper, 2048, battleship, chess)
+// plus web-based games served via WASM/HTTP.
 //
-// Each game runs as a terminal-based interactive session using tview widgets.
+// TUI games run as terminal-based interactive sessions using tview widgets.
+// Web games are Ebitengine-based WASM binaries served by an embedded HTTP
+// server and played in a browser.
 package main
 
 import (
 	"context"
+	"embed"
+	"fmt"
+	"io/fs"
 	"math"
 	"math/rand"
+	"net"
+	"net/http"
 
 	"dotfilesd/plugin"
 	pb "plugins/games/proto/games"
@@ -14,6 +22,27 @@ import (
 
 	"connectrpc.com/connect"
 )
+
+//go:embed wasm_assets
+var wasmAssets embed.FS
+
+var webGamesURL string
+
+func startWebServer() {
+	sub, err := fs.Sub(wasmAssets, "wasm_assets")
+	if err != nil {
+		return
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/", http.FileServer(http.FS(sub)))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return
+	}
+	addr := listener.Addr().(*net.TCPAddr)
+	webGamesURL = fmt.Sprintf("http://127.0.0.1:%d", addr.Port)
+	go http.Serve(listener, mux)
+}
 
 // ─── Minesweeper ────────────────────────────────────────────────────────────
 
@@ -824,6 +853,13 @@ func (s *msSvc) Play(ctx context.Context, req *connect.Request[pb.MinesweeperReq
 	return r(map[bool]string{true: "You won minesweeper!", false: "Boom!"}[won])
 }
 
+func (s *msSvc) PlayWeb(ctx context.Context, req *connect.Request[pb.MinesweeperRequest]) (*connect.Response[pb.PlayWebResponse], error) {
+	if webGamesURL == "" {
+		return nil, fmt.Errorf("web games server not available")
+	}
+	return connect.NewResponse(&pb.PlayWebResponse{Url: webGamesURL + "/minesweeper/"}), nil
+}
+
 type tSvc struct{}
 
 func (s *tSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) (*connect.Response[pb.PlayResponse], error) {
@@ -833,6 +869,13 @@ func (s *tSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) (
 	}
 	won := run2048(pc)
 	return r(map[bool]string{true: "2048 reached!", false: "Game over"}[won])
+}
+
+func (s *tSvc) PlayWeb(ctx context.Context, req *connect.Request[pb.PlayRequest]) (*connect.Response[pb.PlayWebResponse], error) {
+	if webGamesURL == "" {
+		return nil, fmt.Errorf("web games server not available")
+	}
+	return connect.NewResponse(&pb.PlayWebResponse{Url: webGamesURL + "/g2048/"}), nil
 }
 
 type solSvc struct{}
@@ -846,6 +889,13 @@ func (s *solSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest])
 	return r(map[bool]string{true: "Solitaire completed!", false: "Game over"}[won])
 }
 
+func (s *solSvc) PlayWeb(ctx context.Context, req *connect.Request[pb.PlayRequest]) (*connect.Response[pb.PlayWebResponse], error) {
+	if webGamesURL == "" {
+		return nil, fmt.Errorf("web games server not available")
+	}
+	return connect.NewResponse(&pb.PlayWebResponse{Url: webGamesURL + "/solitaire/"}), nil
+}
+
 type bsSvc struct{}
 
 func (s *bsSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) (*connect.Response[pb.PlayResponse], error) {
@@ -855,6 +905,13 @@ func (s *bsSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) 
 	}
 	won := runBattleship(pc)
 	return r(map[bool]string{true: "All ships sunk!", false: "Fleet destroyed"}[won])
+}
+
+func (s *bsSvc) PlayWeb(ctx context.Context, req *connect.Request[pb.PlayRequest]) (*connect.Response[pb.PlayWebResponse], error) {
+	if webGamesURL == "" {
+		return nil, fmt.Errorf("web games server not available")
+	}
+	return connect.NewResponse(&pb.PlayWebResponse{Url: webGamesURL + "/battleship/"}), nil
 }
 
 type chSvc struct{}
@@ -868,6 +925,13 @@ func (s *chSvc) Play(ctx context.Context, req *connect.Request[pb.PlayRequest]) 
 	return r(map[bool]string{true: "Checkmate!", false: "AI wins"}[won])
 }
 
+func (s *chSvc) PlayWeb(ctx context.Context, req *connect.Request[pb.PlayRequest]) (*connect.Response[pb.PlayWebResponse], error) {
+	if webGamesURL == "" {
+		return nil, fmt.Errorf("web games server not available")
+	}
+	return connect.NewResponse(&pb.PlayWebResponse{Url: webGamesURL + "/chess/"}), nil
+}
+
 func r(s string) (*connect.Response[pb.PlayResponse], error) {
 	return connect.NewResponse(&pb.PlayResponse{Summary: s}), nil
 }
@@ -875,6 +939,8 @@ func r(s string) (*connect.Response[pb.PlayResponse], error) {
 // ─── main ──────────────────────────────────────────────────────────────────
 
 func main() {
+	startWebServer()
+
 	msP, msH := gamesconnect.NewMinesweeperServiceHandler(&msSvc{})
 	tP, tH := gamesconnect.NewGame2048ServiceHandler(&tSvc{})
 	sP, sH := gamesconnect.NewSolitaireServiceHandler(&solSvc{})
@@ -883,7 +949,7 @@ func main() {
 
 	plugin.Serve(plugin.Config{
 		Name: "games", DisplayName: "Games", Version: "1.0.0",
-		Description: "TUI games: minesweeper, 2048, solitaire, battleship, chess",
+		Description: "TUI games + web games via WASM",
 		DocsProto:   pb.PluginDocs,
 		Services: []plugin.Service{
 			{Name: "games.MinesweeperService", Description: "Minesweeper", Path: msP, Handler: msH, PluginAccessible: true, InteractiveMethods: []string{"Play"}},

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2048</title>
+<style>
+  body {
+    margin: 0;
+    background: #272822;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: 'Courier New', monospace;
+  }
+  canvas {
+    display: block;
+  }
+</style>
+</head>
+<body>
+<script src="wasm_exec.js"></script>
+<script>
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch("g2048.wasm"), go.importObject).then(result => {
+    go.run(result.instance);
+  }).catch(err => {
+    document.body.innerHTML = "<pre style='color:#F92672'>Failed to load 2048 WASM: " + err + "</pre>";
+  });
+</script>
+</body>
+</html>

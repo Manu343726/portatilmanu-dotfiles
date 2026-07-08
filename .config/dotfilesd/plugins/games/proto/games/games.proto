@@ -5,23 +5,28 @@ package games;
 option go_package = "plugins/games/proto/games";
 
 // SolitaireService provides a Klondike solitaire game playable in the
-// terminal. Uses standard Klondike rules: draw from stock, build tableau
-// columns in descending alternating colors, move completed foundations.
+// terminal or web browser. Uses standard Klondike rules: draw from stock,
+// build tableau columns in descending alternating colors, move completed
+// foundations.
 service SolitaireService {
   // Play starts a new solitaire game. The game is interactive: use D to
   // draw from stock, 1-7 to auto-move a tableau column, "s d n" to move
   // n cards from source to destination column, and Q to quit.
   rpc Play(PlayRequest) returns (PlayResponse);
+  // PlayWeb returns a URL to play the game in a web browser via WASM.
+  rpc PlayWeb(PlayRequest) returns (PlayWebResponse);
 }
 
 // MinesweeperService provides a classic minesweeper game playable in the
-// terminal. Reveal cells, flag bombs, and try to clear the board without
-// detonating any mines.
+// terminal or web browser. Reveal cells, flag bombs, and try to clear the
+// board without detonating any mines.
 service MinesweeperService {
   // Play starts a new minesweeper game with configurable dimensions.
   // Controls: WASD/arrows to move cursor, R to reveal, F to flag, Q to quit.
   // Game ends when you reveal a bomb or clear all safe cells.
   rpc Play(MinesweeperRequest) returns (PlayResponse);
+  // PlayWeb returns a URL to play the game in a web browser via WASM.
+  rpc PlayWeb(MinesweeperRequest) returns (PlayWebResponse);
 }
 
 // Game2048Service provides a 2048 sliding tile puzzle game. Combine tiles
@@ -31,6 +36,8 @@ service Game2048Service {
   // in the respective direction. Tiles with the same value merge when they
   // collide. Reach 2048 to win.
   rpc Play(PlayRequest) returns (PlayResponse);
+  // PlayWeb returns a URL to play the game in a web browser via WASM.
+  rpc PlayWeb(PlayRequest) returns (PlayWebResponse);
 }
 
 // BattleshipService provides a battleship game against an AI opponent.
@@ -42,6 +49,8 @@ service BattleshipService {
   // for random placement). Then take turns entering target coordinates
   // (e.g., "B4") to fire at the enemy grid.
   rpc Play(PlayRequest) returns (PlayResponse);
+  // PlayWeb returns a URL to play the game in a web browser via WASM.
+  rpc PlayWeb(PlayRequest) returns (PlayWebResponse);
 }
 
 // ChessService provides a chess game against a simple AI opponent. Uses
@@ -51,6 +60,8 @@ service ChessService {
   // (e.g., "e2 e4"). Special moves: "O-O" for kingside castle, "O-O-O"
   // for queenside castle. The AI plays black automatically.
   rpc Play(PlayRequest) returns (PlayResponse);
+  // PlayWeb returns a URL to play the game in a web browser via WASM.
+  rpc PlayWeb(PlayRequest) returns (PlayWebResponse);
 }
 
 // PlayRequest is the base request for games that don't need extra setup.
@@ -78,4 +89,10 @@ message PlayResponse {
   // Human-readable result summary (e.g., "You won minesweeper!", "Boom!",
   // "Checkmate!", "Game over").
   string summary = 2;
+}
+
+// PlayWebResponse returns the URL for browser-based play via WASM.
+message PlayWebResponse {
+  // URL to open in a browser (e.g. "http://127.0.0.1:9190/g2048/").
+  string url = 1;
 }

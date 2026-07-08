@@ -183,6 +183,14 @@ plugin-build: plugin-proto plugin-oapi-codegen
 		echo "Usage: make plugin-build PLUGIN=<name>"; \
 		exit 1; \
 	fi
+	@# Build WASM games if the plugin has ebiten/ sources
+	@if [ -d "$(PLUGIN_DIR)/$(PLUGIN)/ebiten" ]; then \
+		echo "  building WASM games..."; \
+		for dir in $(PLUGIN_DIR)/$(PLUGIN)/ebiten/*/; do \
+			game=$$(basename $$dir); \
+			cd $$dir && GOOS=js GOARCH=wasm $(GO) build -o $(PLUGIN_DIR)/$(PLUGIN)/wasm_assets/$$game/$$game.wasm .; \
+		done; \
+	fi
 	@mkdir -p $(PLUGIN_CACHE_DIR)/$(PLUGIN)
 	cd $(PLUGIN_DIR)/$(PLUGIN) && $(GO) build -o $(PLUGIN_CACHE_DIR)/$(PLUGIN)/$(PLUGIN) .
 	@echo "plugin '$(PLUGIN)' built."

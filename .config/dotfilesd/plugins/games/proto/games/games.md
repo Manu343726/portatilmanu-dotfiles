@@ -5,26 +5,33 @@
 - [Services](#services)
   - [games.SolitaireService](#gamessolitaireservice)
     - [Play](#play)
+    - [PlayWeb](#playweb)
   - [games.MinesweeperService](#gamesminesweeperservice)
     - [Play](#play)
+    - [PlayWeb](#playweb)
   - [games.Game2048Service](#gamesgame2048service)
     - [Play](#play)
+    - [PlayWeb](#playweb)
   - [games.BattleshipService](#gamesbattleshipservice)
     - [Play](#play)
+    - [PlayWeb](#playweb)
   - [games.ChessService](#gameschessservice)
     - [Play](#play)
+    - [PlayWeb](#playweb)
 - [Messages](#messages)
   - [PlayRequest](#playrequest)
   - [MinesweeperRequest](#minesweeperrequest)
   - [PlayResponse](#playresponse)
+  - [PlayWebResponse](#playwebresponse)
 
 ## Services
 
 ### games.SolitaireService
 
 SolitaireService provides a Klondike solitaire game playable in the
-terminal. Uses standard Klondike rules: draw from stock, build tableau
-columns in descending alternating colors, move completed foundations.
+terminal or web browser. Uses standard Klondike rules: draw from stock,
+build tableau columns in descending alternating colors, move completed
+foundations.
 
 #### Play
 
@@ -35,11 +42,18 @@ n cards from source to destination column, and Q to quit.
 - **Request:** `games.PlayRequest`
 - **Response:** `games.PlayResponse`
 
+#### PlayWeb
+
+PlayWeb returns a URL to play the game in a web browser via WASM.
+
+- **Request:** `games.PlayRequest`
+- **Response:** `games.PlayWebResponse`
+
 ### games.MinesweeperService
 
 MinesweeperService provides a classic minesweeper game playable in the
-terminal. Reveal cells, flag bombs, and try to clear the board without
-detonating any mines.
+terminal or web browser. Reveal cells, flag bombs, and try to clear the
+board without detonating any mines.
 
 #### Play
 
@@ -49,6 +63,13 @@ Game ends when you reveal a bomb or clear all safe cells.
 
 - **Request:** `games.MinesweeperRequest`
 - **Response:** `games.PlayResponse`
+
+#### PlayWeb
+
+PlayWeb returns a URL to play the game in a web browser via WASM.
+
+- **Request:** `games.MinesweeperRequest`
+- **Response:** `games.PlayWebResponse`
 
 ### games.Game2048Service
 
@@ -63,6 +84,13 @@ collide. Reach 2048 to win.
 
 - **Request:** `games.PlayRequest`
 - **Response:** `games.PlayResponse`
+
+#### PlayWeb
+
+PlayWeb returns a URL to play the game in a web browser via WASM.
+
+- **Request:** `games.PlayRequest`
+- **Response:** `games.PlayWebResponse`
 
 ### games.BattleshipService
 
@@ -80,6 +108,13 @@ for random placement). Then take turns entering target coordinates
 - **Request:** `games.PlayRequest`
 - **Response:** `games.PlayResponse`
 
+#### PlayWeb
+
+PlayWeb returns a URL to play the game in a web browser via WASM.
+
+- **Request:** `games.PlayRequest`
+- **Response:** `games.PlayWebResponse`
+
 ### games.ChessService
 
 ChessService provides a chess game against a simple AI opponent. Uses
@@ -93,6 +128,13 @@ for queenside castle. The AI plays black automatically.
 
 - **Request:** `games.PlayRequest`
 - **Response:** `games.PlayResponse`
+
+#### PlayWeb
+
+PlayWeb returns a URL to play the game in a web browser via WASM.
+
+- **Request:** `games.PlayRequest`
+- **Response:** `games.PlayWebResponse`
 
 
 ## Messages
@@ -124,4 +166,12 @@ PlayResponse reports the game outcome.
 |-------|------|-------------|
 | `won` | bool | Whether the player won the game. |
 | `summary` | string | Human-readable result summary (e.g., "You won minesweeper!", "Boom!", "Checkmate!", "Game over"). |
+
+### PlayWebResponse
+
+PlayWebResponse returns the URL for browser-based play via WASM.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | string | URL to open in a browser (e.g. "http://127.0.0.1:9190/g2048/"). |
 
