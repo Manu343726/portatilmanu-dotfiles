@@ -183,7 +183,11 @@ BatteryWidgetResponse contains the battery widget result.
 
 ### StatusBarRequest
 
-StatusBarRequest is currently empty.
+StatusBarRequest configures the combined status bar output.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `max_width` | int32 | Maximum visible width in terminal columns. When set, the server renders widgets in priority order and drops/compacts widgets that don't fit. High-priority widgets (CPU, RAM) are kept, lower-priority ones (WiFi, profiles) are dropped or compacted. 0 means no limit (render all widgets in full form, backward-compatible default). |
 
 ### StatusBarResponse
 

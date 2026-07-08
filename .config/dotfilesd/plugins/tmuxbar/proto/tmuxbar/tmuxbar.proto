@@ -100,8 +100,15 @@ message BatteryWidgetResponse {
   bool charging = 3;
 }
 
-// StatusBarRequest is currently empty.
-message StatusBarRequest {}
+// StatusBarRequest configures the combined status bar output.
+message StatusBarRequest {
+  // Maximum visible width in terminal columns. When set, the server
+  // renders widgets in priority order and drops/compacts widgets that
+  // don't fit. High-priority widgets (CPU, RAM) are kept, lower-priority
+  // ones (WiFi, profiles) are dropped or compacted. 0 means no limit
+  // (render all widgets in full form, backward-compatible default).
+  int32 max_width = 1;
+}
 
 // StatusBarResponse contains the combined status line.
 message StatusBarResponse {

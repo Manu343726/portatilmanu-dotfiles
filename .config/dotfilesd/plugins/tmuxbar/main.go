@@ -19,6 +19,7 @@ import (
 	"plugins/tmuxbar/proto/tmuxbar/tmuxbarconnect"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 )
 
 const barFilled = "◼"
@@ -28,23 +29,51 @@ const barSegments = 10
 type tmuxBarServer struct {
 	resourcesClient resourcesconnect.ResourcesServiceClient
 	cache           widgetCache
+	hostname        string
+	username        string
+	root            string
 }
 
 type widgetCache struct {
-	mu  sync.RWMutex
-	bar string
+	mu   sync.RWMutex
+	data *respb.CurrentResponse
 }
 
-func (c *widgetCache) get() string {
+func (c *widgetCache) get() *respb.CurrentResponse {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.bar
+	return c.data
 }
 
-func (c *widgetCache) set(bar string) {
+func (c *widgetCache) set(data *respb.CurrentResponse) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.bar = bar
+	c.data = data
+}
+
+// stripTmuxStyles removes tmux #[...] color/style sequences.
+func stripTmuxStyles(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '#' && i+1 < len(s) && s[i+1] == '[' {
+			for j := i + 2; j < len(s); j++ {
+				if s[j] == ']' {
+					i = j
+					break
+				}
+			}
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// visibleWidth returns the number of terminal columns s occupies.
+// Counts runes (all our glyphs are single-column in modern terminals).
+func visibleWidth(s string) int {
+	return len([]rune(stripTmuxStyles(s)))
 }
 
 func batteryStatusString(s respb.BatteryStatus) string {
@@ -131,6 +160,169 @@ func formatDuration(m int) string {
 	h := m / 60
 	m = m % 60
 	return fmt.Sprintf("%dh%dm", h, m)
+}
+
+type barWidget struct {
+	priority      int
+	renderFull    func(*respb.CurrentResponse) string
+	renderCompact func(*respb.CurrentResponse) string
+}
+
+func cpuWidgetFull(r *respb.CurrentResponse) string {
+	if r.Cpu == nil {
+		return ""
+	}
+	pct := int(r.Cpu.TotalPercent)
+	return fmt.Sprintf("CPU %s%d%% (%s) %s#[default] ", pctColor(pct), pct, r.TopCpuProcess, bar(pct))
+}
+
+func cpuWidgetCompact(r *respb.CurrentResponse) string {
+	if r.Cpu == nil {
+		return ""
+	}
+	pct := int(r.Cpu.TotalPercent)
+	return fmt.Sprintf("CPU %s%d%%#[default] ", pctColor(pct), pct)
+}
+
+func ramWidgetFull(r *respb.CurrentResponse) string {
+	if r.Ram == nil {
+		return ""
+	}
+	pct := int(r.Ram.Percent)
+	usedGiB := r.Ram.UsedMb / 1024
+	return fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default] ", pctColor(pct), usedGiB, pct, r.TopMemProcess, bar(pct))
+}
+
+func ramWidgetCompact(r *respb.CurrentResponse) string {
+	if r.Ram == nil {
+		return ""
+	}
+	pct := int(r.Ram.Percent)
+	return fmt.Sprintf("RAM %s%d%%#[default] ", pctColor(pct), pct)
+}
+
+func batteryWidgetFull(r *respb.CurrentResponse) string {
+	if r.Battery == nil {
+		return ""
+	}
+	bt := r.Battery
+	pct := int(bt.Percent)
+	status := batteryStatusString(bt.Status)
+	btBar := batteryBar(pct)
+	lc := batteryLabelColor(pct)
+	switch status {
+	case "Charging":
+		if pct >= 100 {
+			return fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] %s %d%% ", btBar, pct)
+		} else if bt.PowerNow > 0 {
+			m := int((bt.EnergyFull - bt.EnergyNow) * 60 / bt.PowerNow)
+			return fmt.Sprintf("#[fg=%s]CHARGING#[default] %s %d%% %s ", lc, btBar, pct, formatDuration(m))
+		}
+		return fmt.Sprintf("#[fg=%s]CHARGING#[default] %s %d%% ", lc, btBar, pct)
+	case "Discharging":
+		if bt.PowerNow > 0 {
+			m := int(bt.EnergyNow * 60 / bt.PowerNow)
+			return fmt.Sprintf("#[fg=%s]BAT#[default] %s %d%% %s ", lc, btBar, pct, formatDuration(m))
+		}
+		return fmt.Sprintf("#[fg=%s]BAT#[default] %s %d%% ", lc, btBar, pct)
+	case "Full", "Not charging":
+		return fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] %s %d%% ", btBar, pct)
+	default:
+		return fmt.Sprintf("%d%% ", pct)
+	}
+}
+
+func batteryWidgetCompact(r *respb.CurrentResponse) string {
+	if r.Battery == nil {
+		return ""
+	}
+	bt := r.Battery
+	pct := int(bt.Percent)
+	status := batteryStatusString(bt.Status)
+	lc := batteryLabelColor(pct)
+	switch status {
+	case "Charging":
+		if pct >= 100 {
+			return fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] ")
+		}
+		return fmt.Sprintf("#[fg=%s]CHARGING#[default] %d%% ", lc, pct)
+	case "Discharging":
+		return fmt.Sprintf("#[fg=%s]BAT#[default] %d%% ", lc, pct)
+	case "Full", "Not charging":
+		return fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] ")
+	default:
+		return fmt.Sprintf("%d%% ", pct)
+	}
+}
+
+func tempWidgetFull(r *respb.CurrentResponse) string {
+	if r.CpuTemp == nil || r.CpuTemp.TempCelsius <= 0 {
+		return ""
+	}
+	pct := int(r.CpuTemp.BarPct)
+	temp := int(r.CpuTemp.TempCelsius)
+	return fmt.Sprintf("TEMP %s%3d°C %s#[default] ", pctColor(pct), temp, bar(pct))
+}
+
+func tempWidgetCompact(r *respb.CurrentResponse) string {
+	if r.CpuTemp == nil || r.CpuTemp.TempCelsius <= 0 {
+		return ""
+	}
+	temp := int(r.CpuTemp.TempCelsius)
+	return fmt.Sprintf("TEMP %3d°C ", temp)
+}
+
+func asusWidgetBoth(r *respb.CurrentResponse) string {
+	// ASUS profile is always compact — already minimal text.
+	switch r.AsusProfile {
+	case respb.ASUSProfile_ASUS_PROFILE_PERF:
+		return "#[fg=#E8871A]PERF#[default] "
+	case respb.ASUSProfile_ASUS_PROFILE_BAL:
+		return "#[fg=#A6E22E]BAL#[default] "
+	case respb.ASUSProfile_ASUS_PROFILE_QUIET:
+		return "#[fg=#66D9EF]QUIET#[default] "
+	default:
+		return ""
+	}
+}
+
+func gpuWidgetBoth(r *respb.CurrentResponse) string {
+	switch r.GpuProfile {
+	case respb.GPUProfile_GPU_PROFILE_EGPU:
+		return "#[fg=#AE81FF]EGPU#[default] "
+	case respb.GPUProfile_GPU_PROFILE_NVIDIA:
+		return "#[fg=#E8871A]NVIDIA#[default] "
+	case respb.GPUProfile_GPU_PROFILE_IGPU:
+		return "#[fg=#66D9EF]IGPU#[default] "
+	default:
+		return "#[fg=#A6E22E]HYBRID#[default] "
+	}
+}
+
+func wifiWidgetFull(r *respb.CurrentResponse) string {
+	if r.Wifi == nil || r.Wifi.Percent <= 0 {
+		return ""
+	}
+	ipct := int(r.Wifi.Percent)
+	return fmt.Sprintf("WIFI %s%d%% (%s) %s#[default] ", pctColor(100-ipct), ipct, r.Wifi.Ssid, bar(ipct))
+}
+
+func wifiWidgetCompact(r *respb.CurrentResponse) string {
+	if r.Wifi == nil || r.Wifi.Percent <= 0 {
+		return ""
+	}
+	ipct := int(r.Wifi.Percent)
+	return fmt.Sprintf("WIFI %s%d%%#[default] ", pctColor(100-ipct), ipct)
+}
+
+var barWidgets = []barWidget{
+	{priority: 0, renderFull: cpuWidgetFull, renderCompact: cpuWidgetCompact},
+	{priority: 1, renderFull: ramWidgetFull, renderCompact: ramWidgetCompact},
+	{priority: 2, renderFull: batteryWidgetFull, renderCompact: batteryWidgetCompact},
+	{priority: 3, renderFull: tempWidgetFull, renderCompact: tempWidgetCompact},
+	{priority: 4, renderFull: wifiWidgetFull, renderCompact: wifiWidgetCompact},
+	{priority: 5, renderFull: asusWidgetBoth, renderCompact: asusWidgetBoth},
+	{priority: 6, renderFull: gpuWidgetBoth, renderCompact: gpuWidgetBoth},
 }
 
 func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.CPUWidgetRequest]) (*connect.Response[pb.CPUWidgetResponse], error) {
@@ -418,122 +610,82 @@ func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.
 	}), nil
 }
 
-func renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string) string {
+func renderPinned(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string) string {
 	var b strings.Builder
-
-	// ASUS profile
-	switch r.AsusProfile {
-	case respb.ASUSProfile_ASUS_PROFILE_PERF:
-		b.WriteString("#[fg=#E8871A]PERF#[default] ")
-	case respb.ASUSProfile_ASUS_PROFILE_BAL:
-		b.WriteString("#[fg=#A6E22E]BAL#[default] ")
-	case respb.ASUSProfile_ASUS_PROFILE_QUIET:
-		b.WriteString("#[fg=#66D9EF]QUIET#[default] ")
-	}
-
-	// GPU profile
-	switch r.GpuProfile {
-	case respb.GPUProfile_GPU_PROFILE_EGPU:
-		b.WriteString("#[fg=#AE81FF]EGPU#[default] ")
-	case respb.GPUProfile_GPU_PROFILE_NVIDIA:
-		b.WriteString("#[fg=#E8871A]NVIDIA#[default] ")
-	case respb.GPUProfile_GPU_PROFILE_IGPU:
-		b.WriteString("#[fg=#66D9EF]IGPU#[default] ")
-	default:
-		b.WriteString("#[fg=#A6E22E]HYBRID#[default] ")
-	}
-	b.WriteString(" ")
-
-	// Battery
-	if bt := r.Battery; bt != nil {
-		pct := int(bt.Percent)
-		status := batteryStatusString(bt.Status)
-		btBar := batteryBar(pct)
-		lc := batteryLabelColor(pct)
-		switch status {
-		case "Charging":
-			if pct >= 100 {
-				b.WriteString(fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] %s %d%%", btBar, pct))
-			} else if bt.PowerNow > 0 {
-				m := int((bt.EnergyFull - bt.EnergyNow) * 60 / bt.PowerNow)
-				b.WriteString(fmt.Sprintf("#[fg=%s]CHARGING#[default] %s %d%% %s", lc, btBar, pct, formatDuration(m)))
-			} else {
-				b.WriteString(fmt.Sprintf("#[fg=%s]CHARGING#[default] %s %d%%", lc, btBar, pct))
-			}
-		case "Discharging":
-			if bt.PowerNow > 0 {
-				m := int(bt.EnergyNow * 60 / bt.PowerNow)
-				b.WriteString(fmt.Sprintf("#[fg=%s]BAT#[default] %s %d%% %s", lc, btBar, pct, formatDuration(m)))
-			} else {
-				b.WriteString(fmt.Sprintf("#[fg=%s]BAT#[default] %s %d%%", lc, btBar, pct))
-			}
-		case "Full", "Not charging":
-			b.WriteString(fmt.Sprintf("#[fg=#A6E22E]PLUGGED#[default] %s %d%%", btBar, pct))
-		default:
-			b.WriteString(fmt.Sprintf("%d%%", pct))
-		}
-		b.WriteString("#[default] ")
-	}
-
-	// CPU
-	if cpu := r.Cpu; cpu != nil {
-		pct := int(cpu.TotalPercent)
-		b.WriteString(fmt.Sprintf("CPU %s%d%% (%s) %s#[default]", pctColor(pct), pct, r.TopCpuProcess, bar(pct)))
-		b.WriteString("#[default] ")
-	}
-
-	// CPU temp
-	if t := r.CpuTemp; t != nil && t.TempCelsius > 0 {
-		pct := int(t.BarPct)
-		temp := int(t.TempCelsius)
-		b.WriteString(fmt.Sprintf("TEMP %s%3d°C %s#[default]", pctColor(pct), temp, bar(pct)))
-		b.WriteString("#[default] ")
-	}
-
-	// RAM
-	if ram := r.Ram; ram != nil {
-		pct := int(ram.Percent)
-		usedGiB := ram.UsedMb / 1024
-		b.WriteString(fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default]", pctColor(pct), usedGiB, pct, r.TopMemProcess, bar(pct)))
-		b.WriteString("#[default] ")
-	}
-
-	// WiFi
-	if w := r.Wifi; w != nil && w.Percent > 0 {
-		ipct := int(w.Percent)
-		b.WriteString(fmt.Sprintf("WIFI %s%d%% (%s) %s#[default]", pctColor(100-ipct), ipct, w.Ssid, bar(ipct)))
-		b.WriteString("#[default] ")
-	}
-
-	// Thin separator before time
 	b.WriteString("#[fg=#E8E8E2,bg=#272822,none]   ")
 	b.WriteString(timeStr)
 	b.WriteString(" #[fg=#E8E8E2,bg=#272822,none]   ")
 	b.WriteString(dateStr)
-
-	// Powerline arrow to red section for layout
 	b.WriteString(" #[fg=#E82572,bg=#272822,none]#[fg=#A6E22E,bg=#E82572,none] ")
 	b.WriteString(r.KeyboardLayout)
-
-	// Powerline arrow to light section for username
 	b.WriteString(" #[fg=#E8E8E2,bg=#E82572,none]#[fg=#272822,bg=#E8E8E2,bold] ")
 	b.WriteString(username)
 	b.WriteString(root)
-
-	// Powerline arrow back to dark section for hostname
 	b.WriteString(" #[fg=#272822,bg=#E8E8E2,none]#[fg=#E8E8E2,bg=#272822,none] ")
 	b.WriteString(host)
 	b.WriteString(" ")
-
 	return b.String()
+}
+
+func renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string, maxWidth int) string {
+	if maxWidth <= 0 {
+		maxWidth = 9999
+	}
+
+	pinned := renderPinned(r, username, root, host, timeStr, dateStr)
+	pinnedW := visibleWidth(pinned)
+	remaining := maxWidth - pinnedW
+
+	var widgetsStr string
+	for _, w := range barWidgets {
+		if remaining <= 0 {
+			break
+		}
+
+		full := w.renderFull(r)
+		if full == "" {
+			continue
+		}
+		fw := visibleWidth(full)
+
+		if fw <= remaining {
+			widgetsStr += full
+			remaining -= fw
+			continue
+		}
+
+		compact := w.renderCompact(r)
+		if compact == "" {
+			continue
+		}
+		cw := visibleWidth(compact)
+		if cw <= remaining {
+			widgetsStr += compact
+			remaining -= cw
+		}
+	}
+
+	return widgetsStr + pinned
 }
 
 func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.StatusBarRequest]) (*connect.Response[pb.StatusBarResponse], error) {
 	pc := plugin.ExtractContext(ctx)
-	text := s.cache.get()
+	data := s.cache.get()
+
+	now := time.Now()
+	timeStr := now.Format("15:04")
+	dateStr := now.Format("02 Jan")
+
+	var text string
+	if data != nil {
+		text = renderBar(data, s.username, s.root, s.hostname, timeStr, dateStr, int(req.Msg.MaxWidth))
+	} else {
+		r := &respb.CurrentResponse{}
+		text = renderPinned(r, s.username, s.root, s.hostname, timeStr, dateStr)
+	}
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.StatusBar")
+		pc.Log().Info("▶ TmuxBar.StatusBar", "max_width", req.Msg.MaxWidth, "len", len(text))
 	}
 
 	if pc != nil && pc.RenderOutput() {
@@ -561,7 +713,18 @@ func initResourcesClient() resourcesconnect.ResourcesServiceClient {
 
 func main() {
 	resClient := initResourcesClient()
-	svc := &tmuxBarServer{resourcesClient: resClient}
+	host, _ := os.Hostname()
+	username := os.Getenv("USER")
+	root := ""
+	if username == "root" {
+		root = "!"
+	}
+	svc := &tmuxBarServer{
+		resourcesClient: resClient,
+		hostname:        host,
+		username:        username,
+		root:            root,
+	}
 	path, handler := tmuxbarconnect.NewTmuxBarServiceHandler(svc)
 
 	plugin.Serve(plugin.Config{
@@ -569,7 +732,6 @@ func main() {
 		DisplayName: "TmuxBar",
 		Version:     "1.0.0",
 		Description: "Tmux status bar widgets — drop-in replacement for shell functions",
-		DocsProto:   pb.PluginDocs,
 		Services: []plugin.Service{
 			{
 				Name:             "tmuxbar.TmuxBarService",
@@ -580,12 +742,6 @@ func main() {
 			},
 		},
 		Background: func(ctx plugin.Context, stop <-chan struct{}) {
-			host, _ := os.Hostname()
-			username := os.Getenv("USER")
-			root := ""
-			if username == "root" {
-				root = "!"
-			}
 			go func() {
 				filter := &respb.WatchFilter{
 					Ram:             true,
@@ -612,9 +768,7 @@ func main() {
 					}
 					for stream.Receive() {
 						msg := stream.Msg()
-						now := time.Now()
-						bar := renderBar(msg, username, root, host, now.Format("15:04"), now.Format("02 Jan"))
-						svc.cache.set(bar)
+						svc.cache.set(proto.Clone(msg).(*respb.CurrentResponse))
 						exec.Command("tmux", "refresh-client", "-S").Run()
 					}
 					select {
