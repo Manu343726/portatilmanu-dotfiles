@@ -782,9 +782,10 @@ func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
 		nodes[p.Pid] = &treeNode{proc: p}
 	}
 
-	// Build parent-child links (preserve process list order)
-	for _, n := range nodes {
-		ppid, ok := h.ppidMap[n.proc.Pid]
+	// Build parent-child links (iterate original list to preserve order)
+	for _, p := range sorted {
+		n := nodes[p.Pid]
+		ppid, ok := h.ppidMap[p.Pid]
 		if !ok {
 			continue
 		}
@@ -795,10 +796,11 @@ func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
 		parent.children = append(parent.children, n)
 	}
 
-	// Flatten roots (processes whose parent isn't in the list, preserve order)
+	// Roots = processes whose parent isn't in the list (preserve order)
 	var roots []*treeNode
-	for _, n := range nodes {
-		ppid, ok := h.ppidMap[n.proc.Pid]
+	for _, p := range sorted {
+		n := nodes[p.Pid]
+		ppid, ok := h.ppidMap[p.Pid]
 		if !ok {
 			roots = append(roots, n)
 			continue
