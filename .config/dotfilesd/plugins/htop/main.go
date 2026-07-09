@@ -489,15 +489,30 @@ func stateChar(s respb.ProcessState) string {
 func stateColor(s respb.ProcessState) string {
 	switch s {
 	case respb.ProcessState_PROCESS_STATE_RUNNING:
-		return "green"
+		return "#A6E22E"  // monokai green
+	case respb.ProcessState_PROCESS_STATE_SLEEPING:
+		return "#66D9EF"  // monokai cyan
 	case respb.ProcessState_PROCESS_STATE_DISK_SLEEP:
-		return "red"
+		return "#E82572"  // monokai red
 	case respb.ProcessState_PROCESS_STATE_ZOMBIE:
-		return "maroon"
+		return "#75715E"  // monokai dark
 	case respb.ProcessState_PROCESS_STATE_STOPPED:
-		return "yellow"
+		return "#E6DB74"  // monokai yellow
+	case respb.ProcessState_PROCESS_STATE_TRACE_STOP:
+		return "#AE81FF"  // monokai purple
 	default:
-		return "white"
+		return "#E8E8E2"  // monokai fg
+	}
+}
+
+func rowColor(s respb.ProcessState) tcell.Color {
+	switch s {
+	case respb.ProcessState_PROCESS_STATE_DISK_SLEEP:
+		return tcell.ColorRed
+	case respb.ProcessState_PROCESS_STATE_ZOMBIE:
+		return tcell.ColorMaroon
+	default:
+		return tcell.ColorWhite
 	}
 }
 
@@ -734,13 +749,15 @@ func (h *htopUI) refreshTable() {
 		table.SetCell(r, colPid, tview.NewTableCell(fmt.Sprintf("%d", p.Pid)).
 			SetAlign(tview.AlignRight).SetTextColor(pidColor))
 
+		rowTc := rowColor(p.State)
+
 		table.SetCell(r, colUser, tview.NewTableCell(truncateStr(p.User, 8)).
-			SetTextColor(tcell.ColorWhite))
+			SetTextColor(rowTc))
 
 		table.SetCell(r, colPri, tview.NewTableCell(fmt.Sprintf("%d", p.Priority)).
-			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+			SetAlign(tview.AlignRight).SetTextColor(rowTc))
 
-		niColor := tcell.ColorWhite
+		niColor := rowTc
 		if p.Nice < 0 {
 			niColor = tcell.ColorRed
 		} else if p.Nice > 0 {
@@ -750,7 +767,7 @@ func (h *htopUI) refreshTable() {
 			SetAlign(tview.AlignRight).SetTextColor(niColor))
 
 		table.SetCell(r, colThr, tview.NewTableCell(fmt.Sprintf("%d", p.ThreadCount)).
-			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+			SetAlign(tview.AlignRight).SetTextColor(rowTc))
 
 		table.SetCell(r, colState, tview.NewTableCell(stateChar(p.State)).
 			SetAlign(tview.AlignCenter).SetTextColor(tcell.GetColor(stateColor(p.State))))
@@ -759,18 +776,20 @@ func (h *htopUI) refreshTable() {
 		table.SetCell(r, colCpu, tview.NewTableCell(fmt.Sprintf("%.1f", p.CpuPercent)).
 			SetAlign(tview.AlignRight).SetTextColor(tcell.GetColor(cpuC)))
 
+		memC := colorForPct(p.MemPercent)
 		table.SetCell(r, colMem, tview.NewTableCell(fmt.Sprintf("%.1f", p.MemPercent)).
-			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+			SetAlign(tview.AlignRight).SetTextColor(tcell.GetColor(memC)))
 
 		ioR := h.ioData[p.Pid].readBytes
 		ioW := h.ioData[p.Pid].writeBytes
 		table.SetCell(r, colIoR, tview.NewTableCell(formatIORate(ioR)).
-			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+			SetAlign(tview.AlignRight).SetTextColor(rowTc))
 		table.SetCell(r, colIoW, tview.NewTableCell(formatIORate(ioW)).
-			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+			SetAlign(tview.AlignRight).SetTextColor(rowTc))
 
+		timeC := colorForPct(float64(p.Time) / 100000)
 		table.SetCell(r, colTime, tview.NewTableCell(formatTime(p.Time)).
-			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+			SetAlign(tview.AlignRight).SetTextColor(tcell.GetColor(timeC)))
 
 		cmdText := p.Command
 		if cmdText == "" {
