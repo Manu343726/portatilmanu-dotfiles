@@ -1,3 +1,9 @@
 #!/usr/bin/env zsh
 
-dotfilesctl display auto-external
+# Wait for the dotfilesd daemon to be available (boot-time safety).
+for i in {1..10}; do
+  dotfilesctl system ping &>/dev/null && break
+  sleep 1
+done
+
+dotfilesctl display auto-external 2>/dev/null
