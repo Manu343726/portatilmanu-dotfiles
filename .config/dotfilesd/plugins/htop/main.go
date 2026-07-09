@@ -159,6 +159,7 @@ type htopUI struct {
 	prevIO  map[int32]ioSample
 	ioData  map[int32]ioSample
 	ppidMap map[int32]int32
+	tgidMap map[int32]int32
 
 	pc        plugin.Context
 	resClient resourcesconnect.ResourcesServiceClient
@@ -190,6 +191,7 @@ func newHtopUI(pc plugin.Context, resClient resourcesconnect.ResourcesServiceCli
 		prevIO:     make(map[int32]ioSample),
 		ioData:     make(map[int32]ioSample),
 		ppidMap:    make(map[int32]int32),
+		tgidMap:    make(map[int32]int32),
 	}
 	h.buildUI()
 	return h
@@ -798,8 +800,16 @@ func (h *htopUI) refreshTable() {
 		if isTagged {
 			cmdText = "\u2713 " + cmdText
 		}
+		isThread := h.tgidMap[p.Pid] != 0 && h.tgidMap[p.Pid] != p.Pid
 		if pfx, ok := prefixes[p.Pid]; ok && pfx != "" {
-			cmdText = pfx + cmdText
+			treeColor := "#66D9EF"
+			if isThread {
+				treeColor = "#A6E22E"
+			}
+			cmdText = "[" + treeColor + "]" + pfx + "[#E8E8E2]" + cmdText
+		}
+		if isThread {
+			cmdText = "[#A6E22E]" + cmdText + "[#E8E8E2]"
 		}
 		table.SetCell(r, colCmd, tview.NewTableCell(cmdText).
 			SetTextColor(tcell.ColorWhite))
@@ -980,36 +990,55 @@ func (h *htopUI) collectIO(procs []*respb.ProcessInfo) {
 }
 
 func (h *htopUI) collectPPID(procs []*respb.ProcessInfo) {
-	m := make(map[int32]int32, len(procs))
+	pm := make(map[int32]int32, len(procs))
+	tm := make(map[int32]int32, len(procs))
 	for _, p := range procs {
-		ppid, err := readProcPPID(int(p.Pid))
+		ppid, tgid, err := readProcStat(int(p.Pid))
 		if err == nil {
-			m[p.Pid] = ppid
+			pm[p.Pid] = ppid
+			tm[p.Pid] = tgid
 		}
 	}
-	h.ppidMap = m
+	h.ppidMap = pm
+	h.tgidMap = tm
 }
 
-func readProcPPID(pid int) (int32, error) {
+func readProcStat(pid int) (ppid int32, tgid int32, err error) {
 	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	s := string(data)
-	// Find the closing paren of comm field, then skip the space + state char
 	i := strings.LastIndex(s, ")")
 	if i < 0 {
-		return 0, fmt.Errorf("bad stat format")
+		return 0, 0, fmt.Errorf("bad stat format")
 	}
-	rest := strings.Fields(s[i+2:]) // skip ") "
+	rest := strings.Fields(s[i+2:])
 	if len(rest) < 2 {
-		return 0, fmt.Errorf("bad stat format")
+		return 0, 0, fmt.Errorf("bad stat format")
 	}
-	ppid, err := strconv.ParseInt(rest[1], 10, 32)
+	ppidv, err := strconv.ParseInt(rest[1], 10, 32)
+	if err != nil {
+		return 0, 0, err
+	}
+	tgidv, err := readProcTGID(pid)
+	if err != nil {
+		tgidv = int64(pid)
+	}
+	return int32(ppidv), int32(tgidv), nil
+}
+
+func readProcTGID(pid int) (int64, error) {
+	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "status"))
 	if err != nil {
 		return 0, err
 	}
-	return int32(ppid), nil
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "Tgid:") {
+			return strconv.ParseInt(strings.TrimSpace(line[5:]), 10, 32)
+		}
+	}
+	return 0, fmt.Errorf("Tgid not found")
 }
 
 func readProcIO(pid int) (ioSample, error) {
