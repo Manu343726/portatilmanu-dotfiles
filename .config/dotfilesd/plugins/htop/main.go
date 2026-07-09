@@ -642,6 +642,16 @@ func (h *htopUI) refreshTable() {
 	h.mu.RUnlock()
 
 	table := h.procTable
+
+	// Save selected PID before clearing
+	selRow, _ := table.GetSelection()
+	selPid := int32(-1)
+	if selRow > 0 && selRow-1 < len(procs) {
+		h.mu.RLock()
+		selPid = procs[selRow-1].Pid
+		h.mu.RUnlock()
+	}
+
 	table.Clear()
 
 	for i, hdr := range colHeaders {
@@ -769,7 +779,15 @@ func (h *htopUI) refreshTable() {
 		table.SetCell(r, colCmd, tview.NewTableCell(cmdText).
 			SetTextColor(tcell.ColorWhite))
 	}
-	table.ScrollToBeginning()
+	// Restore selection to previously selected PID
+	if selPid > 0 {
+		for i, p := range sorted {
+			if p.Pid == selPid {
+				table.Select(i+1, 0)
+				break
+			}
+		}
+	}
 }
 
 func (h *htopUI) sortProcesses(sorted []*respb.ProcessInfo, mode sortMode) {
