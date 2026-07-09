@@ -1,6 +1,26 @@
-# Generated protobuf code — run `make proto` to regenerate
-**/*.pb.go
-**/*.connect.go
-# Generated docs embed code (protoc-gen-docs)
-**/*_docs.go
-**/*_docs.json
+# Ignore all generated and build artifacts by default.
+# Only hand-written source files should be tracked.
+**
+
+# Allow directories (needed for git to traverse)
+!**/
+
+# Allow source files by extension
+!*.go
+!*.mod
+!*.sum
+!*.proto
+
+# Allow explicit assets
+!.gitkeep
+!README*
+
+# Re-deny generated protobuf code (more specific, overrides allow)
+*.pb.go
+*.connect.go
+
+# Re-deny generated docs artifacts
+*_doc.pb
+*_docs.go
+*_docs.json
+**/proto/**/*.md

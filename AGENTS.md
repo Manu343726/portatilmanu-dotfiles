@@ -20,7 +20,12 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
 
 6. Follow the Monokai palette (`#272822` bg, `#A6E22E` accent, etc.) when adding visual configs.
 
-7. **Use the Makefile for building and installing the daemon/CLI.** Run `make build` to compile, then `make install` to deploy binaries. After modifying daemon or client code, always run `make install` and restart the daemon if needed.
+7. **Always use the Makefile for building — never `go build`/`go run` directly.** Running `go build .` inside a plugin directory produces a binary that gets accidentally committed and pushed. Instead:
+   - **Daemon/CLI:** use `make build` then `make install`.
+   - **Plugin:** use `make plugin-build PLUGIN=<name>` (this compiles proto first, then builds to `~/.cache/dotfilesd/plugins/<name>/<name>` — outside the source tree).
+   - **Plugin proto:** use `make plugin-proto PLUGIN=<name>`.
+   - After modifying a plugin, run `make install` (restarts the daemon) or reload plugins manually.
+   - Generated protobuf code (`*.pb.go`, `*connect/*.connect.go`, `*_docs.go`, `*_doc.pb`, `**/proto/**/*.md`), docs artifacts, and ELF binaries are all gitignored. Never `git add` them.
 
 8. **Use the dotfilesd daemon for dotfiles operations.** The daemon runs as a systemd user service and exposes:
    - **MCP** via `dotfilesctl mcp` stdio — for AI agents (tools: `system_ping`, `system_info`, `system_sudo`, `dotfiles_status`, `dotfiles_git`, `exec_run`, `config_reload`).

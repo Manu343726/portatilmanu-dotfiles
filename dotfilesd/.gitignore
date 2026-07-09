@@ -1,6 +1,9 @@
 /dotfilesd
 /dotfilesctl
+/tui-diag
+/protoc-gen-docs
 /logs/
 __debug_bin*
 proto/**/*.pb.go
 proto/**/*.connect.go
+docs/proto/**

@@ -97,13 +97,8 @@
 /.config/autorandr/laptop-only/*
 !/.config/autorandr/laptop-only/config
 !/.config/autorandr/laptop-only/setup
-*.cache/dotfilesd/plugins/**/games
+*.cache/dotfilesd/plugins/*/games
 /.config/dotfilesd/plugins/*/games
 # Generated OpenAPI clients (oapi-codegen -> api/<name>/)
 /.config/dotfilesd/plugins/*/api/*/
 *.local/bin/*
-
-
-# Ignore compiled binaries (build artifacts)
-dotfilesd/tui-diag
-/.config/dotfilesd/plugins/*/tuidiag
