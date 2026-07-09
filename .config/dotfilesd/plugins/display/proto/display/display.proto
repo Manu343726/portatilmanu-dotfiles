@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package display;
+
+option go_package = "plugins/display/proto/display";
+
+// DisplayService manages display outputs via xrandr. Handles internal/external
+// display detection across GPU modes (Integrated: eDP, Mux/DGPU: DP-0).
+service DisplayService {
+  // GetOutputs returns the current state of all display outputs via xrandr.
+  // Returns per-output connection/primary status and detects which output is
+  // the internal laptop panel and which is the first external monitor.
+  rpc GetOutputs(GetOutputsRequest) returns (GetOutputsResponse);
+  // SetLayout switches to a display layout (laptop-only, external-only,
+  // extended, or mirror). Performs all xrandr operations in a single call
+  // for atomic screen configuration.
+  rpc SetLayout(SetLayoutRequest) returns (SetLayoutResponse);
+  // AutoExternal is the boot-time auto-detection handler. Sleeps 2 seconds
+  // for display driver enumeration, then switches to external-only if an
+  // external monitor is connected. Called from i3 config via
+  // exec --no-startup-id.
+  rpc AutoExternal(AutoExternalRequest) returns (AutoExternalResponse);
+  // AutorandrTrigger is the udev hotplug handler called on DRM change events.
+  // Detects display state after a 1-second settle and switches to
+  // external-only or laptop-only accordingly.
+  rpc AutorandrTrigger(AutorandrTriggerRequest) returns (AutorandrTriggerResponse);
+}
+
+// DisplayLayout represents a display configuration profile.
+enum DisplayLayout {
+  // No layout change — return current state.
+  DISPLAY_LAYOUT_UNSPECIFIED = 0;
+  // Internal laptop panel only, external displays disabled.
+  DISPLAY_LAYOUT_LAPTOP_ONLY = 1;
+  // External display only, internal laptop panel disabled.
+  DISPLAY_LAYOUT_EXTERNAL_ONLY = 2;
+  // Both displays enabled, external placed to the right of internal.
+  DISPLAY_LAYOUT_EXTENDED = 3;
+  // Both displays enabled with mirrored content (same-as clone).
+  DISPLAY_LAYOUT_MIRROR = 4;
+}
+
+// Status of a single display output.
+enum OutputStatus {
+  // Unknown or unspecified status.
+  OUTPUT_STATUS_UNSPECIFIED = 0;
+  // Output is physically connected and enabled.
+  OUTPUT_STATUS_CONNECTED = 1;
+  // Output is physically connected but disabled (e.g., turned off by xrandr).
+  OUTPUT_STATUS_CONNECTED_DISABLED = 2;
+  // Output is disconnected (no monitor attached).
+  OUTPUT_STATUS_DISCONNECTED = 3;
+}
+
+// Information about a single display output as reported by xrandr.
+message Output {
+  // xrandr output name (e.g., "eDP", "DP-0", "DisplayPort-1-1").
+  string name = 1;
+  // Connection and enablement status.
+  OutputStatus status = 2;
+  // Whether this output is currently the primary display.
+  bool primary = 3;
+  // Current resolution as reported by xrandr (e.g., "1920x1200").
+  // Empty if the output is disabled or disconnected.
+  string resolution = 4;
+  // Whether this output is detected as the internal laptop panel.
+  bool internal = 5;
+}
+
+message GetOutputsRequest {}
+
+message GetOutputsResponse {
+  // All display outputs known to xrandr.
+  repeated Output outputs = 1;
+  // Name of the detected internal display (e.g., "eDP" or "DP-0").
+  // Empty if no internal display is detected.
+  string internal = 2;
+  // Name of the first detected external display (e.g., "DisplayPort-1-1").
+  // Empty if no external display is connected.
+  string external = 3;
+  // The currently active layout based on output states.
+  DisplayLayout active_layout = 4;
+}
+
+message SetLayoutRequest {
+  // The layout to apply.
+  DisplayLayout layout = 1;
+}
+
+message SetLayoutResponse {
+  // Whether the layout was applied successfully.
+  bool success = 1;
+  // Human-readable status message (e.g., "Switched to external only" or
+  // error description).
+  string message = 2;
+}
+
+message AutoExternalRequest {
+  // Seconds to wait before probing (default 2).
+  int32 settle_seconds = 1;
+}
+
+message AutoExternalResponse {
+  // Whether an external was detected and the layout was switched.
+  bool switched = 1;
+  // Name of the external display that was enabled, if any.
+  string external = 2;
+  // Human-readable status message.
+  string message = 3;
+}
+
+message AutorandrTriggerRequest {
+  // Seconds to wait before probing (default 1).
+  int32 settle_seconds = 1;
+}
+
+message AutorandrTriggerResponse {
+  // Whether an external display was detected.
+  bool external_connected = 1;
+  // The layout that was applied (external-only or laptop-only).
+  DisplayLayout layout_applied = 2;
+  // Human-readable status message.
+  string message = 3;
+}

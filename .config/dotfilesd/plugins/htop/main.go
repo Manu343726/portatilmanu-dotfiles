@@ -110,7 +110,8 @@ func (h *htopUI) buildUI() {
 	h.headerView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetRegions(false).
-		SetWordWrap(false)
+		SetWrap(true).
+		SetWordWrap(true)
 
 	h.procTable = tview.NewTable().
 		SetSelectable(true, false).
@@ -131,7 +132,7 @@ func (h *htopUI) buildUI() {
 
 	h.flex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(h.headerView, 0, 0, false).
+		AddItem(h.headerView, 5, 0, false).
 		AddItem(h.procTable, 0, 1, true).
 		AddItem(h.footerView, 1, 0, false)
 }
@@ -291,12 +292,20 @@ func (h *htopUI) refreshHeader() {
 	text := ""
 
 	if cpu != nil {
-		for i, p := range cpu.PerCorePercent {
-			c := colorForPct(p)
-			text += fmt.Sprintf(" %d [%s]%s[default] [%s]%5.1f%%[default]",
-				i, c, bar(p, c, 8), c, p)
+		coresPerRow := 8
+		ncpu := len(cpu.PerCorePercent)
+		if ncpu <= coresPerRow {
+			coresPerRow = ncpu
 		}
-		text += "\n"
+		for i := 0; i < ncpu; i += coresPerRow {
+			for j := 0; j < coresPerRow && i+j < ncpu; j++ {
+				p := cpu.PerCorePercent[i+j]
+				c := colorForPct(p)
+				text += fmt.Sprintf(" %2d [%s]%s[default] [%s]%5.1f%%[default]",
+					i+j, c, bar(p, c, 8), c, p)
+			}
+			text += "\n"
+		}
 	}
 
 	if ram != nil {
@@ -394,8 +403,8 @@ func (s *htopServer) Open(ctx context.Context, req *connect.Request[pb.OpenReque
 		return nil, fmt.Errorf("no plugin context")
 	}
 
-	width := int(req.Msg.TerminalSize.GetWidth())
-	height := int(req.Msg.TerminalSize.GetHeight())
+	width := int(req.Msg.TerminalWidth)
+	height := int(req.Msg.TerminalHeight)
 	if width <= 0 {
 		width = 132
 	}

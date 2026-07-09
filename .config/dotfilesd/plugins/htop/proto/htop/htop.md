@@ -6,7 +6,6 @@
   - [htop.HtopService](#htophtopservice)
     - [Open](#open)
 - [Messages](#messages)
-  - [TerminalSize](#terminalsize)
   - [OpenRequest](#openrequest)
   - [OpenResponse](#openresponse)
 
@@ -22,18 +21,12 @@
 
 ## Messages
 
-### TerminalSize
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `width` | int32 |  |
-| `height` | int32 |  |
-
 ### OpenRequest
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `terminal_size` | htop.TerminalSize |  |
+| `terminal_width` | int32 |  |
+| `terminal_height` | int32 |  |
 
 ### OpenResponse
 

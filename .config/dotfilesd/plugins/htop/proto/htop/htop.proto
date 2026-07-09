@@ -8,13 +8,9 @@ service HtopService {
   rpc Open(OpenRequest) returns (OpenResponse);
 }
 
-message TerminalSize {
-  int32 width = 1;
-  int32 height = 2;
-}
-
 message OpenRequest {
-  TerminalSize terminal_size = 1;
+  int32 terminal_width = 1;
+  int32 terminal_height = 2;
 }
 
 message OpenResponse {}

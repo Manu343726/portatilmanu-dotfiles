@@ -1,22 +1,9 @@
 #!/usr/bin/env sh
-# bail if X is unavailable (avoids blocking udev -> shutdown deadlock)
 timeout 2 xrandr &>/dev/null || exit 0
 
-sleep 1
 export DISPLAY=:0
 export XAUTHORITY=/home/manu343726/.Xauthority
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 export HOME=/home/manu343726
 
-ext_connected=$(xrandr | grep "DisplayPort-1-1 connected" | head -1)
-
-if [ -n "$ext_connected" ]; then
-  # External plugged in: set external-only
-  # (framebuffer grows, single call works)
-  xrandr --output DisplayPort-1-1 --auto --primary --output DP-0 --off
-else
-  # External unplugged: set laptop-only
-  # framebuffer shrinks, need two calls
-  xrandr --output DisplayPort-1-1 --off 2>/dev/null
-  xrandr --output DP-0 --auto --primary
-fi
+dotfilesctl display autorandr-trigger

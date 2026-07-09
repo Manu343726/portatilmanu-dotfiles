@@ -1,7 +1,6 @@
 #!/usr/bin/env zsh
-int="eDP"
-ext=$(xrandr | awk '/ connected / && !/^(eDP|DP-0)/ {print $1}' | head -1)
 
+ext=$(dotfilesctl display get-outputs 2>/dev/null | sed -n 's/^External: //p')
 if [[ -z "$ext" ]]; then
   notify-send "Screen Layout" "No external display detected"
   exit 1
@@ -14,24 +13,24 @@ layouts=(
   "Both (mirror)"
 )
 
-choice=$(printf '%s\n' "${layouts[@]}" | rofi -dmenu -p "Screen Layout" -mesg "Internal: $int | External: $ext" -l 4 -theme /home/manu343726/.config/rofi/monokai.rasi)
+choice=$(printf '%s\n' "${layouts[@]}" | rofi -dmenu -p "Screen Layout" -l 4 -theme /home/manu343726/.config/rofi/monokai.rasi)
 [[ -z "$choice" ]] && exit 0
 
 case "$choice" in
   "Laptop only")
-    xrandr --output "$int" --auto --primary --output "$ext" --off
+    dotfilesctl display set-layout --layout=LAPTOP_ONLY
     notify-send "Screen Layout" "Laptop only"
     ;;
   "External only")
-    xrandr --output "$ext" --auto --primary --output "$int" --off
+    dotfilesctl display set-layout --layout=EXTERNAL_ONLY
     notify-send "Screen Layout" "External only"
     ;;
   "Both (extended)")
-    xrandr --output "$int" --auto --primary --output "$ext" --auto --right-of "$int"
+    dotfilesctl display set-layout --layout=EXTENDED
     notify-send "Screen Layout" "Both extended"
     ;;
   "Both (mirror)")
-    xrandr --output "$int" --auto --primary --output "$ext" --auto --same-as "$int"
+    dotfilesctl display set-layout --layout=MIRROR
     notify-send "Screen Layout" "Both mirrored"
     ;;
 esac

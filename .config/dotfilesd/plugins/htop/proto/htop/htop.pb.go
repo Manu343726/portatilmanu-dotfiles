@@ -21,68 +21,17 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type TerminalSize struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Width         int32                  `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`
-	Height        int32                  `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TerminalSize) Reset() {
-	*x = TerminalSize{}
-	mi := &file_proto_htop_htop_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TerminalSize) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TerminalSize) ProtoMessage() {}
-
-func (x *TerminalSize) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_htop_htop_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TerminalSize.ProtoReflect.Descriptor instead.
-func (*TerminalSize) Descriptor() ([]byte, []int) {
-	return file_proto_htop_htop_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *TerminalSize) GetWidth() int32 {
-	if x != nil {
-		return x.Width
-	}
-	return 0
-}
-
-func (x *TerminalSize) GetHeight() int32 {
-	if x != nil {
-		return x.Height
-	}
-	return 0
-}
-
 type OpenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TerminalSize  *TerminalSize          `protobuf:"bytes,1,opt,name=terminal_size,json=terminalSize,proto3" json:"terminal_size,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TerminalWidth  int32                  `protobuf:"varint,1,opt,name=terminal_width,json=terminalWidth,proto3" json:"terminal_width,omitempty"`
+	TerminalHeight int32                  `protobuf:"varint,2,opt,name=terminal_height,json=terminalHeight,proto3" json:"terminal_height,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *OpenRequest) Reset() {
 	*x = OpenRequest{}
-	mi := &file_proto_htop_htop_proto_msgTypes[1]
+	mi := &file_proto_htop_htop_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -94,7 +43,7 @@ func (x *OpenRequest) String() string {
 func (*OpenRequest) ProtoMessage() {}
 
 func (x *OpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_htop_htop_proto_msgTypes[1]
+	mi := &file_proto_htop_htop_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -107,14 +56,21 @@ func (x *OpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenRequest.ProtoReflect.Descriptor instead.
 func (*OpenRequest) Descriptor() ([]byte, []int) {
-	return file_proto_htop_htop_proto_rawDescGZIP(), []int{1}
+	return file_proto_htop_htop_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *OpenRequest) GetTerminalSize() *TerminalSize {
+func (x *OpenRequest) GetTerminalWidth() int32 {
 	if x != nil {
-		return x.TerminalSize
+		return x.TerminalWidth
 	}
-	return nil
+	return 0
+}
+
+func (x *OpenRequest) GetTerminalHeight() int32 {
+	if x != nil {
+		return x.TerminalHeight
+	}
+	return 0
 }
 
 type OpenResponse struct {
@@ -125,7 +81,7 @@ type OpenResponse struct {
 
 func (x *OpenResponse) Reset() {
 	*x = OpenResponse{}
-	mi := &file_proto_htop_htop_proto_msgTypes[2]
+	mi := &file_proto_htop_htop_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -137,7 +93,7 @@ func (x *OpenResponse) String() string {
 func (*OpenResponse) ProtoMessage() {}
 
 func (x *OpenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_htop_htop_proto_msgTypes[2]
+	mi := &file_proto_htop_htop_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -150,19 +106,17 @@ func (x *OpenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenResponse.ProtoReflect.Descriptor instead.
 func (*OpenResponse) Descriptor() ([]byte, []int) {
-	return file_proto_htop_htop_proto_rawDescGZIP(), []int{2}
+	return file_proto_htop_htop_proto_rawDescGZIP(), []int{1}
 }
 
 var File_proto_htop_htop_proto protoreflect.FileDescriptor
 
 const file_proto_htop_htop_proto_rawDesc = "" +
 	"\n" +
-	"\x15proto/htop/htop.proto\x12\x04htop\"<\n" +
-	"\fTerminalSize\x12\x14\n" +
-	"\x05width\x18\x01 \x01(\x05R\x05width\x12\x16\n" +
-	"\x06height\x18\x02 \x01(\x05R\x06height\"F\n" +
-	"\vOpenRequest\x127\n" +
-	"\rterminal_size\x18\x01 \x01(\v2\x12.htop.TerminalSizeR\fterminalSize\"\x0e\n" +
+	"\x15proto/htop/htop.proto\x12\x04htop\"]\n" +
+	"\vOpenRequest\x12%\n" +
+	"\x0eterminal_width\x18\x01 \x01(\x05R\rterminalWidth\x12'\n" +
+	"\x0fterminal_height\x18\x02 \x01(\x05R\x0eterminalHeight\"\x0e\n" +
 	"\fOpenResponse2<\n" +
 	"\vHtopService\x12-\n" +
 	"\x04Open\x12\x11.htop.OpenRequest\x1a\x12.htop.OpenResponseB\x19Z\x17plugins/htop/proto/htopb\x06proto3"
@@ -179,21 +133,19 @@ func file_proto_htop_htop_proto_rawDescGZIP() []byte {
 	return file_proto_htop_htop_proto_rawDescData
 }
 
-var file_proto_htop_htop_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proto_htop_htop_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proto_htop_htop_proto_goTypes = []any{
-	(*TerminalSize)(nil), // 0: htop.TerminalSize
-	(*OpenRequest)(nil),  // 1: htop.OpenRequest
-	(*OpenResponse)(nil), // 2: htop.OpenResponse
+	(*OpenRequest)(nil),  // 0: htop.OpenRequest
+	(*OpenResponse)(nil), // 1: htop.OpenResponse
 }
 var file_proto_htop_htop_proto_depIdxs = []int32{
-	0, // 0: htop.OpenRequest.terminal_size:type_name -> htop.TerminalSize
-	1, // 1: htop.HtopService.Open:input_type -> htop.OpenRequest
-	2, // 2: htop.HtopService.Open:output_type -> htop.OpenResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 0: htop.HtopService.Open:input_type -> htop.OpenRequest
+	1, // 1: htop.HtopService.Open:output_type -> htop.OpenResponse
+	1, // [1:2] is the sub-list for method output_type
+	0, // [0:1] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_proto_htop_htop_proto_init() }
@@ -207,7 +159,7 @@ func file_proto_htop_htop_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_htop_htop_proto_rawDesc), len(file_proto_htop_htop_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
