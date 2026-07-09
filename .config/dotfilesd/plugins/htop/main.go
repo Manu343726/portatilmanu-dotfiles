@@ -674,16 +674,12 @@ func (h *htopUI) refreshTable() {
 		filtered = append(filtered, p)
 	}
 
-	var sorted []*respb.ProcessInfo
-	if h.treeMode {
-		sorted = h.flattenTree(filtered)
-	} else {
-		sorted = make([]*respb.ProcessInfo, len(filtered))
-		copy(sorted, filtered)
+	sorted := make([]*respb.ProcessInfo, len(filtered))
+	copy(sorted, filtered)
+	if !h.treeMode {
 		h.sortProcesses(sorted, sortBy)
 	}
 
-	// Precompute tree indent levels
 	indent := make(map[int32]int)
 	if h.treeMode {
 		for _, p := range sorted {
@@ -767,63 +763,6 @@ func (h *htopUI) refreshTable() {
 			SetTextColor(tcell.ColorWhite))
 	}
 	table.ScrollToBeginning()
-}
-
-type treeNode struct {
-	proc     *respb.ProcessInfo
-	children []*treeNode
-	level    int
-}
-
-func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
-	// Build node map
-	nodes := make(map[int32]*treeNode, len(sorted))
-	for _, p := range sorted {
-		nodes[p.Pid] = &treeNode{proc: p}
-	}
-
-	// Build parent-child links (iterate original list to preserve order)
-	for _, p := range sorted {
-		n := nodes[p.Pid]
-		ppid, ok := h.ppidMap[p.Pid]
-		if !ok {
-			continue
-		}
-		parent, ok := nodes[ppid]
-		if !ok || parent == n {
-			continue
-		}
-		parent.children = append(parent.children, n)
-	}
-
-	// Roots = processes whose parent isn't in the list (preserve order)
-	var roots []*treeNode
-	for _, p := range sorted {
-		n := nodes[p.Pid]
-		ppid, ok := h.ppidMap[p.Pid]
-		if !ok {
-			roots = append(roots, n)
-			continue
-		}
-		if _, found := nodes[ppid]; !found {
-			roots = append(roots, n)
-		}
-	}
-
-	var result []*respb.ProcessInfo
-	var walk func(n *treeNode, level int)
-	walk = func(n *treeNode, level int) {
-		n.level = level
-		result = append(result, n.proc)
-		for _, c := range n.children {
-			walk(c, level+1)
-		}
-	}
-	for _, n := range roots {
-		walk(n, 0)
-	}
-
-	return result
 }
 
 func (h *htopUI) sortProcesses(sorted []*respb.ProcessInfo, mode sortMode) {
