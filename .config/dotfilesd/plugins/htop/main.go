@@ -697,10 +697,20 @@ func (h *htopUI) refreshTable() {
 		h.sortProcesses(sorted, sortBy)
 	}
 
-	indent := make(map[int32]int)
+	prefixes := make(map[int32]string)
 	if h.treeMode {
+		// Build parent→children map
+		children := make(map[int32][]int32)
 		for _, p := range sorted {
-			indent[p.Pid] = getIndentLevel(p.Pid, h.ppidMap)
+			ppid, ok := h.ppidMap[p.Pid]
+			if !ok {
+				continue
+			}
+			children[ppid] = append(children[ppid], p.Pid)
+		}
+		// Compute prefix for each process
+		for _, p := range sorted {
+			prefixes[p.Pid] = treePrefix(p.Pid, h.ppidMap, children)
 		}
 	}
 
@@ -769,12 +779,8 @@ func (h *htopUI) refreshTable() {
 		if isTagged {
 			cmdText = "\u2713 " + cmdText
 		}
-		if h.treeMode {
-			lvl := indent[p.Pid]
-			if lvl > 0 {
-				prefix := strings.Repeat("  ", lvl)
-				cmdText = prefix + "\u2514 " + cmdText
-			}
+		if pfx, ok := prefixes[p.Pid]; ok && pfx != "" {
+			cmdText = pfx + cmdText
 		}
 		table.SetCell(r, colCmd, tview.NewTableCell(cmdText).
 			SetTextColor(tcell.ColorWhite))
@@ -1020,28 +1026,56 @@ func formatIORate(bytes int64) string {
 	}
 }
 
-func getIndentLevel(pid int32, ppidMap map[int32]int32) int {
-	level := 0
+func treePrefix(pid int32, ppidMap map[int32]int32, children map[int32][]int32) string {
+	// Build ancestor chain
+	type ancestor struct {
+		id      int32
+		isLast  bool
+	}
+	var chain []ancestor
 	seen := make(map[int32]bool)
 	current := pid
 	for {
 		if seen[current] {
-			return level
+			break
 		}
 		seen[current] = true
 		ppid, ok := ppidMap[current]
 		if !ok || ppid == 0 || ppid == current {
-			return level
+			break
 		}
 		if _, ok := ppidMap[ppid]; !ok {
-			return level
+			break
 		}
+		siblings := children[ppid]
+		isLast := len(siblings) > 0 && siblings[len(siblings)-1] == current
+		chain = append(chain, ancestor{id: current, isLast: isLast})
 		current = ppid
-		level++
-		if level > 100 {
-			return level
+	}
+	if len(chain) == 0 {
+		return ""
+	}
+	// Walk ancestor chain in reverse (root → leaf), building prefix
+	var prefix string
+	for i := len(chain) - 1; i >= 0; i-- {
+		a := chain[i]
+		if i == 0 {
+			// Current process connector
+			if a.isLast {
+				prefix += "\u2514\u2500\u2500 "
+			} else {
+				prefix += "\u251C\u2500\u2500 "
+			}
+		} else {
+			// Intermediate ancestor
+			if a.isLast {
+				prefix += "    "
+			} else {
+				prefix += "\u2502   "
+			}
 		}
 	}
+	return prefix
 }
 
 func truncateStr(s string, max int) string {
