@@ -674,12 +674,13 @@ func (h *htopUI) refreshTable() {
 		filtered = append(filtered, p)
 	}
 
-	sorted := make([]*respb.ProcessInfo, len(filtered))
-	copy(sorted, filtered)
-	h.sortProcesses(sorted, sortBy)
-
+	var sorted []*respb.ProcessInfo
 	if h.treeMode {
-		sorted = h.flattenTree(sorted)
+		sorted = h.flattenTree(filtered)
+	} else {
+		sorted = make([]*respb.ProcessInfo, len(filtered))
+		copy(sorted, filtered)
+		h.sortProcesses(sorted, sortBy)
 	}
 
 	// Precompute tree indent levels
@@ -781,7 +782,7 @@ func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
 		nodes[p.Pid] = &treeNode{proc: p}
 	}
 
-	// Build parent-child links
+	// Build parent-child links (preserve process list order)
 	for _, n := range nodes {
 		ppid, ok := h.ppidMap[n.proc.Pid]
 		if !ok {
@@ -794,15 +795,7 @@ func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
 		parent.children = append(parent.children, n)
 	}
 
-	// Sort children by current sort order
-	mode := h.sortOrder
-	for _, n := range nodes {
-		sort.SliceStable(n.children, func(i, j int) bool {
-			return procLess(n.children[i].proc, n.children[j].proc, mode)
-		})
-	}
-
-	// Flatten roots (processes whose parent isn't in the list) in sorted order
+	// Flatten roots (processes whose parent isn't in the list, preserve order)
 	var roots []*treeNode
 	for _, n := range nodes {
 		ppid, ok := h.ppidMap[n.proc.Pid]
@@ -814,9 +807,6 @@ func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
 			roots = append(roots, n)
 		}
 	}
-	sort.SliceStable(roots, func(i, j int) bool {
-		return procLess(roots[i].proc, roots[j].proc, mode)
-	})
 
 	var result []*respb.ProcessInfo
 	var walk func(n *treeNode, level int)
@@ -832,36 +822,6 @@ func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
 	}
 
 	return result
-}
-
-func procLess(a, b *respb.ProcessInfo, mode sortMode) bool {
-	switch mode {
-	case sortCpu, sortCpuAsc:
-		if mode == sortCpuAsc {
-			return a.CpuPercent < b.CpuPercent
-		}
-		return a.CpuPercent > b.CpuPercent
-	case sortMem, sortMemAsc:
-		if mode == sortMemAsc {
-			return a.MemPercent < b.MemPercent
-		}
-		return a.MemPercent > b.MemPercent
-	case sortPid:
-		return a.Pid < b.Pid
-	case sortUser:
-		return a.User < b.User
-	case sortTime:
-		return a.Time > b.Time
-	case sortNice:
-		return a.Nice > b.Nice
-	case sortCmd:
-		return a.Command < b.Command
-	case sortIoR:
-		return a.CpuPercent > b.CpuPercent // fallback
-	case sortIoW:
-		return a.CpuPercent > b.CpuPercent // fallback
-	}
-	return a.CpuPercent > b.CpuPercent
 }
 
 func (h *htopUI) sortProcesses(sorted []*respb.ProcessInfo, mode sortMode) {
