@@ -697,8 +697,30 @@ func (h *htopUI) refreshTable() {
 			continue
 		}
 		if h.hideKernel {
-			ppid := h.ppidMap[p.Pid]
-			if ppid == 2 || strings.HasPrefix(p.Name, "[") {
+			ppid, inMap := h.ppidMap[p.Pid]
+			name := p.Name
+			if name == "" {
+				name = p.Command
+			}
+			if (inMap && ppid == 2) || (!inMap && ppid == 0) ||
+				strings.HasPrefix(name, "kworker") ||
+				strings.HasPrefix(name, "ksoftirqd") ||
+				strings.HasPrefix(name, "kthread") ||
+				strings.HasPrefix(name, "migration") ||
+				strings.HasPrefix(name, "watchdog") ||
+				strings.HasPrefix(name, "khelper") ||
+				strings.HasPrefix(name, "kdevtmpfs") ||
+				strings.HasPrefix(name, "netns") ||
+				strings.HasPrefix(name, "writeback") ||
+				strings.HasPrefix(name, "bioset") ||
+				strings.HasPrefix(name, "crypto") ||
+				strings.HasPrefix(name, "kstrp") ||
+				strings.HasPrefix(name, "kbp") ||
+				strings.HasPrefix(name, "rcu") ||
+				strings.HasPrefix(name, "nv_queue") ||
+				strings.HasPrefix(name, "nvidia") ||
+				strings.HasPrefix(name, "irq/") ||
+				strings.HasPrefix(name, "kworker") {
 				continue
 			}
 		}
@@ -803,15 +825,10 @@ func (h *htopUI) refreshTable() {
 		if isTagged {
 			cmdText = "\u2713 " + cmdText
 		}
-		isThread := h.tgidMap[p.Pid] != 0 && h.tgidMap[p.Pid] != p.Pid
 		if pfx, ok := prefixes[p.Pid]; ok && pfx != "" {
-			treeColor := "#66D9EF"
-			if isThread {
-				treeColor = "#A6E22E"
-			}
-			cmdText = "[" + treeColor + "]" + pfx + "[#E8E8E2]" + cmdText
+			cmdText = "[#66D9EF]" + pfx + "[#E8E8E2]" + cmdText
 		}
-		if isThread {
+		if h.tgidMap[p.Pid] != 0 && h.tgidMap[p.Pid] != p.Pid {
 			cmdText = "[#A6E22E]" + cmdText + "[#E8E8E2]"
 		}
 		table.SetCell(r, colCmd, tview.NewTableCell(cmdText).
@@ -1067,11 +1084,11 @@ func readProcStat(pid int) (ppid int32, tgid int32, err error) {
 	}
 	ppidv, err := strconv.ParseInt(rest[1], 10, 32)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, nil
 	}
-	tgidv, err := readProcTGID(pid)
-	if err != nil {
-		tgidv = int64(pid)
+	tgidv := int64(pid)
+	if tgid, err := readProcTGID(pid); err == nil {
+		tgidv = tgid
 	}
 	return int32(ppidv), int32(tgidv), nil
 }
