@@ -196,12 +196,13 @@ func (s *displayService) SetLayout(ctx context.Context, req *connect.Request[pb.
 	var cmd string
 	var msg string
 
+	prefix := "DISPLAY=:0 xrandr"
 	switch layout {
 	case pb.DisplayLayout_DISPLAY_LAYOUT_LAPTOP_ONLY:
 		if external != "" {
-			cmd = fmt.Sprintf("xrandr --output %s --auto --primary --output %s --off", internal, external)
+			cmd = fmt.Sprintf("%s --output %s --auto --primary --output %s --off", prefix, internal, external)
 		} else {
-			cmd = fmt.Sprintf("xrandr --output %s --auto --primary", internal)
+			cmd = fmt.Sprintf("%s --output %s --auto --primary", prefix, internal)
 		}
 		msg = "Switched to laptop only"
 	case pb.DisplayLayout_DISPLAY_LAYOUT_EXTERNAL_ONLY:
@@ -212,7 +213,7 @@ func (s *displayService) SetLayout(ctx context.Context, req *connect.Request[pb.
 			}
 			return connect.NewResponse(&pb.SetLayoutResponse{Success: false, Message: msg}), nil
 		}
-		cmd = fmt.Sprintf("xrandr --output %s --auto --primary --output %s --off", external, internal)
+		cmd = fmt.Sprintf("%s --output %s --auto --primary --output %s --off", prefix, external, internal)
 		msg = "Switched to external only"
 	case pb.DisplayLayout_DISPLAY_LAYOUT_EXTENDED:
 		if external == "" {
@@ -222,7 +223,7 @@ func (s *displayService) SetLayout(ctx context.Context, req *connect.Request[pb.
 			}
 			return connect.NewResponse(&pb.SetLayoutResponse{Success: false, Message: msg}), nil
 		}
-		cmd = fmt.Sprintf("xrandr --output %s --auto --primary --output %s --auto --right-of %s", internal, external, internal)
+		cmd = fmt.Sprintf("%s --output %s --auto --primary --output %s --auto --right-of %s", prefix, internal, external, internal)
 		msg = "Switched to extended layout"
 	case pb.DisplayLayout_DISPLAY_LAYOUT_MIRROR:
 		if external == "" {
@@ -232,7 +233,7 @@ func (s *displayService) SetLayout(ctx context.Context, req *connect.Request[pb.
 			}
 			return connect.NewResponse(&pb.SetLayoutResponse{Success: false, Message: msg}), nil
 		}
-		cmd = fmt.Sprintf("xrandr --output %s --auto --primary --output %s --auto --same-as %s", internal, external, internal)
+		cmd = fmt.Sprintf("%s --output %s --auto --primary --output %s --auto --same-as %s", prefix, internal, external, internal)
 		msg = "Switched to mirrored layout"
 	default:
 		msg = "Unknown layout"
@@ -246,9 +247,9 @@ func (s *displayService) SetLayout(ctx context.Context, req *connect.Request[pb.
 		pc.Log().Info("Display.SetLayout", "layout", layout.String(), "cmd", cmd)
 	}
 
-	_, err = pc.Exec(cmd)
-	if err != nil {
-		errMsg := fmt.Sprintf("xrandr failed: %v", err)
+	res, err := pc.Exec(cmd)
+	if err != nil || res.ExitCode != 0 {
+		errMsg := fmt.Sprintf("xrandr failed (exit=%d): %v", res.ExitCode, err)
 		if pc != nil && pc.RenderOutput() {
 			fmt.Fprintln(pc.Stderr(), errMsg)
 		}
@@ -295,11 +296,19 @@ func (s *displayService) AutoExternal(ctx context.Context, req *connect.Request[
 
 	// Apply external-only layout
 	internal, _, _, err := s.parseXrandrOutput(ctx)
+	prefix := "DISPLAY=:0 xrandr"
 	if err != nil || internal == "" {
-		// Fallback: just enable the external, leave internal as-is
-		_, err = pc.Exec(fmt.Sprintf("xrandr --output %s --auto --primary", external))
+		res, e := pc.Exec(fmt.Sprintf("%s --output %s --auto --primary", prefix, external))
+		err = e
+		if res.ExitCode != 0 {
+			err = fmt.Errorf("exit code %d", res.ExitCode)
+		}
 	} else {
-		_, err = pc.Exec(fmt.Sprintf("xrandr --output %s --auto --primary --output %s --off", external, internal))
+		res, e := pc.Exec(fmt.Sprintf("%s --output %s --auto --primary --output %s --off", prefix, external, internal))
+		err = e
+		if res.ExitCode != 0 {
+			err = fmt.Errorf("exit code %d", res.ExitCode)
+		}
 	}
 
 	if err != nil {
@@ -349,8 +358,13 @@ func (s *displayService) AutorandrTrigger(ctx context.Context, req *connect.Requ
 		internal = "DP-0"
 	}
 
+	prefix := "DISPLAY=:0 xrandr"
 	if external != "" {
-		_, err = pc.Exec(fmt.Sprintf("xrandr --output %s --auto --primary --output %s --off", external, internal))
+		res, e := pc.Exec(fmt.Sprintf("%s --output %s --auto --primary --output %s --off", prefix, external, internal))
+		err = e
+		if res.ExitCode != 0 {
+			err = fmt.Errorf("exit code %d", res.ExitCode)
+		}
 		if err != nil {
 			msg := fmt.Sprintf("Failed to switch to external: %v", err)
 			if pc != nil && pc.RenderOutput() {
@@ -373,7 +387,11 @@ func (s *displayService) AutorandrTrigger(ctx context.Context, req *connect.Requ
 		}), nil
 	}
 
-	_, err = pc.Exec(fmt.Sprintf("xrandr --output %s --auto --primary", internal))
+	res, e := pc.Exec(fmt.Sprintf("%s --output %s --auto --primary", prefix, internal))
+	err = e
+	if res.ExitCode != 0 {
+		err = fmt.Errorf("exit code %d", res.ExitCode)
+	}
 	if err != nil {
 		msg := fmt.Sprintf("Failed to switch to internal: %v", err)
 		if pc != nil && pc.RenderOutput() {
