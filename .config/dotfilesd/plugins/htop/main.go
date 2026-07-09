@@ -156,6 +156,12 @@ type htopUI struct {
 	ioMode          bool
 	taggedPids      map[int32]bool
 
+	hideKernel bool
+	hideUserThreads bool
+	showPath   bool
+	highlightChanges bool
+	prevSnapshot map[int32]float64
+
 	prevIO  map[int32]ioSample
 	ioData  map[int32]ioSample
 	ppidMap map[int32]int32
@@ -187,11 +193,16 @@ func newHtopUI(pc plugin.Context, resClient resourcesconnect.ResourcesServiceCli
 		sortOrder:  sortCpu,
 		stopPoll:   make(chan struct{}),
 		done:       make(chan struct{}),
-		taggedPids: make(map[int32]bool),
-		prevIO:     make(map[int32]ioSample),
-		ioData:     make(map[int32]ioSample),
-		ppidMap:    make(map[int32]int32),
-		tgidMap:    make(map[int32]int32),
+		taggedPids:      make(map[int32]bool),
+		prevIO:          make(map[int32]ioSample),
+		ioData:          make(map[int32]ioSample),
+		ppidMap:         make(map[int32]int32),
+		tgidMap:         make(map[int32]int32),
+		prevSnapshot:    make(map[int32]float64),
+		hideKernel:      true,
+		hideUserThreads: false,
+		showPath:        true,
+		highlightChanges: false,
 	}
 	h.buildUI()
 	return h
@@ -221,14 +232,7 @@ func (h *htopUI) buildUI() {
 	h.procTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF2:
-			h.ioMode = !h.ioMode
-			if h.ioMode {
-				h.mu.Lock()
-				h.sortOrder = sortIoW
-				h.mu.Unlock()
-			}
-			h.refreshTable()
-			h.refreshFooter()
+			h.showSetup()
 			return nil
 		case tcell.KeyF3:
 			h.showSearch()
@@ -276,29 +280,12 @@ func (h *htopUI) toggleTag() {
 
 func (h *htopUI) cycleSort() {
 	h.mu.Lock()
-	h.sortOrder = nextSort(h.sortOrder, h.ioMode)
+	h.sortOrder = nextSort(h.sortOrder)
 	h.mu.Unlock()
 	h.refreshTable()
 }
 
-func nextSort(current sortMode, ioMode bool) sortMode {
-	if ioMode {
-		switch current {
-		case sortIoW:
-			return sortIoR
-		case sortIoR:
-			return sortPid
-		case sortPid:
-			return sortUser
-		case sortUser:
-			return sortTime
-		case sortTime:
-			return sortCmd
-		default:
-			// skip CPU/MEM sorts in IO mode, go to first IO sort
-			return sortIoW
-		}
-	}
+func nextSort(current sortMode) sortMode {
 	switch current {
 	case sortCpu:
 		return sortMem
@@ -311,6 +298,10 @@ func nextSort(current sortMode, ioMode bool) sortMode {
 	case sortTime:
 		return sortNice
 	case sortNice:
+		return sortIoR
+	case sortIoR:
+		return sortIoW
+	case sortIoW:
 		return sortCpuAsc
 	case sortCpuAsc:
 		return sortMemAsc
@@ -646,8 +637,8 @@ func (h *htopUI) refreshFooter() {
 		filterIndicator = fmt.Sprintf(" [FILTER: %s]", filter)
 	}
 	sortName := h.sortOrder.String()
-	text := fmt.Sprintf("[::b]F2[::-]:IO  [::b]F3[::-]:Search  [::b]F4[::-]:Filter  [::b]F5[::-]:Tree%s  [::b]F6[::-]:Sort(%s)%s%s  [::b]F7[::-]:Nice-  [::b]F8[::-]:Nice+  [::b]F9[::-]:Kill  [::b]q[::-]:Quit",
-		ioIndicator, sortName, treeIndicator, filterIndicator)
+	text := fmt.Sprintf("[::b]F2[::-]:Setup  [::b]F3[::-]:Search  [::b]F4[::-]:Filter  [::b]F5[::-]:Tree%s  [::b]F6[::-]:Sort(%s)%s%s  [::b]F7[::-]:Nice-  [::b]F8[::-]:Nice+  [::b]F9[::-]:Kill  [::b]q[::-]:Quit",
+		treeIndicator, sortName, ioIndicator, filterIndicator)
 	h.footerView.SetText(text)
 }
 
@@ -704,6 +695,18 @@ func (h *htopUI) refreshTable() {
 		if filter != "" && !strings.Contains(strings.ToLower(p.Command), strings.ToLower(filter)) &&
 			!strings.Contains(strings.ToLower(p.Name), strings.ToLower(filter)) {
 			continue
+		}
+		if h.hideKernel {
+			ppid := h.ppidMap[p.Pid]
+			if ppid == 2 || strings.HasPrefix(p.Name, "[") {
+				continue
+			}
+		}
+		if h.hideUserThreads {
+			tgid := h.tgidMap[p.Pid]
+			if tgid != 0 && tgid != p.Pid {
+				continue
+			}
 		}
 		filtered = append(filtered, p)
 	}
@@ -794,7 +797,7 @@ func (h *htopUI) refreshTable() {
 			SetAlign(tview.AlignRight).SetTextColor(tcell.GetColor(timeC)))
 
 		cmdText := p.Command
-		if cmdText == "" {
+		if !h.showPath || cmdText == "" {
 			cmdText = p.Name
 		}
 		if isTagged {
@@ -911,6 +914,51 @@ func (h *htopUI) changeNice(delta int) {
 		cmd := fmt.Sprintf("renice %d %d", newNice, p.Pid)
 		h.pc.Exec(cmd)
 	}
+}
+
+func (h *htopUI) showSetup() {
+	form := tview.NewForm()
+	form.SetTitle(" Setup ").SetTitleAlign(tview.AlignLeft).SetBorder(true)
+
+	form.AddCheckbox("Hide kernel threads", h.hideKernel, func(checked bool) {
+		h.hideKernel = checked
+		h.refreshTable()
+	})
+	form.AddCheckbox("Hide user threads", h.hideUserThreads, func(checked bool) {
+		h.hideUserThreads = checked
+		h.refreshTable()
+	})
+	form.AddCheckbox("Tree view always on", h.treeMode, func(checked bool) {
+		h.treeMode = checked
+		h.refreshTable()
+		h.refreshFooter()
+	})
+	form.AddCheckbox("Show program path", h.showPath, func(checked bool) {
+		h.showPath = checked
+		h.refreshTable()
+	})
+	form.AddCheckbox("Highlight changes", h.highlightChanges, func(checked bool) {
+		h.highlightChanges = checked
+	})
+	form.AddButton("Done", func() {
+		h.app.SetRoot(h.flex, true)
+	})
+
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyF2 {
+			h.app.SetRoot(h.flex, true)
+			return nil
+		}
+		return event
+	})
+
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(nil, 0, 1, false).
+		AddItem(form, 50, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	h.app.SetRoot(flex, true)
 }
 
 func (h *htopUI) showKillMenu() {
