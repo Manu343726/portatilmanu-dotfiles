@@ -1,6 +1,41 @@
 #!/usr/bin/env zsh
-profiles=("Integrated" "Hybrid" "AsusMuxDgpu")
-[[ $(cat /sys/devices/platform/asus-nb-wmi/egpu_connected 2>/dev/null) == 1 ]] && profiles+=("AsusEgpu")
-current=$(supergfxctl -g)
+
+profiles_json=$(dotfilesctl --no-verify gpu list-profiles --json 2>/dev/null)
+if [[ -z "$profiles_json" ]]; then
+  notify-send "GPU Profile" "Failed to query profiles"
+  exit 1
+fi
+
+current=$(echo "$profiles_json" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(d.get('currentDisplayName', ''))
+" 2>/dev/null)
+
+available=$(echo "$profiles_json" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+names = [p['displayName'] for p in d['profiles'] if p.get('status') != 'GPU_MODE_STATUS_UNAVAILABLE']
+print('\n'.join(names))
+" 2>/dev/null)
+
+profiles=("${(@f)available}")
+if [[ ${#profiles} -eq 0 ]]; then
+  notify-send "GPU Profile" "No available profiles"
+  exit 1
+fi
+
 choice=$(printf '%s\n' "${profiles[@]}" | rofi -dmenu -p "GPU Profile" -mesg "Current: $current" -l "${#profiles[@]}" -theme /home/manu343726/.config/rofi/monokai.rasi)
-[[ -n "$choice" ]] && supergfxctl -m "$choice" && notify-send "GPU Profile" "$choice (logout to apply)"
+[[ -z "$choice" ]] && exit 0
+
+# Map display name to enum value
+case "$choice" in
+  "Integrated")    mode="INTEGRATED" ;;
+  "Hybrid")        mode="HYBRID" ;;
+  "AsusMuxDgpu")   mode="ASUS_MUX_DGPU" ;;
+  "AsusEgpu")      mode="ASUS_EGPU" ;;
+  *)               notify-send "GPU Profile" "Unknown profile: $choice"; exit 1 ;;
+esac
+
+result=$(dotfilesctl --no-verify gpu set-profile --mode="$mode" 2>&1)
+notify-send "GPU Profile" "$choice — $result"

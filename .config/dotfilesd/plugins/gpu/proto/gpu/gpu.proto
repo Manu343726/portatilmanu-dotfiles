@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package gpu;
+
+option go_package = "plugins/gpu/proto/gpu";
+
+// GpuService manages the GPU mode (supergfxctl) on ASUS ROG laptops.
+// Wraps supergfxctl to get/set graphics mode (Integrated, Hybrid,
+// AsusMuxDgpu, AsusEgpu) and detect eGPU availability. Mode changes
+// require a logout or reboot to fully apply.
+service GpuService {
+  // GetProfile returns the current and pending GPU mode, plus the
+  // human-readable status message from supergfxctl.
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+  // SetProfile switches the GPU mode. Returns success/failure and a
+  // message indicating whether a logout or reboot is required.
+  rpc SetProfile(SetProfileRequest) returns (SetProfileResponse);
+  // ListProfiles returns all available GPU modes with their current
+  // status (active, pending, or unavailable). Also detects eGPU
+  // availability from the ASUS WMI sysfs interface.
+  rpc ListProfiles(ListProfilesRequest) returns (ListProfilesResponse);
+}
+
+// GPU mode as defined by supergfxctl.
+enum GpuMode {
+  // Unknown or unspecified GPU mode.
+  GPU_MODE_UNSPECIFIED = 0;
+  // Integrated only: AMD iGPU, NVIDIA dGPU powered off.
+  GPU_MODE_INTEGRATED = 1;
+  // Hybrid: dynamic switching between iGPU and dGPU.
+  GPU_MODE_HYBRID = 2;
+  // AsusMuxDgpu: NVIDIA dGPU drives internal display, highest performance.
+  GPU_MODE_ASUS_MUX_DGPU = 3;
+  // AsusEgpu: external GPU connected via USB4 / XG Mobile.
+  GPU_MODE_ASUS_EGPU = 4;
+}
+
+// Status of a GPU mode.
+enum GpuModeStatus {
+  // Unknown or unspecified status.
+  GPU_MODE_STATUS_UNSPECIFIED = 0;
+  // This mode is currently active.
+  GPU_MODE_STATUS_ACTIVE = 1;
+  // This mode is pending — will apply on next logout/reboot.
+  GPU_MODE_STATUS_PENDING = 2;
+  // This mode is available for switching but not currently active.
+  GPU_MODE_STATUS_AVAILABLE = 3;
+  // This mode is not available on this system.
+  GPU_MODE_STATUS_UNAVAILABLE = 4;
+}
+
+// Information about a single GPU mode.
+message GpuProfile {
+  // The GPU mode identifier.
+  GpuMode mode = 1;
+  // Human-readable name (e.g., "AsusMuxDgpu", "Integrated").
+  string display_name = 2;
+  // Current status of this mode.
+  GpuModeStatus status = 3;
+  // Whether an eGPU is currently detected (only relevant for AsusEgpu).
+  bool egpu_connected = 4;
+}
+
+message GetProfileRequest {}
+
+message GetProfileResponse {
+  // The current active or pending GPU mode.
+  GpuMode current = 1;
+  // The pending GPU mode that will apply after next logout/reboot.
+  // May be the same as current if no change is pending.
+  string current_display_name = 2;
+  // Human-readable status (e.g., "No action required",
+  // "A reboot is required to complete the mode change").
+  string status_message = 3;
+}
+
+message SetProfileRequest {
+  // Target GPU mode to switch to.
+  GpuMode mode = 1;
+}
+
+message SetProfileResponse {
+  // Whether the mode change was accepted.
+  bool success = 1;
+  // Human-readable message (e.g., "Graphics mode changed to Integrated"
+  // or error description).
+  string message = 2;
+}
+
+message ListProfilesRequest {}
+
+message ListProfilesResponse {
+  // All available GPU profiles with their status.
+  repeated GpuProfile profiles = 1;
+  // The currently active GPU mode.
+  GpuMode current = 2;
+  // Display name of the current mode.
+  string current_display_name = 3;
+}
