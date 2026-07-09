@@ -584,6 +584,8 @@ func sortProcesses(procs []ProcessInfo, sortBy pb.SortOrder) []ProcessInfo {
 			switch sortBy {
 			case pb.SortOrder_SORT_ORDER_MEMORY:
 				less = out[i].MemPercent < out[j].MemPercent
+			case pb.SortOrder_SORT_ORDER_PID:
+				less = out[i].PID > out[j].PID
 			default:
 				less = out[i].CPUPercent < out[j].CPUPercent
 			}

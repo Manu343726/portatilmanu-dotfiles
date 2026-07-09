@@ -30,6 +30,8 @@ const (
 	SortOrder_SORT_ORDER_CPU SortOrder = 1
 	// Sort by memory usage (highest first).
 	SortOrder_SORT_ORDER_MEMORY SortOrder = 2
+	// Sort by PID (ascending).
+	SortOrder_SORT_ORDER_PID SortOrder = 3
 )
 
 // Enum value maps for SortOrder.
@@ -38,11 +40,13 @@ var (
 		0: "SORT_ORDER_UNSPECIFIED",
 		1: "SORT_ORDER_CPU",
 		2: "SORT_ORDER_MEMORY",
+		3: "SORT_ORDER_PID",
 	}
 	SortOrder_value = map[string]int32{
 		"SORT_ORDER_UNSPECIFIED": 0,
 		"SORT_ORDER_CPU":         1,
 		"SORT_ORDER_MEMORY":      2,
+		"SORT_ORDER_PID":         3,
 	}
 )
 
@@ -2046,11 +2050,12 @@ const file_proto_resources_resources_proto_rawDesc = "" +
 	"\x04nice\x18\n" +
 	" \x01(\x05R\x04nice\x12\x12\n" +
 	"\x04time\x18\v \x01(\x03R\x04time\x12\x18\n" +
-	"\acommand\x18\f \x01(\tR\acommand*R\n" +
+	"\acommand\x18\f \x01(\tR\acommand*f\n" +
 	"\tSortOrder\x12\x1a\n" +
 	"\x16SORT_ORDER_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSORT_ORDER_CPU\x10\x01\x12\x15\n" +
-	"\x11SORT_ORDER_MEMORY\x10\x02*\xaa\x01\n" +
+	"\x11SORT_ORDER_MEMORY\x10\x02\x12\x12\n" +
+	"\x0eSORT_ORDER_PID\x10\x03*\xaa\x01\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11RESOURCE_TYPE_RAM\x10\x01\x12\x15\n" +

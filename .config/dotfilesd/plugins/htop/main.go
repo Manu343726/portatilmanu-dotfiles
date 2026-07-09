@@ -347,7 +347,14 @@ func (h *htopUI) fetchData(_ context.Context) {
 	if err != nil {
 		return
 	}
-	psResp, err := h.resClient.PS(context.Background(), connect.NewRequest(&respb.PSRequest{Count: 500}))
+	sortOrder := respb.SortOrder_SORT_ORDER_UNSPECIFIED
+	if h.treeMode {
+		sortOrder = respb.SortOrder_SORT_ORDER_PID
+	}
+	psResp, err := h.resClient.PS(context.Background(), connect.NewRequest(&respb.PSRequest{
+		Count: 500,
+		Sort:  sortOrder,
+	}))
 	if err != nil {
 		psResp = nil
 	}
@@ -676,9 +683,7 @@ func (h *htopUI) refreshTable() {
 
 	sorted := make([]*respb.ProcessInfo, len(filtered))
 	copy(sorted, filtered)
-	if h.treeMode {
-		h.sortProcesses(sorted, sortPid)
-	} else {
+	if !h.treeMode {
 		h.sortProcesses(sorted, sortBy)
 	}
 

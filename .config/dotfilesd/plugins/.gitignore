@@ -8,7 +8,3 @@
 *_doc.pb
 # Generated markdown docs in proto directories
 **/proto/**/*.md
-# Compiled plugin binaries (no-extension files in plugin dirs, e.g. htop/htop)
-# Re-include files with extensions (source code, configs, assets)
-*/*
-!*.*

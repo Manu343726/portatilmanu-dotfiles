@@ -119,6 +119,8 @@ enum SortOrder {
   SORT_ORDER_CPU = 1;
   // Sort by memory usage (highest first).
   SORT_ORDER_MEMORY = 2;
+  // Sort by PID (ascending).
+  SORT_ORDER_PID = 3;
 }
 
 // Request to list top processes by resource usage.
