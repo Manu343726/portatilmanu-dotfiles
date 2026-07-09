@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,15 +48,67 @@ func (p *tviewPty) WindowSize() (tcell.WindowSize, error) {
 	return tcell.WindowSize{Width: w, Height: h}, nil
 }
 
-func (p *tviewPty) NotifyResize(cb func()) {
-	p.cb = cb
-}
-
+func (p *tviewPty) NotifyResize(cb func()) { p.cb = cb }
 func (p *tviewPty) Resize(width, height int) {
 	p.tty.Resize(width, height)
 	if p.cb != nil {
 		p.cb()
 	}
+}
+
+const monokaiBg = "#272822"
+const monokaiFg = "#E8E8E2"
+const cpuUserColor = "#A6E22E"
+const cpuSysColor = "#E8871A"
+const cpuIowColor = "#E82572"
+
+const colPid = 0
+const colUser = 1
+const colPri = 2
+const colNi = 3
+const colThr = 4
+const colState = 5
+const colCpu = 6
+const colMem = 7
+const colTime = 8
+const colCmd = 9
+
+var colHeaders = []string{"PID", "USER", "PRI", "NI", "THR", "S", "CPU%", "MEM%", "TIME+", "COMMAND"}
+var colAlign = []int{tview.AlignRight, tview.AlignLeft, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignCenter, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignLeft}
+
+type sortMode int
+
+const (
+	sortCpu sortMode = iota
+	sortMem
+	sortPid
+	sortUser
+	sortTime
+	sortNice
+	sortCpuAsc
+	sortMemAsc
+)
+
+func (s sortMode) String() string {
+	switch s {
+	case sortCpu:
+		return "CPU%"
+	case sortMem:
+		return "MEM%"
+	case sortPid:
+		return "PID"
+	case sortUser:
+		return "USER"
+	case sortTime:
+		return "TIME+"
+	case sortNice:
+		return "NI"
+	case sortCpuAsc:
+		return "CPU%"
+	case sortMemAsc:
+		return "MEM%"
+	}
+	return "?"
 }
 
 type htopUI struct {
@@ -67,6 +121,10 @@ type htopUI struct {
 	mu              sync.RWMutex
 	cpu             *respb.CPUSnapshot
 	ram             *respb.RAMSnapshot
+	disk            *respb.DiskSnapshot
+	diskIO          *respb.DiskIOSnapshot
+	cpuTemp         *respb.CPUTempSnapshot
+	battery         *respb.BatterySnapshot
 	loadAvg1        float64
 	loadAvg5        float64
 	loadAvg15       float64
@@ -75,8 +133,12 @@ type htopUI struct {
 	threadCount     int32
 	runningProcCount int32
 	processes       []*respb.ProcessInfo
-	sortBy          string
+	sortOrder       sortMode
+	filterText      string
+	treeMode        bool
+	taggedPids      map[int32]bool
 
+	pc        plugin.Context
 	resClient resourcesconnect.ResourcesServiceClient
 	stopPoll  chan struct{}
 	done      chan struct{}
@@ -95,12 +157,14 @@ func initResourcesClient() resourcesconnect.ResourcesServiceClient {
 	return resourcesconnect.NewResourcesServiceClient(httpClient, regResp.Msg.Url)
 }
 
-func newHtopUI(resClient resourcesconnect.ResourcesServiceClient) *htopUI {
+func newHtopUI(pc plugin.Context, resClient resourcesconnect.ResourcesServiceClient) *htopUI {
 	h := &htopUI{
-		resClient: resClient,
-		sortBy:    "cpu",
-		stopPoll:  make(chan struct{}),
-		done:      make(chan struct{}),
+		pc:         pc,
+		resClient:  resClient,
+		sortOrder:  sortCpu,
+		stopPoll:   make(chan struct{}),
+		done:       make(chan struct{}),
+		taggedPids: make(map[int32]bool),
 	}
 	h.buildUI()
 	return h
@@ -119,30 +183,81 @@ func (h *htopUI) buildUI() {
 
 	h.footerView = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft).
-		SetText("[::b]F6[::-]:Sort  [::b]q[::-]:Quit")
-
-	h.procTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyF6:
-			h.cycleSort()
-		}
-		return event
-	})
+		SetTextAlign(tview.AlignLeft)
 
 	h.flex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(h.headerView, 5, 0, false).
+		AddItem(h.headerView, 3, 0, false).
 		AddItem(h.procTable, 0, 1, true).
 		AddItem(h.footerView, 1, 0, false)
+
+	h.procTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF3:
+			h.showSearch()
+			return nil
+		case tcell.KeyF4:
+			h.showFilter()
+			return nil
+		case tcell.KeyF5:
+			h.treeMode = !h.treeMode
+			h.refreshTable()
+			return nil
+		case tcell.KeyF6:
+			h.cycleSort()
+			return nil
+		case tcell.KeyF7:
+			h.changeNice(-1)
+			return nil
+		case tcell.KeyF8:
+			h.changeNice(1)
+			return nil
+		case tcell.KeyF9:
+			h.showKillMenu()
+			return nil
+		}
+		if event.Rune() == ' ' {
+			h.toggleTag()
+			return nil
+		}
+		return event
+	})
+}
+
+func (h *htopUI) toggleTag() {
+	row, _ := h.procTable.GetSelection()
+	h.mu.RLock()
+	procs := h.processes
+	h.mu.RUnlock()
+	if row < 1 || row-1 >= len(procs) {
+		return
+	}
+	pid := procs[row-1].Pid
+	h.taggedPids[pid] = !h.taggedPids[pid]
+	h.refreshTable()
 }
 
 func (h *htopUI) cycleSort() {
 	h.mu.Lock()
-	if h.sortBy == "cpu" {
-		h.sortBy = "mem"
-	} else {
-		h.sortBy = "cpu"
+	switch h.sortOrder {
+	case sortCpu:
+		h.sortOrder = sortMem
+	case sortMem:
+		h.sortOrder = sortPid
+	case sortPid:
+		h.sortOrder = sortUser
+	case sortUser:
+		h.sortOrder = sortTime
+	case sortTime:
+		h.sortOrder = sortNice
+	case sortNice:
+		h.sortOrder = sortCpuAsc
+	case sortCpuAsc:
+		h.sortOrder = sortMemAsc
+	case sortMemAsc:
+		h.sortOrder = sortCpu
+	default:
+		h.sortOrder = sortCpu
 	}
 	h.mu.Unlock()
 	h.refreshTable()
@@ -157,10 +272,7 @@ func (h *htopUI) pollLoop() {
 	ctx := context.Background()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-
-	// Initial fetch
 	h.fetchData(ctx)
-
 	for {
 		select {
 		case <-h.stopPoll:
@@ -171,30 +283,36 @@ func (h *htopUI) pollLoop() {
 	}
 }
 
-func (h *htopUI) fetchData(ctx context.Context) {
+func (h *htopUI) fetchData(_ context.Context) {
 	if h.resClient == nil {
 		return
 	}
-
-	currentResp, err := h.resClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
+	currentResp, err := h.resClient.Current(context.Background(), connect.NewRequest(&respb.CurrentRequest{}))
 	if err != nil {
 		return
 	}
-
-	psCount := 200
-	psResp, err := h.resClient.PS(ctx, connect.NewRequest(&respb.PSRequest{
-		Count: int32(psCount),
-	}))
+	psResp, err := h.resClient.PS(context.Background(), connect.NewRequest(&respb.PSRequest{Count: 500}))
 	if err != nil {
 		psResp = nil
 	}
-
 	h.mu.Lock()
 	if currentResp.Msg.Cpu != nil {
 		h.cpu = currentResp.Msg.Cpu
 	}
 	if currentResp.Msg.Ram != nil {
 		h.ram = currentResp.Msg.Ram
+	}
+	if currentResp.Msg.Disk != nil {
+		h.disk = currentResp.Msg.Disk
+	}
+	if currentResp.Msg.DiskIo != nil {
+		h.diskIO = currentResp.Msg.DiskIo
+	}
+	if currentResp.Msg.CpuTemp != nil && currentResp.Msg.CpuTemp.TempCelsius > 0 {
+		h.cpuTemp = currentResp.Msg.CpuTemp
+	}
+	if currentResp.Msg.Battery != nil && currentResp.Msg.Battery.Percent > 0 {
+		h.battery = currentResp.Msg.Battery
 	}
 	h.loadAvg1 = currentResp.Msg.LoadAverage_1
 	h.loadAvg5 = currentResp.Msg.LoadAverage_5
@@ -207,11 +325,11 @@ func (h *htopUI) fetchData(ctx context.Context) {
 		h.processes = psResp.Msg.Processes
 	}
 	h.mu.Unlock()
-
 	if h.app != nil {
 		h.app.QueueUpdateDraw(func() {
 			h.refreshHeader()
 			h.refreshTable()
+			h.refreshFooter()
 		})
 	}
 }
@@ -243,6 +361,13 @@ func formatTime(jiffies int64) string {
 	return fmt.Sprintf("%02d:%02d.%02d", m, s, cs)
 }
 
+func formatBytesMB(mb float64) string {
+	if mb >= 1024 {
+		return fmt.Sprintf("%.1fG", mb/1024)
+	}
+	return fmt.Sprintf("%.0fM", mb)
+}
+
 func bar(pct float64, fillColor string, width int) string {
 	filled := int(pct * float64(width) / 100)
 	if filled > width {
@@ -259,7 +384,7 @@ func bar(pct float64, fillColor string, width int) string {
 	for i := filled; i < width; i++ {
 		s += "\u2581"
 	}
-	s += "[default]"
+	s += "[#555555]"
 	return s
 }
 
@@ -276,10 +401,49 @@ func colorForPct(pct float64) string {
 	}
 }
 
+func stateChar(s respb.ProcessState) string {
+	switch s {
+	case respb.ProcessState_PROCESS_STATE_RUNNING:
+		return "R"
+	case respb.ProcessState_PROCESS_STATE_SLEEPING:
+		return "S"
+	case respb.ProcessState_PROCESS_STATE_DISK_SLEEP:
+		return "D"
+	case respb.ProcessState_PROCESS_STATE_ZOMBIE:
+		return "Z"
+	case respb.ProcessState_PROCESS_STATE_STOPPED:
+		return "T"
+	case respb.ProcessState_PROCESS_STATE_TRACE_STOP:
+		return "t"
+	case respb.ProcessState_PROCESS_STATE_DEAD:
+		return "X"
+	}
+	return "?"
+}
+
+func stateColor(s respb.ProcessState) string {
+	switch s {
+	case respb.ProcessState_PROCESS_STATE_RUNNING:
+		return "green"
+	case respb.ProcessState_PROCESS_STATE_DISK_SLEEP:
+		return "red"
+	case respb.ProcessState_PROCESS_STATE_ZOMBIE:
+		return "maroon"
+	case respb.ProcessState_PROCESS_STATE_STOPPED:
+		return "yellow"
+	default:
+		return "white"
+	}
+}
+
 func (h *htopUI) refreshHeader() {
 	h.mu.RLock()
 	cpu := h.cpu
 	ram := h.ram
+	disk := h.disk
+	diskIO := h.diskIO
+	cpuTemp := h.cpuTemp
+	battery := h.battery
 	la1 := h.loadAvg1
 	la5 := h.loadAvg5
 	la15 := h.loadAvg15
@@ -289,73 +453,166 @@ func (h *htopUI) refreshHeader() {
 	rpc := h.runningProcCount
 	h.mu.RUnlock()
 
-	text := ""
+	var text string
 
 	if cpu != nil {
-		coresPerRow := 8
 		ncpu := len(cpu.PerCorePercent)
-		if ncpu <= coresPerRow {
-			coresPerRow = ncpu
-		}
-		for i := 0; i < ncpu; i += coresPerRow {
-			for j := 0; j < coresPerRow && i+j < ncpu; j++ {
+		perRow := 8
+		for i := 0; i < ncpu; i += perRow {
+			for j := 0; j < perRow && i+j < ncpu; j++ {
 				p := cpu.PerCorePercent[i+j]
 				c := colorForPct(p)
-				text += fmt.Sprintf(" %2d [%s]%s[default] [%s]%5.1f%%[default]",
+				text += fmt.Sprintf(" %2d [%s]%s[#555555] [%s]%5.1f%%[#555555]",
 					i+j, c, bar(p, c, 8), c, p)
 			}
 			text += "\n"
 		}
+		userP := cpu.UserPercent
+		sysP := cpu.SystemPercent
+		iowP := cpu.IowaitPercent
+		totalP := cpu.TotalPercent
+		text += fmt.Sprintf(" CPU[%s]\u2588[#555555][%s]%5.1f%%[#555555] ", cpuUserColor, cpuUserColor, userP)
+		text += fmt.Sprintf("sys[%s]%4.1f%%[#555555] ", cpuSysColor, sysP)
+		text += fmt.Sprintf("io[%s]%4.1f%%[#555555] ", cpuIowColor, iowP)
+		text += fmt.Sprintf("total[%s]%4.1f%%[#555555]\n", colorForPct(totalP), totalP)
 	}
 
 	if ram != nil {
 		c := colorForPct(ram.Percent)
-		text += fmt.Sprintf(" Mem [%s]%s[default] [%s]%5.1f%%[default]  %.1f/%.0f MB\n",
-			c, bar(ram.Percent, c, 20), c, ram.Percent, ram.UsedMb, ram.TotalMb)
+		avail := ram.TotalMb - ram.UsedMb
+		text += fmt.Sprintf(" Mem [%s]%s[#555555] [%s]%5.1f%%[#555555]  used:%s avail:%s total:%s\n",
+			c, bar(ram.Percent, c, 20), c, ram.Percent,
+			formatBytesMB(ram.UsedMb), formatBytesMB(avail), formatBytesMB(ram.TotalMb))
 	}
 
-	text += fmt.Sprintf(" Tasks: %d (%d running)  Threads: %d  Load: %.2f %.2f %.2f  Uptime: %s\n",
-		pc, rpc, tc, la1, la5, la15, formatUptime(uptime))
+	if disk != nil {
+		c := colorForPct(disk.Percent)
+		text += fmt.Sprintf(" Disk[%s]%s[#555555] [%s]%5.1f%%[#555555]  used:%s avail:%s total:%s\n",
+			c, bar(disk.Percent, c, 20), c, disk.Percent,
+			formatBytesMB(disk.UsedGb*1024), formatBytesMB(disk.AvailGb*1024), formatBytesMB(disk.TotalGb*1024))
+	}
+
+	if cpuTemp != nil {
+		tc := colorForPct(cpuTemp.BarPct)
+		text += fmt.Sprintf(" Temp[%s]\u2588[#555555] %3.0f\u00b0C [%s]%4.0f%%[#555555]",
+			tc, cpuTemp.TempCelsius, tc, cpuTemp.BarPct)
+	}
+	if battery != nil {
+		btPct := battery.Percent
+		btColor := colorForPct(100 - btPct)
+		status := "BAT"
+		if battery.Charging || battery.Plugged {
+			status = "CHR"
+		}
+		if btPct >= 100 {
+			status = "FUL"
+		}
+		text += fmt.Sprintf("  %s[%s]\u2588[#555555] %3.0f%%", status, btColor, btPct)
+	}
+	if cpuTemp != nil || battery != nil {
+		text += "\n"
+	}
+
+	if diskIO != nil {
+		var rRate, wRate string
+		if diskIO.ReadBytesPerSec >= 1<<30 {
+			rRate = fmt.Sprintf("%.1fGB/s", diskIO.ReadBytesPerSec/float64(1<<30))
+		} else if diskIO.ReadBytesPerSec >= 1<<20 {
+			rRate = fmt.Sprintf("%.1fMB/s", diskIO.ReadBytesPerSec/float64(1<<20))
+		} else if diskIO.ReadBytesPerSec >= 1024 {
+			rRate = fmt.Sprintf("%.0fKB/s", diskIO.ReadBytesPerSec/1024)
+		} else {
+			rRate = fmt.Sprintf("%.0fB/s", diskIO.ReadBytesPerSec)
+		}
+		if diskIO.WriteBytesPerSec >= 1<<30 {
+			wRate = fmt.Sprintf("%.1fGB/s", diskIO.WriteBytesPerSec/float64(1<<30))
+		} else if diskIO.WriteBytesPerSec >= 1<<20 {
+			wRate = fmt.Sprintf("%.1fMB/s", diskIO.WriteBytesPerSec/float64(1<<20))
+		} else if diskIO.WriteBytesPerSec >= 1024 {
+			wRate = fmt.Sprintf("%.0fKB/s", diskIO.WriteBytesPerSec/1024)
+		} else {
+			wRate = fmt.Sprintf("%.0fB/s", diskIO.WriteBytesPerSec)
+		}
+		text += fmt.Sprintf("  IO R:%s W:%s\n", rRate, wRate)
+	}
+
+	totalProcs := pc
+	sleeping := totalProcs - rpc
+	if sleeping < 0 {
+		sleeping = 0
+	}
+	text += fmt.Sprintf(" Tasks: %d total (%d running, %d sleeping)  Threads: %d  Load: %.2f %.2f %.2f  Uptime: %s\n",
+		totalProcs, rpc, sleeping, tc, la1, la5, la15, formatUptime(uptime))
 
 	h.headerView.SetText(text)
+}
+
+func (h *htopUI) refreshFooter() {
+	treeIndicator := ""
+	if h.treeMode {
+		treeIndicator = " [TREE]"
+	}
+	h.mu.RLock()
+	filter := h.filterText
+	h.mu.RUnlock()
+	filterIndicator := ""
+	if filter != "" {
+		filterIndicator = fmt.Sprintf(" [FILTER: %s]", filter)
+	}
+	sortName := h.sortOrder.String()
+	text := fmt.Sprintf("[::b]F3[::-]:Search  [::b]F4[::-]:Filter  [::b]F5[::-]:Tree  [::b]F6[::-]:Sort(%s)%s%s  [::b]F7[::-]:Nice-  [::b]F8[::-]:Nice+  [::b]F9[::-]:Kill  [::b]q[::-]:Quit",
+		sortName, treeIndicator, filterIndicator)
+	h.footerView.SetText(text)
 }
 
 func (h *htopUI) refreshTable() {
 	h.mu.RLock()
 	procs := h.processes
-	sortBy := h.sortBy
+	sortBy := h.sortOrder
+	filter := h.filterText
 	h.mu.RUnlock()
 
 	table := h.procTable
 	table.Clear()
 
-	headers := []string{"PID", "USER", "PRI", "NI", "CPU%", "MEM%", "TIME+", "COMMAND"}
-	for i, hdr := range headers {
-		table.SetCell(0, i, tview.NewTableCell(hdr).
+	for i, hdr := range colHeaders {
+		disp := hdr
+		if i == colCpu && (sortBy == sortCpu || sortBy == sortCpuAsc) {
+			disp += " \u25bc"
+		} else if i == colMem && (sortBy == sortMem || sortBy == sortMemAsc) {
+			disp += " \u25bc"
+		} else if i == colPid && sortBy == sortPid {
+			disp += " \u25bc"
+		} else if i == colUser && sortBy == sortUser {
+			disp += " \u25bc"
+		} else if i == colTime && sortBy == sortTime {
+			disp += " \u25bc"
+		} else if i == colNi && sortBy == sortNice {
+			disp += " \u25bc"
+		}
+		table.SetCell(0, i, tview.NewTableCell(disp).
 			SetSelectable(false).
 			SetAttributes(tcell.AttrBold).
-			SetTextColor(tcell.ColorYellow))
+			SetTextColor(tcell.ColorYellow).
+			SetAlign(colAlign[i]))
 	}
 
-	sorted := make([]*respb.ProcessInfo, len(procs))
-	copy(sorted, procs)
-
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			var less bool
-			if sortBy == "cpu" {
-				less = sorted[i].CpuPercent < sorted[j].CpuPercent
-			} else {
-				less = sorted[i].MemPercent < sorted[j].MemPercent
-			}
-			if less {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
+	var filtered []*respb.ProcessInfo
+	for _, p := range procs {
+		if filter != "" && !strings.Contains(strings.ToLower(p.Command), strings.ToLower(filter)) &&
+			!strings.Contains(strings.ToLower(p.Name), strings.ToLower(filter)) {
+			continue
 		}
+		filtered = append(filtered, p)
 	}
+
+	sorted := make([]*respb.ProcessInfo, len(filtered))
+	copy(sorted, filtered)
+	h.sortProcesses(sorted, sortBy)
 
 	for row, p := range sorted {
 		r := row + 1
+
 		pidColor := tcell.ColorWhite
 		switch p.State {
 		case respb.ProcessState_PROCESS_STATE_RUNNING:
@@ -364,33 +621,192 @@ func (h *htopUI) refreshTable() {
 			pidColor = tcell.ColorRed
 		case respb.ProcessState_PROCESS_STATE_ZOMBIE:
 			pidColor = tcell.ColorMaroon
+		case respb.ProcessState_PROCESS_STATE_STOPPED:
+			pidColor = tcell.ColorYellow
 		}
 
-		table.SetCell(r, 0, tview.NewTableCell(fmt.Sprintf("%d", p.Pid)).
-			SetAlign(tview.AlignRight).
-			SetTextColor(pidColor))
-		table.SetCell(r, 1, tview.NewTableCell(p.User).
+		isTagged := h.taggedPids[p.Pid]
+
+		table.SetCell(r, colPid, tview.NewTableCell(fmt.Sprintf("%d", p.Pid)).
+			SetAlign(tview.AlignRight).SetTextColor(pidColor))
+
+		table.SetCell(r, colUser, tview.NewTableCell(truncateStr(p.User, 8)).
 			SetTextColor(tcell.ColorWhite))
-		table.SetCell(r, 2, tview.NewTableCell(fmt.Sprintf("%d", p.Priority)).
-			SetAlign(tview.AlignRight).
-			SetTextColor(tcell.ColorWhite))
-		table.SetCell(r, 3, tview.NewTableCell(fmt.Sprintf("%d", p.Nice)).
-			SetAlign(tview.AlignRight).
-			SetTextColor(tcell.ColorWhite))
-		table.SetCell(r, 4, tview.NewTableCell(fmt.Sprintf("%.1f", p.CpuPercent)).
-			SetAlign(tview.AlignRight).
-			SetTextColor(tcell.ColorWhite))
-		table.SetCell(r, 5, tview.NewTableCell(fmt.Sprintf("%.1f", p.MemPercent)).
-			SetAlign(tview.AlignRight).
-			SetTextColor(tcell.ColorWhite))
-		table.SetCell(r, 6, tview.NewTableCell(formatTime(p.Time)).
-			SetAlign(tview.AlignRight).
-			SetTextColor(tcell.ColorWhite))
-		table.SetCell(r, 7, tview.NewTableCell(p.Command).
+
+		table.SetCell(r, colPri, tview.NewTableCell(fmt.Sprintf("%d", p.Priority)).
+			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+
+		niColor := tcell.ColorWhite
+		if p.Nice < 0 {
+			niColor = tcell.ColorRed
+		} else if p.Nice > 0 {
+			niColor = tcell.ColorGreen
+		}
+		table.SetCell(r, colNi, tview.NewTableCell(fmt.Sprintf("%d", p.Nice)).
+			SetAlign(tview.AlignRight).SetTextColor(niColor))
+
+		table.SetCell(r, colThr, tview.NewTableCell(fmt.Sprintf("%d", p.ThreadCount)).
+			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+
+		table.SetCell(r, colState, tview.NewTableCell(stateChar(p.State)).
+			SetAlign(tview.AlignCenter).SetTextColor(tcell.GetColor(stateColor(p.State))))
+
+		cpuC := colorForPct(p.CpuPercent)
+		table.SetCell(r, colCpu, tview.NewTableCell(fmt.Sprintf("%.1f", p.CpuPercent)).
+			SetAlign(tview.AlignRight).SetTextColor(tcell.GetColor(cpuC)))
+
+		table.SetCell(r, colMem, tview.NewTableCell(fmt.Sprintf("%.1f", p.MemPercent)).
+			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+
+		table.SetCell(r, colTime, tview.NewTableCell(formatTime(p.Time)).
+			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+
+		cmdText := p.Command
+		if cmdText == "" {
+			cmdText = p.Name
+		}
+		if isTagged {
+			cmdText = "\u2713 " + cmdText
+		}
+		table.SetCell(r, colCmd, tview.NewTableCell(cmdText).
 			SetTextColor(tcell.ColorWhite))
 	}
-
 	table.ScrollToBeginning()
+}
+
+func (h *htopUI) sortProcesses(sorted []*respb.ProcessInfo, mode sortMode) {
+	sort.SliceStable(sorted, func(i, j int) bool {
+		var less bool
+		switch mode {
+		case sortCpu:
+			less = sorted[i].CpuPercent > sorted[j].CpuPercent
+		case sortMem:
+			less = sorted[i].MemPercent > sorted[j].MemPercent
+		case sortPid:
+			less = sorted[i].Pid < sorted[j].Pid
+		case sortUser:
+			less = sorted[i].User < sorted[j].User
+		case sortTime:
+			less = sorted[i].Time > sorted[j].Time
+		case sortNice:
+			less = sorted[i].Nice > sorted[j].Nice
+		case sortCpuAsc:
+			less = sorted[i].CpuPercent < sorted[j].CpuPercent
+		case sortMemAsc:
+			less = sorted[i].MemPercent < sorted[j].MemPercent
+		}
+		return less
+	})
+}
+
+func (h *htopUI) showSearch() {
+	h.showInputDialog("Search")
+}
+
+func (h *htopUI) showFilter() {
+	h.showInputDialog("Filter")
+}
+
+func (h *htopUI) showInputDialog(title string) {
+	var inputField *tview.InputField
+	inputField = tview.NewInputField().
+		SetLabel(title + ": ").
+		SetFieldWidth(30).
+		SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEnter {
+				h.mu.Lock()
+				h.filterText = inputField.GetText()
+				h.mu.Unlock()
+				h.refreshTable()
+				h.refreshFooter()
+			}
+			h.app.SetRoot(h.flex, true)
+		})
+	box := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(inputField, 1, 0, true).
+			AddItem(nil, 0, 1, false), 40, 0, true).
+		AddItem(nil, 0, 1, false)
+	h.app.SetRoot(box, true)
+}
+
+func (h *htopUI) changeNice(delta int) {
+	h.mu.RLock()
+	procs := h.processes
+	h.mu.RUnlock()
+
+	row, _ := h.procTable.GetSelection()
+	if row < 1 || row-1 >= len(procs) {
+		return
+	}
+	p := procs[row-1]
+	newNice := int(p.Nice) + delta
+	if newNice < -20 {
+		newNice = -20
+	}
+	if newNice > 19 {
+		newNice = 19
+	}
+	if h.pc != nil {
+		cmd := fmt.Sprintf("renice %d %d", newNice, p.Pid)
+		h.pc.Exec(cmd)
+	}
+}
+
+func (h *htopUI) showKillMenu() {
+	h.mu.RLock()
+	procs := h.processes
+	h.mu.RUnlock()
+
+	row, _ := h.procTable.GetSelection()
+	if row < 1 || row-1 >= len(procs) {
+		return
+	}
+	p := procs[row-1]
+
+	signals := []struct {
+		label string
+		sig   int
+	}{
+		{"SIGTERM (15)", 15},
+		{"SIGKILL (9)", 9},
+		{"SIGINT (2)", 2},
+		{"SIGHUP (1)", 1},
+		{"SIGQUIT (3)", 3},
+		{"SIGSTOP (19)", 19},
+		{"SIGCONT (18)", 18},
+	}
+
+	list := tview.NewList()
+	list.SetTitle(fmt.Sprintf(" Kill PID %d (%s) ", p.Pid, truncateStr(p.Command, 30))).
+		SetTitleAlign(tview.AlignLeft).
+		SetBorder(true)
+
+	for _, s := range signals {
+		s := s
+		list.AddItem(s.label, "", 0, func() {
+			if h.pc != nil {
+				cmd := fmt.Sprintf("kill -%d %d", s.sig, p.Pid)
+				h.pc.Exec(cmd)
+			}
+			h.app.SetRoot(h.flex, true)
+		})
+	}
+	list.AddItem("Cancel", "", 0, func() {
+		h.app.SetRoot(h.flex, true)
+	})
+
+	h.app.SetRoot(list, true)
+}
+
+func truncateStr(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "\u2026"
 }
 
 type htopServer struct {
@@ -416,7 +832,6 @@ func (s *htopServer) Open(ctx context.Context, req *connect.Request[pb.OpenReque
 	if err != nil {
 		return nil, fmt.Errorf("PtyTtyConn: %w", err)
 	}
-
 	tty.Resize(width, height)
 
 	term := os.Getenv("TERM")
@@ -427,7 +842,7 @@ func (s *htopServer) Open(ctx context.Context, req *connect.Request[pb.OpenReque
 	if err != nil {
 		ti, err = terminfo.LookupTerminfo("xterm-256color")
 		if err != nil {
-			return nil, fmt.Errorf("LookupTerminfo(%q): %w", term, err)
+			return nil, fmt.Errorf("LookupTerminfo: %w", err)
 		}
 	}
 
@@ -437,14 +852,31 @@ func (s *htopServer) Open(ctx context.Context, req *connect.Request[pb.OpenReque
 		return nil, fmt.Errorf("NewTerminfoScreen: %w", err)
 	}
 
-	ui := newHtopUI(s.resClient)
+	ui := newHtopUI(pc, s.resClient)
+
 	ui.flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Rune() == 'q' {
+		if event.Rune() == 'q' || event.Rune() == 'Q' {
 			ui.stopPoll <- struct{}{}
 			go func() {
 				time.Sleep(100 * time.Millisecond)
 				ui.app.Stop()
 			}()
+			return nil
+		}
+		if event.Rune() == 'h' || event.Rune() == 'H' || event.Key() == tcell.KeyF1 {
+			ui.showHelp()
+			return nil
+		}
+		if event.Key() == tcell.KeyUp {
+			r, _ := ui.procTable.GetSelection()
+			if r > 1 {
+				ui.procTable.Select(r-1, 0)
+			}
+			return nil
+		}
+		if event.Key() == tcell.KeyDown {
+			r, _ := ui.procTable.GetSelection()
+			ui.procTable.Select(r+1, 0)
 			return nil
 		}
 		return event
@@ -460,21 +892,65 @@ func (s *htopServer) Open(ctx context.Context, req *connect.Request[pb.OpenReque
 	return connect.NewResponse(&pb.OpenResponse{}), nil
 }
 
+func (h *htopUI) showHelp() {
+	helpText := `[yellow]htop[/] — interactive process viewer
+
+[yellow]Keys:[/]
+  [green]F1 / h[/]      Help
+  [green]F3[/]          Search by name
+  [green]F4[/]          Filter by name
+  [green]F5[/]          Toggle tree view
+  [green]F6[/]          Cycle sort order
+  [green]F7[/]          Decrease nice value (+1)
+  [green]F8[/]          Increase nice value (-1)
+  [green]F9[/]          Kill process menu
+  [green]Space[/]        Tag/un-tag process
+  [green]q[/]            Quit
+
+[yellow]Columns:[/]
+  PID    Process ID
+  USER   Owner
+  PRI    Kernel priority
+  NI     Nice value
+  THR    Thread count
+  S      State (R=run, S=sleep, D=disk, Z=zombie, T=stop)
+  CPU%   CPU usage
+  MEM%   Memory usage
+  TIME+  Cumulative CPU time
+  COMMAND Command line
+
+[green]Press any key to close[/]`
+
+	textView := tview.NewTextView().
+		SetDynamicColors(true).
+		SetText(helpText)
+
+	textView.SetBorder(true).SetTitle(" Help ").SetTitleAlign(tview.AlignLeft)
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		h.app.SetRoot(h.flex, true)
+		return nil
+	})
+	textView.SetDoneFunc(func(key tcell.Key) {
+		h.app.SetRoot(h.flex, true)
+	})
+
+	h.app.SetRoot(textView, true)
+}
+
 func main() {
 	resClient := initResourcesClient()
 	if resClient == nil {
 		fmt.Fprintf(os.Stderr, "htop: failed to connect to resources plugin\n")
 		os.Exit(1)
 	}
-
 	svc := &htopServer{resClient: resClient}
 	path, handler := htopconnect.NewHtopServiceHandler(svc)
 
 	plugin.Serve(plugin.Config{
 		Name:        "htop",
 		DisplayName: "Htop",
-		Version:     "1.0.0",
-		Description: "Interactive process viewer using system resources",
+		Version:     "2.0.0",
+		Description: "Interactive process viewer — htop clone with CPU, Mem, Disk, Temp, Battery meters",
 		Services: []plugin.Service{
 			{
 				Name:               "htop.HtopService",
