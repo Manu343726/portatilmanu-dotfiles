@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -70,13 +72,20 @@ const colThr = 4
 const colState = 5
 const colCpu = 6
 const colMem = 7
-const colTime = 8
-const colCmd = 9
+const colIoR = 8
+const colIoW = 9
+const colTime = 10
+const colCmd = 11
 
-var colHeaders = []string{"PID", "USER", "PRI", "NI", "THR", "S", "CPU%", "MEM%", "TIME+", "COMMAND"}
-var colAlign = []int{tview.AlignRight, tview.AlignLeft, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignCenter, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignLeft}
+var colHeaders = []string{"PID", "USER", "PRI", "NI", "THR", "S", "CPU%", "MEM%", "IO_R", "IO_W", "TIME+", "COMMAND"}
+var colAlign = []int{tview.AlignRight, tview.AlignLeft, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignCenter, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignRight, tview.AlignLeft}
 
 type sortMode int
+
+type ioSample struct {
+	readBytes  int64
+	writeBytes int64
+}
 
 const (
 	sortCpu sortMode = iota
@@ -85,6 +94,9 @@ const (
 	sortUser
 	sortTime
 	sortNice
+	sortCmd
+	sortIoR
+	sortIoW
 	sortCpuAsc
 	sortMemAsc
 )
@@ -103,6 +115,10 @@ func (s sortMode) String() string {
 		return "TIME+"
 	case sortNice:
 		return "NI"
+	case sortIoR:
+		return "IO_R"
+	case sortIoW:
+		return "IO_W"
 	case sortCpuAsc:
 		return "CPU%"
 	case sortMemAsc:
@@ -110,6 +126,7 @@ func (s sortMode) String() string {
 	}
 	return "?"
 }
+
 
 type htopUI struct {
 	app        *tview.Application
@@ -136,7 +153,11 @@ type htopUI struct {
 	sortOrder       sortMode
 	filterText      string
 	treeMode        bool
+	ioMode          bool
 	taggedPids      map[int32]bool
+
+	prevIO  map[int32]ioSample
+	ioData  map[int32]ioSample
 
 	pc        plugin.Context
 	resClient resourcesconnect.ResourcesServiceClient
@@ -165,6 +186,8 @@ func newHtopUI(pc plugin.Context, resClient resourcesconnect.ResourcesServiceCli
 		stopPoll:   make(chan struct{}),
 		done:       make(chan struct{}),
 		taggedPids: make(map[int32]bool),
+		prevIO:     make(map[int32]ioSample),
+		ioData:     make(map[int32]ioSample),
 	}
 	h.buildUI()
 	return h
@@ -193,6 +216,16 @@ func (h *htopUI) buildUI() {
 
 	h.procTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
+		case tcell.KeyF2:
+			h.ioMode = !h.ioMode
+			if h.ioMode {
+				h.mu.Lock()
+				h.sortOrder = sortIoW
+				h.mu.Unlock()
+			}
+			h.refreshTable()
+			h.refreshFooter()
+			return nil
 		case tcell.KeyF3:
 			h.showSearch()
 			return nil
@@ -239,28 +272,49 @@ func (h *htopUI) toggleTag() {
 
 func (h *htopUI) cycleSort() {
 	h.mu.Lock()
-	switch h.sortOrder {
-	case sortCpu:
-		h.sortOrder = sortMem
-	case sortMem:
-		h.sortOrder = sortPid
-	case sortPid:
-		h.sortOrder = sortUser
-	case sortUser:
-		h.sortOrder = sortTime
-	case sortTime:
-		h.sortOrder = sortNice
-	case sortNice:
-		h.sortOrder = sortCpuAsc
-	case sortCpuAsc:
-		h.sortOrder = sortMemAsc
-	case sortMemAsc:
-		h.sortOrder = sortCpu
-	default:
-		h.sortOrder = sortCpu
-	}
+	h.sortOrder = nextSort(h.sortOrder, h.ioMode)
 	h.mu.Unlock()
 	h.refreshTable()
+}
+
+func nextSort(current sortMode, ioMode bool) sortMode {
+	if ioMode {
+		switch current {
+		case sortIoW:
+			return sortIoR
+		case sortIoR:
+			return sortPid
+		case sortPid:
+			return sortUser
+		case sortUser:
+			return sortTime
+		case sortTime:
+			return sortCmd
+		default:
+			// skip CPU/MEM sorts in IO mode, go to first IO sort
+			return sortIoW
+		}
+	}
+	switch current {
+	case sortCpu:
+		return sortMem
+	case sortMem:
+		return sortPid
+	case sortPid:
+		return sortUser
+	case sortUser:
+		return sortTime
+	case sortTime:
+		return sortNice
+	case sortNice:
+		return sortCpuAsc
+	case sortCpuAsc:
+		return sortMemAsc
+	case sortMemAsc:
+		return sortCpu
+	default:
+		return sortCpu
+	}
 }
 
 func (h *htopUI) start(app *tview.Application) {
@@ -323,6 +377,7 @@ func (h *htopUI) fetchData(_ context.Context) {
 	h.runningProcCount = currentResp.Msg.RunningProcessCount
 	if psResp != nil {
 		h.processes = psResp.Msg.Processes
+		h.collectIO(psResp.Msg.Processes)
 	}
 	h.mu.Unlock()
 	if h.app != nil {
@@ -552,6 +607,10 @@ func (h *htopUI) refreshFooter() {
 	if h.treeMode {
 		treeIndicator = " [TREE]"
 	}
+	ioIndicator := ""
+	if h.ioMode {
+		ioIndicator = " [IO]"
+	}
 	h.mu.RLock()
 	filter := h.filterText
 	h.mu.RUnlock()
@@ -560,8 +619,8 @@ func (h *htopUI) refreshFooter() {
 		filterIndicator = fmt.Sprintf(" [FILTER: %s]", filter)
 	}
 	sortName := h.sortOrder.String()
-	text := fmt.Sprintf("[::b]F3[::-]:Search  [::b]F4[::-]:Filter  [::b]F5[::-]:Tree  [::b]F6[::-]:Sort(%s)%s%s  [::b]F7[::-]:Nice-  [::b]F8[::-]:Nice+  [::b]F9[::-]:Kill  [::b]q[::-]:Quit",
-		sortName, treeIndicator, filterIndicator)
+	text := fmt.Sprintf("[::b]F2[::-]:IO  [::b]F3[::-]:Search  [::b]F4[::-]:Filter  [::b]F5[::-]:Tree%s  [::b]F6[::-]:Sort(%s)%s%s  [::b]F7[::-]:Nice-  [::b]F8[::-]:Nice+  [::b]F9[::-]:Kill  [::b]q[::-]:Quit",
+		ioIndicator, sortName, treeIndicator, filterIndicator)
 	h.footerView.SetText(text)
 }
 
@@ -588,6 +647,12 @@ func (h *htopUI) refreshTable() {
 		} else if i == colTime && sortBy == sortTime {
 			disp += " \u25bc"
 		} else if i == colNi && sortBy == sortNice {
+			disp += " \u25bc"
+		} else if i == colIoR && sortBy == sortIoR {
+			disp += " \u25bc"
+		} else if i == colIoW && sortBy == sortIoW {
+			disp += " \u25bc"
+		} else if i == colCmd && sortBy == sortCmd {
 			disp += " \u25bc"
 		}
 		table.SetCell(0, i, tview.NewTableCell(disp).
@@ -658,6 +723,13 @@ func (h *htopUI) refreshTable() {
 		table.SetCell(r, colMem, tview.NewTableCell(fmt.Sprintf("%.1f", p.MemPercent)).
 			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
 
+		ioR := h.ioData[p.Pid].readBytes
+		ioW := h.ioData[p.Pid].writeBytes
+		table.SetCell(r, colIoR, tview.NewTableCell(formatIORate(ioR)).
+			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+		table.SetCell(r, colIoW, tview.NewTableCell(formatIORate(ioW)).
+			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
+
 		table.SetCell(r, colTime, tview.NewTableCell(formatTime(p.Time)).
 			SetAlign(tview.AlignRight).SetTextColor(tcell.ColorWhite))
 
@@ -690,6 +762,12 @@ func (h *htopUI) sortProcesses(sorted []*respb.ProcessInfo, mode sortMode) {
 			less = sorted[i].Time > sorted[j].Time
 		case sortNice:
 			less = sorted[i].Nice > sorted[j].Nice
+		case sortCmd:
+			less = sorted[i].Command < sorted[j].Command
+		case sortIoR:
+			less = h.ioData[sorted[i].Pid].readBytes > h.ioData[sorted[j].Pid].readBytes
+		case sortIoW:
+			less = h.ioData[sorted[i].Pid].writeBytes > h.ioData[sorted[j].Pid].writeBytes
 		case sortCpuAsc:
 			less = sorted[i].CpuPercent < sorted[j].CpuPercent
 		case sortMemAsc:
@@ -802,6 +880,69 @@ func (h *htopUI) showKillMenu() {
 	h.app.SetRoot(list, true)
 }
 
+func (h *htopUI) collectIO(procs []*respb.ProcessInfo) {
+	now := make(map[int32]ioSample, len(procs))
+	for _, p := range procs {
+		sample, err := readProcIO(int(p.Pid))
+		if err != nil {
+			continue
+		}
+		now[p.Pid] = sample
+	}
+	// Calculate rate (bytes/sec) from delta since last poll
+	h.ioData = make(map[int32]ioSample, len(now))
+	for pid, cur := range now {
+		prev, ok := h.prevIO[pid]
+		if !ok {
+			h.ioData[pid] = cur
+		} else {
+			rd := cur.readBytes - prev.readBytes
+			wd := cur.writeBytes - prev.writeBytes
+			if rd < 0 {
+				rd = 0
+			}
+			if wd < 0 {
+				wd = 0
+			}
+			h.ioData[pid] = ioSample{readBytes: rd / 2, writeBytes: wd / 2}
+		}
+	}
+	h.prevIO = now
+}
+
+func readProcIO(pid int) (ioSample, error) {
+	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "io"))
+	if err != nil {
+		return ioSample{}, err
+	}
+	var s ioSample
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "read_bytes:") {
+			s.readBytes, _ = strconv.ParseInt(strings.TrimSpace(line[11:]), 10, 64)
+		} else if strings.HasPrefix(line, "write_bytes:") {
+			s.writeBytes, _ = strconv.ParseInt(strings.TrimSpace(line[12:]), 10, 64)
+		}
+	}
+	return s, nil
+}
+
+func formatIORate(bytes int64) string {
+	if bytes <= 0 {
+		return "0"
+	}
+	b := float64(bytes)
+	switch {
+	case b >= 1<<30:
+		return fmt.Sprintf("%.1fG", b/float64(1<<30))
+	case b >= 1<<20:
+		return fmt.Sprintf("%.1fM", b/float64(1<<20))
+	case b >= 1024:
+		return fmt.Sprintf("%.0fK", b/1024)
+	default:
+		return fmt.Sprintf("%.0f", b)
+	}
+}
+
 func truncateStr(s string, max int) string {
 	if len(s) <= max {
 		return s
@@ -897,6 +1038,7 @@ func (h *htopUI) showHelp() {
 
 [yellow]Keys:[/]
   [green]F1 / h[/]      Help
+  [green]F2[/]          Toggle I/O mode (per-process read/write rates)
   [green]F3[/]          Search by name
   [green]F4[/]          Filter by name
   [green]F5[/]          Toggle tree view
@@ -916,6 +1058,8 @@ func (h *htopUI) showHelp() {
   S      State (R=run, S=sleep, D=disk, Z=zombie, T=stop)
   CPU%   CPU usage
   MEM%   Memory usage
+  IO_R   Disk read rate (B/s)
+  IO_W   Disk write rate (B/s)
   TIME+  Cumulative CPU time
   COMMAND Command line
 
