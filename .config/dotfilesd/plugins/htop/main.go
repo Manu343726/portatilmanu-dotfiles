@@ -158,6 +158,7 @@ type htopUI struct {
 
 	prevIO  map[int32]ioSample
 	ioData  map[int32]ioSample
+	ppidMap map[int32]int32
 
 	pc        plugin.Context
 	resClient resourcesconnect.ResourcesServiceClient
@@ -188,6 +189,7 @@ func newHtopUI(pc plugin.Context, resClient resourcesconnect.ResourcesServiceCli
 		taggedPids: make(map[int32]bool),
 		prevIO:     make(map[int32]ioSample),
 		ioData:     make(map[int32]ioSample),
+		ppidMap:    make(map[int32]int32),
 	}
 	h.buildUI()
 	return h
@@ -378,6 +380,7 @@ func (h *htopUI) fetchData(_ context.Context) {
 	if psResp != nil {
 		h.processes = psResp.Msg.Processes
 		h.collectIO(psResp.Msg.Processes)
+		h.collectPPID(psResp.Msg.Processes)
 	}
 	h.mu.Unlock()
 	if h.app != nil {
@@ -675,6 +678,18 @@ func (h *htopUI) refreshTable() {
 	copy(sorted, filtered)
 	h.sortProcesses(sorted, sortBy)
 
+	if h.treeMode {
+		sorted = h.flattenTree(sorted)
+	}
+
+	// Precompute tree indent levels
+	indent := make(map[int32]int)
+	if h.treeMode {
+		for _, p := range sorted {
+			indent[p.Pid] = getIndentLevel(p.Pid, h.ppidMap)
+		}
+	}
+
 	for row, p := range sorted {
 		r := row + 1
 
@@ -740,10 +755,113 @@ func (h *htopUI) refreshTable() {
 		if isTagged {
 			cmdText = "\u2713 " + cmdText
 		}
+		if h.treeMode {
+			lvl := indent[p.Pid]
+			if lvl > 0 {
+				prefix := strings.Repeat("  ", lvl)
+				cmdText = prefix + "\u2514 " + cmdText
+			}
+		}
 		table.SetCell(r, colCmd, tview.NewTableCell(cmdText).
 			SetTextColor(tcell.ColorWhite))
 	}
 	table.ScrollToBeginning()
+}
+
+type treeNode struct {
+	proc     *respb.ProcessInfo
+	children []*treeNode
+	level    int
+}
+
+func (h *htopUI) flattenTree(sorted []*respb.ProcessInfo) []*respb.ProcessInfo {
+	// Build node map
+	nodes := make(map[int32]*treeNode, len(sorted))
+	for _, p := range sorted {
+		nodes[p.Pid] = &treeNode{proc: p}
+	}
+
+	// Build parent-child links
+	for _, n := range nodes {
+		ppid, ok := h.ppidMap[n.proc.Pid]
+		if !ok {
+			continue
+		}
+		parent, ok := nodes[ppid]
+		if !ok || parent == n {
+			continue
+		}
+		parent.children = append(parent.children, n)
+	}
+
+	// Sort children by current sort order
+	mode := h.sortOrder
+	for _, n := range nodes {
+		sort.SliceStable(n.children, func(i, j int) bool {
+			return procLess(n.children[i].proc, n.children[j].proc, mode)
+		})
+	}
+
+	// Flatten roots (processes whose parent isn't in the list) in sorted order
+	var roots []*treeNode
+	for _, n := range nodes {
+		ppid, ok := h.ppidMap[n.proc.Pid]
+		if !ok {
+			roots = append(roots, n)
+			continue
+		}
+		if _, found := nodes[ppid]; !found {
+			roots = append(roots, n)
+		}
+	}
+	sort.SliceStable(roots, func(i, j int) bool {
+		return procLess(roots[i].proc, roots[j].proc, mode)
+	})
+
+	var result []*respb.ProcessInfo
+	var walk func(n *treeNode, level int)
+	walk = func(n *treeNode, level int) {
+		n.level = level
+		result = append(result, n.proc)
+		for _, c := range n.children {
+			walk(c, level+1)
+		}
+	}
+	for _, n := range roots {
+		walk(n, 0)
+	}
+
+	return result
+}
+
+func procLess(a, b *respb.ProcessInfo, mode sortMode) bool {
+	switch mode {
+	case sortCpu, sortCpuAsc:
+		if mode == sortCpuAsc {
+			return a.CpuPercent < b.CpuPercent
+		}
+		return a.CpuPercent > b.CpuPercent
+	case sortMem, sortMemAsc:
+		if mode == sortMemAsc {
+			return a.MemPercent < b.MemPercent
+		}
+		return a.MemPercent > b.MemPercent
+	case sortPid:
+		return a.Pid < b.Pid
+	case sortUser:
+		return a.User < b.User
+	case sortTime:
+		return a.Time > b.Time
+	case sortNice:
+		return a.Nice > b.Nice
+	case sortCmd:
+		return a.Command < b.Command
+	case sortIoR:
+		return a.CpuPercent > b.CpuPercent // fallback
+	case sortIoW:
+		return a.CpuPercent > b.CpuPercent // fallback
+	}
+	return a.CpuPercent > b.CpuPercent
 }
 
 func (h *htopUI) sortProcesses(sorted []*respb.ProcessInfo, mode sortMode) {
@@ -910,6 +1028,39 @@ func (h *htopUI) collectIO(procs []*respb.ProcessInfo) {
 	h.prevIO = now
 }
 
+func (h *htopUI) collectPPID(procs []*respb.ProcessInfo) {
+	m := make(map[int32]int32, len(procs))
+	for _, p := range procs {
+		ppid, err := readProcPPID(int(p.Pid))
+		if err == nil {
+			m[p.Pid] = ppid
+		}
+	}
+	h.ppidMap = m
+}
+
+func readProcPPID(pid int) (int32, error) {
+	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return 0, err
+	}
+	s := string(data)
+	// Find the closing paren of comm field, then skip the space + state char
+	i := strings.LastIndex(s, ")")
+	if i < 0 {
+		return 0, fmt.Errorf("bad stat format")
+	}
+	rest := strings.Fields(s[i+2:]) // skip ") "
+	if len(rest) < 2 {
+		return 0, fmt.Errorf("bad stat format")
+	}
+	ppid, err := strconv.ParseInt(rest[1], 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int32(ppid), nil
+}
+
 func readProcIO(pid int) (ioSample, error) {
 	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "io"))
 	if err != nil {
@@ -940,6 +1091,30 @@ func formatIORate(bytes int64) string {
 		return fmt.Sprintf("%.0fK", b/1024)
 	default:
 		return fmt.Sprintf("%.0f", b)
+	}
+}
+
+func getIndentLevel(pid int32, ppidMap map[int32]int32) int {
+	level := 0
+	seen := make(map[int32]bool)
+	current := pid
+	for {
+		if seen[current] {
+			return level
+		}
+		seen[current] = true
+		ppid, ok := ppidMap[current]
+		if !ok || ppid == 0 || ppid == current {
+			return level
+		}
+		if _, ok := ppidMap[ppid]; !ok {
+			return level
+		}
+		current = ppid
+		level++
+		if level > 100 {
+			return level
+		}
 	}
 }
 
