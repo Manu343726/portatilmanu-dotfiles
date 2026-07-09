@@ -1,26 +1,14 @@
-# Ignore all generated and build artifacts by default.
-# Only hand-written source files should be tracked.
-**
-
-# Allow directories (needed for git to traverse)
-!**/
-
-# Allow source files by extension
-!*.go
-!*.mod
-!*.sum
-!*.proto
-
-# Allow explicit assets
-!.gitkeep
-!README*
-
-# Re-deny generated protobuf code (more specific, overrides allow)
+# Generated protobuf code — run `make proto` to regenerate
 *.pb.go
 *.connect.go
-
-# Re-deny generated docs artifacts
-*_doc.pb
+# Generated docs embed code (protoc-gen-docs)
 *_docs.go
 *_docs.json
+# Generated doc binary protobuf
+*_doc.pb
+# Generated markdown docs in proto directories
 **/proto/**/*.md
+# Compiled plugin binaries (no-extension files in plugin dirs, e.g. htop/htop)
+# Re-include files with extensions (source code, configs, assets)
+*/*
+!*.*
