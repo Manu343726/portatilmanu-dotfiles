@@ -676,7 +676,9 @@ func (h *htopUI) refreshTable() {
 
 	sorted := make([]*respb.ProcessInfo, len(filtered))
 	copy(sorted, filtered)
-	if !h.treeMode {
+	if h.treeMode {
+		h.sortProcesses(sorted, sortPid)
+	} else {
 		h.sortProcesses(sorted, sortBy)
 	}
 
