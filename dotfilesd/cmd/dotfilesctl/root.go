@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 
 	"dotfilesd/internal/pkg/cli"
 	"dotfilesd/internal/pkg/shared"
 	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1"
+	"dotfilesd/proto/dotfilesd/v1/dotfilesdv1/dotfilesdv1connect"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -108,16 +110,17 @@ var (
 // and registered scripts as top-level cobra commands. This is best-effort: if
 // the daemon is unreachable, only the static core commands are available.
 func registerDynamicCommands(root *cobra.Command, daemonPort string) {
-	dynClients := cli.NewClients(daemonPort)
-	if err := dynClients.Connect(context.Background()); err != nil {
-		slog.Debug("daemon not reachable, skipping dynamic command registration", "port", daemonPort)
-		return
-	}
-	defer dynClients.Close()
-	slog.Debug("connected to daemon for dynamic command registration")
+	// Use bare Connect RPC clients without creating a daemon session.
+	// This avoids pushing client_connect/session_create diagnostic events
+	// that would create phantom entries in the diagnostics tree.
+	baseURL := fmt.Sprintf("http://127.0.0.1:%s", daemonPort)
+	registryClient := dotfilesdv1connect.NewPluginRegistryServiceClient(http.DefaultClient, baseURL)
+	scriptClient := dotfilesdv1connect.NewScriptServiceClient(http.DefaultClient, baseURL)
+
+	slog.Debug("fetching dynamic commands from daemon", "port", daemonPort)
 
 	// Register plugin list commands (one per plugin) from the registry.
-	pluginResp, err := dynClients.Registry.ListPlugins(context.Background(), connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{}))
+	pluginResp, err := registryClient.ListPlugins(context.Background(), connect.NewRequest(&dotfilesdv1.RegistryListPluginsRequest{}))
 	if err == nil {
 		for _, p := range pluginResp.Msg.Plugins {
 			info := cli.PluginRegistryInfo{
@@ -139,10 +142,10 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 	}
 
 	// Fetch script tree.
-	scriptResp, err := dynClients.Script.ListScripts(context.Background(), connect.NewRequest(&dotfilesdv1.ListScriptsRequest{}))
+	scriptResp, err := scriptClient.ListScripts(context.Background(), connect.NewRequest(&dotfilesdv1.ListScriptsRequest{}))
 	if err == nil {
 		for _, entry := range scriptResp.Msg.Entries {
-			registerScriptCommand(root, dynClients, entry, true)
+			registerScriptCommand(root, entry, true)
 		}
 	} else {
 		slog.Debug("failed to fetch scripts for command registration", "error", err)
@@ -152,7 +155,7 @@ func registerDynamicCommands(root *cobra.Command, daemonPort string) {
 // registerScriptCommand recursively creates cobra commands from the script
 // entry tree. parent is the command to which the entry should be added.
 // isTopLevel indicates whether this is a root-level entry (controls GroupID).
-func registerScriptCommand(parent *cobra.Command, dynClients *cli.Clients, entry *dotfilesdv1.ScriptEntry, isTopLevel bool) {
+func registerScriptCommand(parent *cobra.Command, entry *dotfilesdv1.ScriptEntry, isTopLevel bool) {
 	name := entry.Name
 	scriptPath := entry.Path
 
@@ -179,7 +182,7 @@ func registerScriptCommand(parent *cobra.Command, dynClients *cli.Clients, entry
 			dirCmd.GroupID = "scripts"
 		}
 		for _, child := range entry.Children {
-			registerScriptCommand(dirCmd, dynClients, child, false)
+			registerScriptCommand(dirCmd, child, false)
 		}
 		parent.AddCommand(dirCmd)
 	} else {

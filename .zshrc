@@ -148,3 +148,6 @@ export NVM_DIR="$HOME/.nvm"
 # nchat
 alias tg='nchat -d ~/.config/nchat-telegram'
 alias wa='nchat -d ~/.config/nchat-whatsapp'
+
+# Enable VSCode shell integration
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"

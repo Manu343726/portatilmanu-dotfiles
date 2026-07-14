@@ -136,12 +136,17 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 	scriptID := "script:" + scriptLabel + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
 	scriptStart := time.Now()
 
-	// Push script_start.
+	// Push script_start (use empty parent for ephemeral sessions to avoid
+	// orphaned script nodes with a dangling "session:" reference).
+	scriptParent := ""
+	if session.id != "" {
+		scriptParent = "session:" + session.id
+	}
 	if r.diag != nil {
 		r.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventScriptStart,
 			Resource:  scriptID,
-			Parent:    "session:" + session.id,
+			Parent:    scriptParent,
 			Timestamp: scriptStart,
 			Message:   scriptLabel,
 		})
@@ -289,7 +294,7 @@ func (r *ScriptRunner) RunScript(ctx context.Context, req *connect.Request[dotfi
 		r.diag.PushEvent(diagnostics.Event{
 			Type:      diagnostics.EventScriptStop,
 			Resource:  scriptID,
-			Parent:    "session:" + session.id,
+			Parent:    scriptParent,
 			Timestamp: time.Now(),
 			Message:   scriptLabel,
 			Attrs: map[string]string{

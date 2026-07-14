@@ -1004,7 +1004,13 @@ func newSessionServer(store *SessionStore) *sessionServer {
 func (s *sessionServer) CreateSession(ctx context.Context, req *connect.Request[dotfilesdv1.CreateSessionRequest]) (*connect.Response[dotfilesdv1.CreateSessionResponse], error) {
 	slog.Log(ctx, levelTrace, "Session.CreateSession")
 
-	session := s.store.Create("")
+	// Extract diagnostics parent from session variables, same as Connect() does.
+	diagParent := ""
+	if sm := req.Msg.GetSession(); sm != nil {
+		diagParent = sm.GetVariables()[diagParentKey]
+	}
+
+	session := s.store.Create(diagParent)
 	resp := connect.NewResponse(&dotfilesdv1.CreateSessionResponse{
 		Session: session.toProto(),
 	})

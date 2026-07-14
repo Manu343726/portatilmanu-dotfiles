@@ -36,7 +36,12 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 	// session variables (set by plugin SDK for plugin-to-plugin traceability).
 	// Fall back to "session:<id>". We read from req.Msg directly to avoid
 	// permanently mutating the stored session's variables.
-	execParent := "session:" + session.id
+	// When the session is ephemeral (empty id), use empty parent to avoid
+	// creating orphaned exec nodes with a dangling "session:" reference.
+	execParent := ""
+	if session.id != "" {
+		execParent = "session:" + session.id
+	}
 	if sm := req.Msg.GetSession(); sm != nil {
 		if dp, ok := sm.GetVariables()["_diag_parent"]; ok && dp != "" {
 			execParent = dp
@@ -162,7 +167,12 @@ func (s *execServer) ExecStream(
 
 	// Determine exec parent: check _diag_parent in the incoming request's
 	// session variables (plugin-to-plugin traceability).
-	execParent := "session:" + session.id
+	// When the session is ephemeral (empty id), use empty parent to avoid
+	// creating orphaned exec nodes with a dangling "session:" reference.
+	execParent := ""
+	if session.id != "" {
+		execParent = "session:" + session.id
+	}
 	if sm := req.Msg.GetSession(); sm != nil {
 		if dp, ok := sm.GetVariables()["_diag_parent"]; ok && dp != "" {
 			execParent = dp

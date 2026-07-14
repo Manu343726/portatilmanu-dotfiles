@@ -464,6 +464,48 @@ func RunMCP(clients *Clients) {
 	bridge := NewMCPBridge(os.Stdout)
 	mcpBridge = bridge
 
+	// Daemon health check: ping every 5s. When the daemon restarts or goes
+	// down, exit cleanly so the MCP client (VS Code, opencode) restarts us
+	// with a fresh connection. This avoids stale sessions, stale plugin tool
+	// caches, and broken sudo key negotiations.
+	ctx, stopHealthCheck := context.WithCancel(context.Background())
+	defer stopHealthCheck()
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+
+			// Only check once we've connected at least once.
+			if clients.ClientID == "" {
+				continue
+			}
+
+			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_, err := clients.Sys.Ping(pingCtx, connect.NewRequest(&dotfilesdv1.PingRequest{}))
+			cancel()
+
+			if err != nil {
+				slog.Error("daemon health check failed, notifying MCP client and exiting", "error", err)
+				writeJSONLine(os.Stdout, map[string]any{
+					"jsonrpc": "2.0",
+					"method":  "notifications/message",
+					"params": map[string]any{
+						"level":   "error",
+						"message": "dotfilesd daemon connection lost — restarting MCP tools",
+					},
+				})
+				// Clean exit signals the MCP client to restart us immediately.
+				os.Exit(0)
+			}
+		}
+	}()
+
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		line, err := reader.ReadString('\n')
