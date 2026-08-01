@@ -14,5 +14,35 @@
       },
       "enabled": true
     }
+  },
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio",
+      "options": {
+        "baseURL": "http://localhost:1234/v1"
+      },
+      "blacklist": [
+        "qwen/qwen3-30b-a3b-2507",
+        "qwen/qwen3-coder-30b"
+      ],
+      "models": {
+        "glm-4.7-flash": {
+          "name": "GLM 4.7 Flash",
+          "reasoning": true
+        },
+        "zai-org/glm-4.6v-flash": {
+          "name": "GLM 4.6V Flash",
+          "reasoning": true
+        },
+        "openai/gpt-oss-20b": {
+          "name": "GPT-OSS 20B"
+        },
+        "deepseek/deepseek-r1-0528-qwen3-8b": {
+          "name": "DeepSeek R1 0528 Qwen3 8B",
+          "reasoning": true
+        }
+      }
+    }
   }
 }

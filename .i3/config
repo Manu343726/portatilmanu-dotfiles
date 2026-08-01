@@ -291,6 +291,7 @@ exec --no-startup-id start_conky_maia
 exec --no-startup-id auto-external
 exec --no-startup-id flameshot
 exec --no-startup-id rog-control-center
+exec --no-startup-id sleep 3 && lms server start
 exec --no-startup-id xautolock -time 10 -locker blurlock
 exec_always --no-startup-id ff-theme-util
 exec_always --no-startup-id fix_xcursor
