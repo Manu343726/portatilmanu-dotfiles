@@ -32,6 +32,7 @@ See `.docs/` for per-component setup guides.
 | zsh       | `~/.zshrc` | `.docs/zsh.md` |
 | keyboard  | — | `.docs/keyboard.md` |
 | clipboard | — | `.docs/clipboard.md` |
+| SSH/ZeroTier | `~/.ssh/config` + `/etc/udev/rules.d/90-zerotier-mtu.rules` | `.docs/ssh-zerotier-mtu.md` |
 | palette   | — | `.docs/index.md` |
 | dotfilesd | `~/dotfilesd/` | `dotfilesd/README.md` + `dotfilesd/docs/` |
 | **ASUS ROG** | `~/.local/bin/asus-profile` | Power profile switcher via `asusctl` |
