@@ -151,3 +151,10 @@ alias wa='nchat -d ~/.config/nchat-whatsapp'
 
 # Enable VSCode shell integration
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/home/manu343726/.lmstudio/bin"
+# End of LM Studio CLI section
+
+
+# Codeman tmux session shortcut
+alias sc='tmux-chooser'

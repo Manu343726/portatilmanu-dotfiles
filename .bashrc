@@ -115,3 +115,8 @@ shopt -s histappend
 
 # opencode
 export PATH=/home/manu343726/.opencode/bin:$PATH
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/home/manu343726/.lmstudio/bin"
+# End of LM Studio CLI section
+
