@@ -33,15 +33,16 @@ ip link show enp9s0f3u1u4          # mtu 1500  ← physical link
 
 ## Permanent fix
 
-Force ZeroTier interfaces down to `1500` whenever a `zt*` interface is added, so
-it survives reboots and interface re-creation.
+Force ZeroTier interfaces down to `1500`, both when a `zt*` interface is added
+**and** periodically afterward, so it survives reboots and the late MTU re-zero.
 
-**Why the naive rule is not enough:** a bare `ATTR{mtu}="1500"` udev rule *does*
-run on the `add` event, but `zerotier-one` re-sets the MTU to `2800` right after
-creating the tap device, racing past udev and winning. Result: the interface
-comes back at `2800` after reboot even with the rule installed. The fix retries
-for ~10s from the `add` event, so it catches and re-caps the MTU after ZeroTier
-finishes its own bring-up.
+**Why the udev-only rule is not enough:** the naive `ATTR{mtu}="1500"` udev rule
+runs on the `add` event, but `zerotier-one` sets the MTU back to `2800` *after* the
+tap device is created. The one-shot retry loop catches ZeroTier's initial bring-up,
+but `zerotier-one` re-applies `2800` once its network comes up **after** the ~10s
+udev window closes — so on the next reboot SSH stalls again. The lasting fix adds a
+**systemd timer** (`zt-mtu-fix.timer`) that re-caps every 60s, self-healing the
+interface whenever ZeroTier drifts it back to `2800`.
 
 **File:** `/etc/udev/rules.d/90-zerotier-mtu.rules`
 ```
@@ -49,22 +50,37 @@ SUBSYSTEM=="net", ACTION=="add", KERNEL=="zt*", ATTR{mtu}="1500", RUN+="/usr/loc
 ```
 
 **Script:** `/usr/local/bin/zt-mtu-fix`
+- With an interface argument (udev `RUN+=`), caps that one interface with a short retry loop.
+- With no arguments (called by the timer), caps **all** `zt*` interfaces.
+
 ```sh
 #!/usr/bin/env bash
 set -u
-iface="$1"
-[ -e "/sys/class/net/$iface" ] || exit 0
-for _ in $(seq 1 40); do
-  ip link set dev "$iface" mtu 1500 2>/dev/null || true
-  if [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "1500" ]; then
-    echo "$(date '+%F %T') $iface: mtu capped to 1500" >> /var/log/zt-mtu-fix.log
-    exit 0
-  fi
-  sleep 0.25
-done
-echo "$(date '+%F %T') $iface: FAILED to cap mtu" >> /var/log/zt-mtu-fix.log
-exit 1
+fix_iface() {
+  local iface="$1"
+  [ -e "/sys/class/net/$iface" ] || return 0
+  for _ in $(seq 1 8); do
+    ip link set dev "$iface" mtu 1500 2>/dev/null || true
+    if [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "1500" ]; then
+      echo "$(date '+%F %T') $iface: mtu capped to 1500" >> /var/log/zt-mtu-fix.log
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 0
+}
+if [ $# -gt 0 ]; then
+  fix_iface "$1"
+else
+  for d in /sys/class/net/zt*; do
+    [ -e "$d/mtu" ] && fix_iface "${d##*/}"
+  done
+fi
 ```
+
+**Systemd units:** `/etc/systemd/system/zt-mtu-fix.timer` + `zt-mtu-fix.service`
+- `.service`: `Type=oneshot`, `ExecStart=/usr/local/bin/zt-mtu-fix`, run after `network.target` and `zerotier-one.service`.
+- `.timer`: `OnBootSec=10s`, `OnUnitActiveSec=60s`, `Persistent=true`, `WantedBy=timers.target`. This re-caps every 60s so any late `2800` re-zero self-heals.
 
 Apply to the running interface and install:
 
@@ -76,16 +92,51 @@ EOF
 sudo tee /usr/local/bin/zt-mtu-fix >/dev/null <<'EOF'
 #!/usr/bin/env bash
 set -u
-iface="$1"
-[ -e "/sys/class/net/$iface" ] || exit 0
-for _ in $(seq 1 40); do
-  ip link set dev "$iface" mtu 1500 2>/dev/null || true
-  [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "1500" ] && exit 0
-  sleep 0.25
-done
-exit 1
+fix_iface() {
+  local iface="$1"
+  [ -e "/sys/class/net/$iface" ] || return 0
+  for _ in $(seq 1 8); do
+    ip link set dev "$iface" mtu 1500 2>/dev/null || true
+    if [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "1500" ]; then
+      echo "$(date '+%F %T') $iface: mtu capped to 1500" >> /var/log/zt-mtu-fix.log
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 0
+}
+if [ $# -gt 0 ]; then
+  fix_iface "$1"
+else
+  for d in /sys/class/net/zt*; do
+    [ -e "$d/mtu" ] && fix_iface "${d##*/}"
+  done
+fi
 EOF
 sudo chmod +x /usr/local/bin/zt-mtu-fix
+sudo tee /etc/systemd/system/zt-mtu-fix.service >/dev/null <<'EOF'
+[Unit]
+Description=Cap ZeroTier zt* MTU to 1500
+After=network.target zerotier-one.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/zt-mtu-fix
+EOF
+sudo tee /etc/systemd/system/zt-mtu-fix.timer >/dev/null <<'EOF'
+[Unit]
+Description=Periodically re-cap ZeroTier zt* MTU to 1500
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=60s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now zt-mtu-fix.timer
 sudo udevadm control --reload
 # verify live (bump MTU back up, re-fire the add event, expect 1500):
 sudo ip link set ztyxa6ggpt mtu 2800
@@ -106,7 +157,9 @@ ip link show ztyxa6ggpt         # should report "mtu 1500"
 
 | File | Purpose |
 |------|---------|
-| `/etc/udev/rules.d/90-zerotier-mtu.rules` | **Permanent fix** — caps `zt*` MTU at 1500 via `ATTR{mtu}` + `RUN+=` |
-| `/usr/local/bin/zt-mtu-fix` | retry-loop script run by udev; beats the ZeroTier MTU race |
+| `/etc/udev/rules.d/90-zerotier-mtu.rules` | **Fast boot fix** — caps `zt*` MTU at 1500 on the `add` event |
+| `/usr/local/bin/zt-mtu-fix` | retry-loop script run by udev (single iface) or the timer (all `zt*`) |
+| `/etc/systemd/system/zt-mtu-fix.service` | oneshot service wrapping `zt-mtu-fix` |
+| `/etc/systemd/system/zt-mtu-fix.timer` | **Self-heal** — re-caps MTU to 1500 every 60s, defeating ZeroTier's late re-zero |
 | `/var/log/zt-mtu-fix.log` | execution log for the fix script |
 | `~/.ssh/config` | `Host pcgordo-wsl` → `172.25.209.143` port `2222`, user `manu343726` |
