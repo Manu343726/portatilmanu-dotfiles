@@ -41,8 +41,16 @@ runs on the `add` event, but `zerotier-one` sets the MTU back to `2800` *after* 
 tap device is created. The one-shot retry loop catches ZeroTier's initial bring-up,
 but `zerotier-one` re-applies `2800` once its network comes up **after** the ~10s
 udev window closes — so on the next reboot SSH stalls again. The lasting fix adds a
-**systemd timer** (`zt-mtu-fix.timer`) that re-caps every 60s, self-healing the
+**systemd timer** (`zt-mtu-fix.timer`) that re-caps every minute, self-healing the
 interface whenever ZeroTier drifts it back to `2800`.
+
+**Why the timer must use `OnCalendar`, not `OnUnitActiveSec`:** the original timer
+used `OnBootSec=10s` + `OnUnitActiveSec=60s` + `Persistent=true`. After a
+suspend/resume cycle the monotonic trigger went stale — the timer stayed `active`
+but showed `Trigger: n/a` with an empty `NextElapseUSecRealtime`, so it silently
+stopped re-capping and SSH stalled again on the next drift. `OnCalendar=*:0/1`
+(a wall-clock trigger every minute at second 0) re-arms reliably on its own
+schedule and survives suspend/resume, so the self-heal is dependable.
 
 **File:** `/etc/udev/rules.d/90-zerotier-mtu.rules`
 ```
@@ -80,7 +88,7 @@ fi
 
 **Systemd units:** `/etc/systemd/system/zt-mtu-fix.timer` + `zt-mtu-fix.service`
 - `.service`: `Type=oneshot`, `ExecStart=/usr/local/bin/zt-mtu-fix`, run after `network.target` and `zerotier-one.service`.
-- `.timer`: `OnBootSec=10s`, `OnUnitActiveSec=60s`, `Persistent=true`, `WantedBy=timers.target`. This re-caps every 60s so any late `2800` re-zero self-heals.
+- `.timer`: `OnBootSec=10s`, `OnCalendar=*:0/1`, `AccuracySec=1s`, `Persistent=true`, `WantedBy=timers.target`. This re-caps every minute so any late `2800` re-zero self-heals. The wall-clock `OnCalendar` trigger (not monotonic `OnUnitActiveSec`) prevents the timer from going stale after suspend/resume.
 
 Apply to the running interface and install:
 
@@ -129,7 +137,8 @@ Description=Periodically re-cap ZeroTier zt* MTU to 1500
 
 [Timer]
 OnBootSec=10s
-OnUnitActiveSec=60s
+OnCalendar=*:0/1
+AccuracySec=1s
 Persistent=true
 
 [Install]
@@ -160,6 +169,6 @@ ip link show ztyxa6ggpt         # should report "mtu 1500"
 | `/etc/udev/rules.d/90-zerotier-mtu.rules` | **Fast boot fix** — caps `zt*` MTU at 1500 on the `add` event |
 | `/usr/local/bin/zt-mtu-fix` | retry-loop script run by udev (single iface) or the timer (all `zt*`) |
 | `/etc/systemd/system/zt-mtu-fix.service` | oneshot service wrapping `zt-mtu-fix` |
-| `/etc/systemd/system/zt-mtu-fix.timer` | **Self-heal** — re-caps MTU to 1500 every 60s, defeating ZeroTier's late re-zero |
+| `/etc/systemd/system/zt-mtu-fix.timer` | **Self-heal** — `OnCalendar=*:0/1` re-caps MTU to 1500 every minute, defeating ZeroTier's late re-zero |
 | `/var/log/zt-mtu-fix.log` | execution log for the fix script |
 | `~/.ssh/config` | `Host pcgordo-wsl` → `172.25.209.143` port `2222`, user `manu343726` |
