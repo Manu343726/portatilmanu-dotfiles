@@ -33,10 +33,19 @@ ip link show enp9s0f3u1u4          # mtu 1500  ← physical link
 
 ## Permanent fix
 
-Force ZeroTier interfaces down to `1500`, both when a `zt*` interface is added
-**and** periodically afterward, so it survives reboots and the late MTU re-zero.
+Force ZeroTier interfaces down to `1350`, both when a `zt*` interface is added
+**and** periodically afterward, so it survives reboots, the late MTU re-zero, and
+low-MTU physical paths.
 
-**Why the udev-only rule is not enough:** the naive `ATTR{mtu}="1500"` udev rule
+**Why `1350` and not `1500`:** the `1500` cap fixes the original `2800` re-zero,
+but ZeroTier encapsulation adds ~104 bytes of overhead on top of the MTU you set.
+On a PPPoE physical link (MTU `1492`) the tunnel's effective ceiling is ~`1388`
+(measure with `ping -M do -s <n> <host>`: payload `1360` passes, `1370` drops).
+`1500` therefore silently stays broken on PPPoE paths; `1350` fits with margin
+under both `1500` and `1492` uplinks. Confirm the current path MTU with
+`ping -M do -s 1472 <peer-public-ip>` before choosing a value.
+
+**Why the udev-only rule is not enough:** the naive `ATTR{mtu}="1350"` udev rule
 runs on the `add` event, but `zerotier-one` sets the MTU back to `2800` *after* the
 tap device is created. The one-shot retry loop catches ZeroTier's initial bring-up,
 but `zerotier-one` re-applies `2800` once its network comes up **after** the ~10s
@@ -54,23 +63,25 @@ schedule and survives suspend/resume, so the self-heal is dependable.
 
 **File:** `/etc/udev/rules.d/90-zerotier-mtu.rules`
 ```
-SUBSYSTEM=="net", ACTION=="add", KERNEL=="zt*", ATTR{mtu}="1500", RUN+="/usr/local/bin/zt-mtu-fix %k"
+SUBSYSTEM=="net", ACTION=="add", KERNEL=="zt*", ATTR{mtu}="1350", RUN+="/usr/local/bin/zt-mtu-fix %k"
 ```
 
 **Script:** `/usr/local/bin/zt-mtu-fix`
 - With an interface argument (udev `RUN+=`), caps that one interface with a short retry loop.
 - With no arguments (called by the timer), caps **all** `zt*` interfaces.
+- The target MTU lives in the `MTU=1350` variable at the top of the script.
 
 ```sh
 #!/usr/bin/env bash
 set -u
+MTU=1350
 fix_iface() {
   local iface="$1"
   [ -e "/sys/class/net/$iface" ] || return 0
   for _ in $(seq 1 8); do
-    ip link set dev "$iface" mtu 1500 2>/dev/null || true
-    if [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "1500" ]; then
-      echo "$(date '+%F %T') $iface: mtu capped to 1500" >> /var/log/zt-mtu-fix.log
+    ip link set dev "$iface" mtu $MTU 2>/dev/null || true
+    if [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "$MTU" ]; then
+      echo "$(date '+%F %T') $iface: mtu capped to $MTU" >> /var/log/zt-mtu-fix.log
       return 0
     fi
     sleep 0.25
@@ -93,20 +104,21 @@ fi
 Apply to the running interface and install:
 
 ```sh
-sudo ip link set ztyxa6ggpt mtu 1500     # fix the live interface now
+sudo ip link set ztyxa6ggpt mtu 1350     # fix the live interface now
 sudo tee /etc/udev/rules.d/90-zerotier-mtu.rules >/dev/null <<'EOF'
-SUBSYSTEM=="net", ACTION=="add", KERNEL=="zt*", ATTR{mtu}="1500", RUN+="/usr/local/bin/zt-mtu-fix %k"
+SUBSYSTEM=="net", ACTION=="add", KERNEL=="zt*", ATTR{mtu}="1350", RUN+="/usr/local/bin/zt-mtu-fix %k"
 EOF
 sudo tee /usr/local/bin/zt-mtu-fix >/dev/null <<'EOF'
 #!/usr/bin/env bash
 set -u
+MTU=1350
 fix_iface() {
   local iface="$1"
   [ -e "/sys/class/net/$iface" ] || return 0
   for _ in $(seq 1 8); do
-    ip link set dev "$iface" mtu 1500 2>/dev/null || true
-    if [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "1500" ]; then
-      echo "$(date '+%F %T') $iface: mtu capped to 1500" >> /var/log/zt-mtu-fix.log
+    ip link set dev "$iface" mtu $MTU 2>/dev/null || true
+    if [ "$(cat "/sys/class/net/$iface/mtu" 2>/dev/null)" = "$MTU" ]; then
+      echo "$(date '+%F %T') $iface: mtu capped to $MTU" >> /var/log/zt-mtu-fix.log
       return 0
     fi
     sleep 0.25
@@ -124,7 +136,7 @@ EOF
 sudo chmod +x /usr/local/bin/zt-mtu-fix
 sudo tee /etc/systemd/system/zt-mtu-fix.service >/dev/null <<'EOF'
 [Unit]
-Description=Cap ZeroTier zt* MTU to 1500
+Description=Cap ZeroTier zt* MTU to 1350
 After=network.target zerotier-one.service
 
 [Service]
@@ -133,7 +145,7 @@ ExecStart=/usr/local/bin/zt-mtu-fix
 EOF
 sudo tee /etc/systemd/system/zt-mtu-fix.timer >/dev/null <<'EOF'
 [Unit]
-Description=Periodically re-cap ZeroTier zt* MTU to 1500
+Description=Periodically re-cap ZeroTier zt* MTU to 1350
 
 [Timer]
 OnBootSec=10s
@@ -147,11 +159,11 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now zt-mtu-fix.timer
 sudo udevadm control --reload
-# verify live (bump MTU back up, re-fire the add event, expect 1500):
+# verify live (bump MTU back up, re-fire the add event, expect 1350):
 sudo ip link set ztyxa6ggpt mtu 2800
 sudo udevadm trigger --action=add /sys/class/net/ztyxa6ggpt
 sleep 3
-ip link show ztyxa6ggpt        # should report "mtu 1500"
+ip link show ztyxa6ggpt        # should report "mtu 1350"
 tail -1 /var/log/zt-mtu-fix.log
 ```
 
@@ -159,16 +171,16 @@ tail -1 /var/log/zt-mtu-fix.log
 
 ```sh
 ssh pcgordo-wsl hostname        # should connect and run the command
-ip link show ztyxa6ggpt         # should report "mtu 1500"
+ip link show ztyxa6ggpt         # should report "mtu 1350"
 ```
 
 ## Files involved
 
 | File | Purpose |
 |------|---------|
-| `/etc/udev/rules.d/90-zerotier-mtu.rules` | **Fast boot fix** — caps `zt*` MTU at 1500 on the `add` event |
-| `/usr/local/bin/zt-mtu-fix` | retry-loop script run by udev (single iface) or the timer (all `zt*`) |
+| `/etc/udev/rules.d/90-zerotier-mtu.rules` | **Fast boot fix** — caps `zt*` MTU at 1350 on the `add` event |
+| `/usr/local/bin/zt-mtu-fix` | retry-loop script run by udev (single iface) or the timer (all `zt*`); MTU in `$MTU` |
 | `/etc/systemd/system/zt-mtu-fix.service` | oneshot service wrapping `zt-mtu-fix` |
-| `/etc/systemd/system/zt-mtu-fix.timer` | **Self-heal** — `OnCalendar=*:0/1` re-caps MTU to 1500 every minute, defeating ZeroTier's late re-zero |
+| `/etc/systemd/system/zt-mtu-fix.timer` | **Self-heal** — `OnCalendar=*:0/1` re-caps MTU to 1350 every minute, defeating ZeroTier's late re-zero |
 | `/var/log/zt-mtu-fix.log` | execution log for the fix script |
 | `~/.ssh/config` | `Host pcgordo-wsl` → `172.25.209.143` port `2222`, user `manu343726` |
