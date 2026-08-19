@@ -1464,10 +1464,20 @@ func collectGPUProfile() pb.GPUProfile {
 	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/egpu_connected"); err == nil && strings.TrimSpace(string(raw)) == "1" {
 		return pb.GPUProfile_GPU_PROFILE_EGPU
 	}
-	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	muxMode := "0"
+	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil {
+		muxMode = strings.TrimSpace(string(raw))
+	}
+	dgpuDisabled := "0"
+	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/dgpu_disable"); err == nil {
+		dgpuDisabled = strings.TrimSpace(string(raw))
+	}
+	// gpu_mux_mode: 0 = dGPU primary (NVIDIA), 1 = iGPU primary
+	// dgpu_disable: 0 = dGPU enabled, 1 = dGPU powered off
+	if muxMode == "0" {
 		return pb.GPUProfile_GPU_PROFILE_NVIDIA
 	}
-	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/dgpu_disable"); err == nil && strings.TrimSpace(string(raw)) == "1" {
+	if dgpuDisabled == "1" {
 		return pb.GPUProfile_GPU_PROFILE_IGPU
 	}
 	return pb.GPUProfile_GPU_PROFILE_HYBRID
