@@ -102,3 +102,4 @@
 # Generated OpenAPI clients (oapi-codegen -> api/<name>/)
 /.config/dotfilesd/plugins/*/api/*/
 *.local/bin/*
+!/.local/bin/power-profile
