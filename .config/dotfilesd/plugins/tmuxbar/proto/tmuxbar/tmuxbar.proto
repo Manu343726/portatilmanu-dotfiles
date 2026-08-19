@@ -26,9 +26,9 @@ service TmuxBarService {
   // and other widgets into a single string like "CPU 24% | RAM 39% | 65°C".
   // Intended as a one-call solution for tmux status-right configuration.
   rpc StatusBar(StatusBarRequest) returns (StatusBarResponse);
-  // AsusProfileWidget returns a formatted ASUS performance profile indicator
+  // PowerProfileWidget returns a formatted TLP power profile indicator
   // like "#[fg=#E8871A]PERF#[default] " with Monokai-colored output.
-  rpc AsusProfileWidget(AsusProfileWidgetRequest) returns (AsusProfileWidgetResponse);
+  rpc PowerProfileWidget(PowerProfileWidgetRequest) returns (PowerProfileWidgetResponse);
   // GPUProfileWidget returns a formatted GPU mode indicator like
   // "#[fg=#A6E22E]HYBRID#[default] " with Monokai-colored output.
   rpc GPUProfileWidget(GPUProfileWidgetRequest) returns (GPUProfileWidgetResponse);
@@ -116,14 +116,14 @@ message StatusBarResponse {
   string text = 1;
 }
 
-// AsusProfileWidgetRequest is empty.
-message AsusProfileWidgetRequest {}
+// PowerProfileWidgetRequest is empty.
+message PowerProfileWidgetRequest {}
 
-// AsusProfileWidgetResponse contains the ASUS performance profile indicator.
-message AsusProfileWidgetResponse {
+// PowerProfileWidgetResponse contains the TLP power profile indicator.
+message PowerProfileWidgetResponse {
   // Formatted text with tmux color sequences (e.g., "#[fg=#A6E22E]BAL#[default] ").
   string text = 1;
-  // Raw profile name ("PERF", "BAL", "QUIET", or "").
+  // Raw profile name ("PERF", "BAL", "SAV", or "").
   string profile = 2;
 }
 

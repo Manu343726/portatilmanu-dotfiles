@@ -272,15 +272,15 @@ func tempWidgetCompact(r *respb.CurrentResponse) string {
 	return fmt.Sprintf("TEMP %3d°C ", temp)
 }
 
-func asusWidgetBoth(r *respb.CurrentResponse) string {
-	// ASUS profile is always compact — already minimal text.
-	switch r.AsusProfile {
-	case respb.ASUSProfile_ASUS_PROFILE_PERF:
+func powerWidgetBoth(r *respb.CurrentResponse) string {
+	// Power profile is always compact — already minimal text.
+	switch r.PowerProfile {
+	case respb.PowerProfile_POWER_PROFILE_PERF:
 		return "#[fg=#E8871A]PERF#[default] "
-	case respb.ASUSProfile_ASUS_PROFILE_BAL:
+	case respb.PowerProfile_POWER_PROFILE_BAL:
 		return "#[fg=#A6E22E]BAL#[default] "
-	case respb.ASUSProfile_ASUS_PROFILE_QUIET:
-		return "#[fg=#66D9EF]QUIET#[default] "
+	case respb.PowerProfile_POWER_PROFILE_SAV:
+		return "#[fg=#66D9EF]SAV#[default] "
 	default:
 		return ""
 	}
@@ -321,7 +321,7 @@ var barWidgets = []barWidget{
 	{priority: 2, renderFull: batteryWidgetFull, renderCompact: batteryWidgetCompact},
 	{priority: 3, renderFull: tempWidgetFull, renderCompact: tempWidgetCompact},
 	{priority: 4, renderFull: wifiWidgetFull, renderCompact: wifiWidgetCompact},
-	{priority: 5, renderFull: asusWidgetBoth, renderCompact: asusWidgetBoth},
+	{priority: 5, renderFull: powerWidgetBoth, renderCompact: powerWidgetBoth},
 	{priority: 6, renderFull: gpuWidgetBoth, renderCompact: gpuWidgetBoth},
 }
 
@@ -480,39 +480,39 @@ func (s *tmuxBarServer) BatteryWidget(ctx context.Context, req *connect.Request[
 	}), nil
 }
 
-func (s *tmuxBarServer) AsusProfileWidget(ctx context.Context, req *connect.Request[pb.AsusProfileWidgetRequest]) (*connect.Response[pb.AsusProfileWidgetResponse], error) {
+func (s *tmuxBarServer) PowerProfileWidget(ctx context.Context, req *connect.Request[pb.PowerProfileWidgetRequest]) (*connect.Response[pb.PowerProfileWidgetResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 
 	r, err := s.resourcesClient.Current(ctx, connect.NewRequest(&respb.CurrentRequest{}))
-	p := respb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
+	p := respb.PowerProfile_POWER_PROFILE_UNSPECIFIED
 	if err == nil {
-		p = r.Msg.AsusProfile
+		p = r.Msg.PowerProfile
 	}
 
 	var text, short string
 	switch p {
-	case respb.ASUSProfile_ASUS_PROFILE_PERF:
+	case respb.PowerProfile_POWER_PROFILE_PERF:
 		text = "#[fg=#E8871A]PERF#[default] "
 		short = "PERF"
-	case respb.ASUSProfile_ASUS_PROFILE_BAL:
+	case respb.PowerProfile_POWER_PROFILE_BAL:
 		text = "#[fg=#A6E22E]BAL#[default] "
 		short = "BAL"
-	case respb.ASUSProfile_ASUS_PROFILE_QUIET:
-		text = "#[fg=#66D9EF]QUIET#[default] "
-		short = "QUIET"
+	case respb.PowerProfile_POWER_PROFILE_SAV:
+		text = "#[fg=#66D9EF]SAV#[default] "
+		short = "SAV"
 	default:
 		text = "? "
 	}
 
 	if pc != nil {
-		pc.Log().Info("▶ TmuxBar.AsusProfileWidget", "profile", short)
+		pc.Log().Info("▶ TmuxBar.PowerProfileWidget", "profile", short)
 	}
 
 	if pc != nil && pc.RenderOutput() {
 		fmt.Fprintln(pc.Stdout(), text)
 	}
 
-	return connect.NewResponse(&pb.AsusProfileWidgetResponse{
+	return connect.NewResponse(&pb.PowerProfileWidgetResponse{
 		Text:    text,
 		Profile: short,
 	}), nil
@@ -751,7 +751,7 @@ func main() {
 					CpuTemp:         true,
 					Battery:         true,
 					Wifi:            true,
-					AsusProfile:     true,
+					PowerProfile:    true,
 					GpuProfile:      true,
 					KeyboardLayout:  true,
 					TopProcesses:    true,

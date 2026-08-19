@@ -57,8 +57,8 @@ message WatchFilter {
   bool battery = 6;
   // WiFi signal or SSID changes.
   bool wifi = 7;
-  // ASUS performance profile changes.
-  bool asus_profile = 8;
+  // Power profile changes.
+  bool power_profile = 8;
   // GPU mode changes.
   bool gpu_profile = 9;
   // Keyboard layout changes.
@@ -83,8 +83,8 @@ message CurrentResponse {
   BatterySnapshot battery = 6;
   // WiFi signal snapshot (strength, SSID).
   WiFiSnapshot wifi = 7;
-  // ASUS performance profile.
-  ASUSProfile asus_profile = 8;
+  // Active TLP power profile.
+  PowerProfile power_profile = 8;
   // GPU mode.
   GPUProfile gpu_profile = 9;
   // Current keyboard layout (e.g., "us" or "es").
@@ -300,15 +300,16 @@ enum BatteryStatus {
   BATTERY_STATUS_NOT_CHARGING = 4;
 }
 
-// ASUS performance profile as reported by asusctl.
-enum ASUSProfile {
-  ASUS_PROFILE_UNSPECIFIED = 0;
-  // Performance mode (high power).
-  ASUS_PROFILE_PERF = 1;
-  // Balanced mode.
-  ASUS_PROFILE_BAL = 2;
-  // Quiet mode (low power, low fan).
-  ASUS_PROFILE_QUIET = 3;
+// Active TLP power profile as reported by tlpctl.
+// Maps to TLP's three profiles: performance, balanced, power-saver.
+enum PowerProfile {
+  POWER_PROFILE_UNSPECIFIED = 0;
+  // Performance profile (full speed, uncapped). TLP "performance".
+  POWER_PROFILE_PERF = 1;
+  // Balanced profile (light power saving). TLP "balanced".
+  POWER_PROFILE_BAL = 2;
+  // Power-saver profile (aggressive 1 GHz CPU cap). TLP "power-saver".
+  POWER_PROFILE_SAV = 3;
 }
 
 // GPU mode as detected from the ASUS nv-wmi driver.

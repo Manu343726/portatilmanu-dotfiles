@@ -123,7 +123,7 @@ type SharedState struct {
 	battery BatterySnapshot
 	wifi    WiFiSnapshot
 
-	asusProfile     pb.ASUSProfile
+	powerProfile    pb.PowerProfile
 	gpuProfile      pb.GPUProfile
 	keyboardLayout  string
 	topCPUProcess   string
@@ -188,7 +188,7 @@ func (s *SharedState) update(snap systemSnapshot) {
 	s.cpuTemp = snap.cpuTemp
 	s.battery = snap.battery
 	s.wifi = snap.wifi
-	s.asusProfile = collectASUSProfile()
+	s.powerProfile = collectPowerProfile()
 	s.gpuProfile = collectGPUProfile()
 	s.keyboardLayout = collectKeyboardLayout()
 	s.topCPUProcess = collectTopCPUProcess()
@@ -217,11 +217,11 @@ func appendRing(buf []float64, val float64, max int) []float64 {
 	return buf
 }
 
-func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot, WiFiSnapshot, pb.ASUSProfile, pb.GPUProfile, string, string, string, float64, float64, float64, float64, int, int, int, []ProcessInfo) {
+func (s *SharedState) get() (RAMSnapshot, CPUSnapshot, DiskSnapshot, DiskIOSnapshot, CPUTempSnapshot, BatterySnapshot, WiFiSnapshot, pb.PowerProfile, pb.GPUProfile, string, string, string, float64, float64, float64, float64, int, int, int, []ProcessInfo) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.ram, s.cpu, s.disk, s.diskIO, s.cpuTemp, s.battery, s.wifi,
-		s.asusProfile, s.gpuProfile, s.keyboardLayout, s.topCPUProcess, s.topMemProcess,
+		s.powerProfile, s.gpuProfile, s.keyboardLayout, s.topCPUProcess, s.topMemProcess,
 		s.loadAvg1, s.loadAvg5, s.loadAvg15, s.uptimeSeconds, s.processCount, s.threadCount, s.runningProcCount, s.processes
 }
 
@@ -276,7 +276,7 @@ type resourcesServer struct {
 }
 
 func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
-	ram, cpu, disk, diskIO, cpuTemp, battery, wifi, asusProfile, gpuProfile, keyboardLayout, topCPUProc, topMemProc, loadAvg1, loadAvg5, loadAvg15, uptimeSec, procCount, threadCount, runningProcCount, _ := s.state.get()
+	ram, cpu, disk, diskIO, cpuTemp, battery, wifi, powerProfile, gpuProfile, keyboardLayout, topCPUProc, topMemProc, loadAvg1, loadAvg5, loadAvg15, uptimeSec, procCount, threadCount, runningProcCount, _ := s.state.get()
 
 	return &pb.CurrentResponse{
 		Ram: &pb.RAMSnapshot{
@@ -327,7 +327,7 @@ func (s *resourcesServer) buildResponse() *pb.CurrentResponse {
 			Percent:   wifi.Percent,
 			Ssid:      wifi.SSID,
 		},
-		AsusProfile:       asusProfile,
+		PowerProfile:      powerProfile,
 		GpuProfile:        gpuProfile,
 		KeyboardLayout:    keyboardLayout,
 		TopCpuProcess:     topCPUProc,
@@ -400,7 +400,7 @@ func fieldsChanged(f *pb.WatchFilter, old, cur *pb.CurrentResponse) bool {
 			}
 		}
 	}
-	if f.AsusProfile && cur.AsusProfile != old.AsusProfile {
+	if f.PowerProfile && cur.PowerProfile != old.PowerProfile {
 		return true
 	}
 	if f.GpuProfile && cur.GpuProfile != old.GpuProfile {
@@ -1444,24 +1444,20 @@ func collectWiFi() WiFiSnapshot {
 	}
 }
 
-func collectASUSProfile() pb.ASUSProfile {
-	out, err := exec.Command("asusctl", "profile", "get").Output()
+func collectPowerProfile() pb.PowerProfile {
+	out, err := exec.Command("tlpctl", "get").Output()
 	if err != nil {
-		return pb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
+		return pb.PowerProfile_POWER_PROFILE_UNSPECIFIED
 	}
-	fields := strings.Fields(string(out))
-	if len(fields) < 3 {
-		return pb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
+	switch strings.TrimSpace(string(out)) {
+	case "performance":
+		return pb.PowerProfile_POWER_PROFILE_PERF
+	case "balanced":
+		return pb.PowerProfile_POWER_PROFILE_BAL
+	case "power-saver":
+		return pb.PowerProfile_POWER_PROFILE_SAV
 	}
-	switch fields[2] {
-	case "Performance":
-		return pb.ASUSProfile_ASUS_PROFILE_PERF
-	case "Balanced":
-		return pb.ASUSProfile_ASUS_PROFILE_BAL
-	case "Quiet":
-		return pb.ASUSProfile_ASUS_PROFILE_QUIET
-	}
-	return pb.ASUSProfile_ASUS_PROFILE_UNSPECIFIED
+	return pb.PowerProfile_POWER_PROFILE_UNSPECIFIED
 }
 
 func collectGPUProfile() pb.GPUProfile {
