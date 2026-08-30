@@ -77,6 +77,11 @@
 /.config/dotfilesctl/*
 !/.config/dotfilesctl/config.yaml
 
+# rclone
+!/.config/rclone/
+/.config/rclone/*
+!/.config/rclone/rclone.conf
+
 # nchat
 !/.config/nchat/
 /.config/nchat/*
