@@ -34,6 +34,7 @@ See `.docs/` for per-component setup guides.
 | clipboard | — | `.docs/clipboard.md` |
 | SSH/ZeroTier | `~/.ssh/config` + `/etc/udev/rules.d/90-zerotier-mtu.rules` | `.docs/ssh-zerotier-mtu.md` |
 | NFS media    | `/etc/fstab` (TrueNAS `/mnt/media/media` → `/mnt/media`) | `.docs/nfs-media.md` |
+| Synology NFS | `/etc/fstab` (NAS casa `/volume1/{Dropbox,Backups,Google Drive}` → `/mnt/synology`) | `.docs/synology-nfs.md` |
 | MacsStash    | `~/.config/systemd/user/mac-stash.service` (rclone WebDAV → `/mnt/mac-stash`) | `.docs/mac-stash.md` |
 | palette   | — | `.docs/index.md` |
 | dotfilesd | `~/dotfilesd/` | `dotfilesd/README.md` + `dotfilesd/docs/` |
