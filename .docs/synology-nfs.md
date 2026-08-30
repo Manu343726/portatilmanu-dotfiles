@@ -4,7 +4,7 @@ Mounts three Synology volume shares over ZeroTier at `/mnt/synology/`.
 
 - **Server:** `NAS casa` (Synology DSM) — `172.25.106.32` (ZeroTier, online)
 - **Exports:** `/volume1/Dropbox`, `/volume1/Backups`, `/volume1/Google Drive`
-- **Local mount points:** `/mnt/synology/{Dropbox,Backups,Google Drive}`
+- **Local mount points:** `/mnt/synology/{Dropbox,Backups,GoogleDrive}`
 - **fs type:** `nfs` (negotiated as NFSv4.1 here, `vers=4.1`)
 
 Also exports `/volume1/Descargas` — not mounted (not requested).
@@ -16,7 +16,7 @@ Also exports `/volume1/Descargas` — not mounted (not requested).
 ```
 172.25.106.32:/volume1/Dropbox       /mnt/synology/Dropbox        nfs  rw,nolock,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=60,x-systemd.idle-timeout=60  0  0
 172.25.106.32:/volume1/Backups       /mnt/synology/Backups        nfs  rw,nolock,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=60,x-systemd.idle-timeout=60  0  0
-172.25.106.32:/volume1/Google\040Drive  /mnt/synology/Google\040Drive  nfs  rw,nolock,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=60,x-systemd.idle-timeout=60  0  0
+172.25.106.32:/volume1/Google\040Drive  /mnt/synology/GoogleDrive  nfs  rw,nolock,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=60,x-systemd.idle-timeout=60  0  0
 ```
 
 The options are the same as the TrueNAS media mount (see `nfs-media.md`):
@@ -26,22 +26,24 @@ NAS never stalls startup.
 
 ### Space escaping (`\040`)
 
-The `Google Drive` share name contains a space. In fstab a space is written as
-`\040` (octal for space) — in **both** the export path and the mount point:
+The `Google Drive` share name contains a space **on the server**. In fstab a space
+in the source export path is written as `\040` (octal for space). The **local
+mountpoint** is written with no space (`GoogleDrive`), so it never needs escaping:
 
 ```
-/volume1/Google\040Drive  /mnt/synology/Google\040Drive
+/volume1/Google\040Drive  /mnt/synology/GoogleDrive
 ```
 
-The resulting mountpoint on disk is still `/mnt/synology/Google Drive` (with a
-literal space). `findmnt --verify` confirms the file is valid.
+The server path keeps `\040` (the export `/volume1/Google Drive` genuinely has a
+space); only the local mountpoint drops it. `findmnt --verify` confirms the file
+is valid.
 
 ## Mount points
 
 Created via:
 
 ```sh
-sudo mkdir -p /mnt/synology/Dropbox /mnt/synology/Backups "/mnt/synology/Google Drive"
+sudo mkdir -p /mnt/synology/Dropbox /mnt/synology/Backups /mnt/synology/GoogleDrive
 ```
 
 ## Verify
@@ -49,7 +51,7 @@ sudo mkdir -p /mnt/synology/Dropbox /mnt/synology/Backups "/mnt/synology/Google 
 ```sh
 systemctl list-units --type=automount | grep synology   # 3 active automounts
 ls /mnt/synology/Dropbox          # triggers mount, shows contents
-ls "/mnt/synology/Google Drive"   # space in path — quote it
+ls /mnt/synology/GoogleDrive      # no space in local path now
 findmnt /mnt/synology/Backups     # autofs placeholder + real nfs4 mount
 ```
 
