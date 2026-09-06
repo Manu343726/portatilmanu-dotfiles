@@ -13,6 +13,11 @@
         "Authorization": "Bearer ${HA_MCP_TOKEN}"
       },
       "enabled": true
+    },
+    "proxmox-mcp-plus": {
+      "type": "local",
+      "command": ["sh", "-c", ". /home/manu343726/.config/opencode/proxmox-mcp.env && exec /home/manu343726/.local/bin/uvx proxmox-mcp-plus"],
+      "enabled": true
     }
   },
   "provider": {
