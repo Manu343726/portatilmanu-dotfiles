@@ -18,6 +18,11 @@
       "type": "local",
       "command": ["sh", "-c", ". /home/manu343726/.config/opencode/proxmox-mcp.env && exec /home/manu343726/.local/bin/uvx proxmox-mcp-plus"],
       "enabled": true
+    },
+    "virtualbox": {
+      "type": "local",
+      "command": ["/home/manu343726/go/bin/mcp-virtualbox"],
+      "enabled": true
     }
   },
   "provider": {
