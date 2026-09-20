@@ -28,21 +28,25 @@ Based on [Oh My Tmux!](https://github.com/gpakosz/.tmux) with a Monokai override
 
 ## Status bar
 
-The right side shows (left to right):
+The right side is rendered by the dotfilesd `tmuxbar` plugin
+(`dotfilesctl tmuxbar status-bar --max-width #{client_width}`, wired in
+`~/.config/tmux/tmux.conf.local`):
 
 ```
-PERF BAT ██████░░ 85%  CPU ██████░░ 45%  TEMP ██████░░ 76°C  RAM ████░░░░ 30% , 23:59 , 19 Jun | us | user | hostname
+CPU ██████░░ 45% (proc)  RAM ████░░░░ 30% (proc)  PLUGGED  TEMP ██░░ 55°C  WIFI 67% (ssid)  P  H   23:59  19 Jun | es | user | hostname
 ```
 
 ### Indicators
 
-| Variable | What | Example |
-|----------|------|---------|
-| `#{asus_profile}` | ASUS ROG power profile | `PERF` (green), `BAL` (yellow), `QUIET` (red) |
-| `#{cpu_info}` | CPU usage with 10-segment bar | `CPU ██████░░ 45%` |
-| `#{cpu_temp}` | CPU temperature with 10-segment bar + min/max tracking | `TEMP ██░░░░░░ 55°C` |
-| `#{ram_info}` | RAM usage with 10-segment bar | `RAM ████░░░░ 30%` |
-| `#{layout_info}` | Active keyboard layout | calls `xkb_group` |
+| Widget | What | Values |
+|--------|------|--------|
+| `CPU` | CPU usage with 10-segment bar + top process | percent |
+| `RAM` | RAM usage with 10-segment bar + top process | GiB / percent |
+| `PLUGGED`/`BAT` | Battery status + 10-segment bar | percent |
+| `TEMP` | CPU temperature with 10-segment bar | °C |
+| `WIFI` | WiFi signal + 10-segment bar | percent / SSID |
+| Power profile | TLP profile, single letter | `P` (orange), `B` (green), `S` (blue) |
+| GPU profile | GPU mode, single letter | `N` (orange), `H` (green), `I` (blue), `E` (purple) |
 
 ### Color gradients
 
@@ -83,9 +87,6 @@ Defined in `~/.config/tmux/tmux.conf.local` between `# EOF` and `# "$@"`:
 
 | Function | Displays | Source |
 |----------|----------|--------|
-| `asus_profile` | Power profile (PERF/BAL/QUIET) | `asusctl profile get` |
-| `gpu_profile` | GPU profile (IGPU/HYBRID/NVIDIA/EGPU) | `supergfxctl -g` |
-| `cpu_info` | CPU usage with 10-segment bar | `/proc/stat` |
-| `cpu_temp` | CPU temp with 10-segment bar, min/max tracking | `/sys/class/hwmon/hwmon5/temp1_input` |
-| `ram_info` | RAM usage with 10-segment bar | `free` |
-| `layout_info` | Active keyboard layout | `xkb_group` script |
+| `status-bar` | Combined bar: CPU, RAM, battery, temp, WiFi, power + GPU profiles | `dotfilesctl tmuxbar status-bar` |
+| `power-profile-widget` | TLP power profile (`P`/`B`/`S`) | `dotfilesctl tmuxbar power-profile-widget` (reads `tlpctl get`) |
+| `gpu-profile-widget` | GPU mode (`N`/`H`/`I`/`E`) | `dotfilesctl tmuxbar gpu-profile-widget` (reads `supergfxctl -g`) |

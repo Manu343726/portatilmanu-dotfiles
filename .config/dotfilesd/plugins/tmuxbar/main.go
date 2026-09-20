@@ -273,29 +273,30 @@ func tempWidgetCompact(r *respb.CurrentResponse) string {
 }
 
 func powerWidgetBoth(r *respb.CurrentResponse) string {
-	// Power profile is always compact — already minimal text.
+	// Power profile — single letter for compactness.
 	switch r.PowerProfile {
 	case respb.PowerProfile_POWER_PROFILE_PERF:
-		return "#[fg=#E8871A]PERF#[default] "
+		return "#[fg=#E8871A]P#[default] "
 	case respb.PowerProfile_POWER_PROFILE_BAL:
-		return "#[fg=#A6E22E]BAL#[default] "
+		return "#[fg=#A6E22E]B#[default] "
 	case respb.PowerProfile_POWER_PROFILE_SAV:
-		return "#[fg=#66D9EF]SAV#[default] "
+		return "#[fg=#66D9EF]S#[default] "
 	default:
 		return ""
 	}
 }
 
 func gpuWidgetBoth(r *respb.CurrentResponse) string {
+	// GPU mode — single letter for compactness.
 	switch r.GpuProfile {
 	case respb.GPUProfile_GPU_PROFILE_EGPU:
-		return "#[fg=#AE81FF]EGPU#[default] "
+		return "#[fg=#AE81FF]E#[default] "
 	case respb.GPUProfile_GPU_PROFILE_NVIDIA:
-		return "#[fg=#E8871A]NVIDIA#[default] "
+		return "#[fg=#E8871A]N#[default] "
 	case respb.GPUProfile_GPU_PROFILE_IGPU:
-		return "#[fg=#66D9EF]IGPU#[default] "
+		return "#[fg=#66D9EF]I#[default] "
 	case respb.GPUProfile_GPU_PROFILE_HYBRID:
-		return "#[fg=#A6E22E]HYBRID#[default] "
+		return "#[fg=#A6E22E]H#[default] "
 	default:
 		return ""
 	}
@@ -494,16 +495,17 @@ func (s *tmuxBarServer) PowerProfileWidget(ctx context.Context, req *connect.Req
 	var text, short string
 	switch p {
 	case respb.PowerProfile_POWER_PROFILE_PERF:
-		text = "#[fg=#E8871A]PERF#[default] "
-		short = "PERF"
+		text = "#[fg=#E8871A]P#[default] "
+		short = "P"
 	case respb.PowerProfile_POWER_PROFILE_BAL:
-		text = "#[fg=#A6E22E]BAL#[default] "
-		short = "BAL"
+		text = "#[fg=#A6E22E]B#[default] "
+		short = "B"
 	case respb.PowerProfile_POWER_PROFILE_SAV:
-		text = "#[fg=#66D9EF]SAV#[default] "
-		short = "SAV"
+		text = "#[fg=#66D9EF]S#[default] "
+		short = "S"
 	default:
 		text = "? "
+		short = "?"
 	}
 
 	if pc != nil {
@@ -532,17 +534,20 @@ func (s *tmuxBarServer) GPUProfileWidget(ctx context.Context, req *connect.Reque
 	var text, short string
 	switch p {
 	case respb.GPUProfile_GPU_PROFILE_EGPU:
-		text = "#[fg=#AE81FF]EGPU#[default] "
-		short = "EGPU"
+		text = "#[fg=#AE81FF]E#[default] "
+		short = "E"
 	case respb.GPUProfile_GPU_PROFILE_NVIDIA:
-		text = "#[fg=#E8871A]NVIDIA#[default] "
-		short = "NVIDIA"
+		text = "#[fg=#E8871A]N#[default] "
+		short = "N"
 	case respb.GPUProfile_GPU_PROFILE_IGPU:
-		text = "#[fg=#66D9EF]IGPU#[default] "
-		short = "IGPU"
+		text = "#[fg=#66D9EF]I#[default] "
+		short = "I"
+	case respb.GPUProfile_GPU_PROFILE_HYBRID:
+		text = "#[fg=#A6E22E]H#[default] "
+		short = "H"
 	default:
-		text = "#[fg=#A6E22E]HYBRID#[default] "
-		short = "HYBRID"
+		text = "? "
+		short = "?"
 	}
 
 	if pc != nil {
