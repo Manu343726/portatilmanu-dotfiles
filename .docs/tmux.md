@@ -93,10 +93,14 @@ Defined in `~/.config/tmux/tmux.conf.local` between `# EOF` and `# "$@"`:
 
 ### Widget ordering
 
-The status bar is rendered as fine-grained **segments**, each with its own
-priority. Lower priority renders earlier (left) and survives width truncation
-first; higher priority segments are dropped first when space runs out.
-Ordered least → most important:
+The status bar is rendered as fine-grained **segments** that always appear in
+a fixed visual order (CPU + process, RAM + process, battery, temp, WiFi +
+SSID, power, GPU, then time, date, keyboard layout, user, host). Each segment
+has a **priority** that only controls whether it is shown or hidden when the
+bar is truncated to `max_width`: when space runs out, the lowest-priority
+segments are hidden first, while the survivors keep their fixed order.
+
+Priority per segment (least → most important, hidden first):
 
 | Segment | Default priority |
 |---------|------------------|
@@ -116,7 +120,7 @@ Ordered least → most important:
 Priorities are runtime-configurable — only the fields you pass change:
 
 ```bash
-dotfilesctl tmuxbar set-widget-priorities --priorities.gpu-profile 1   # move GPU near the front
+dotfilesctl tmuxbar set-widget-priorities --priorities.gpu-profile 1   # GPU survives truncation longer
 dotfilesctl tmuxbar set-widget-priorities --priorities.wifi-percent 3 --priorities.time 5  # several at once
 ```
 

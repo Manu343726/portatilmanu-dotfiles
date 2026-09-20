@@ -350,18 +350,18 @@ func segHost(c *renderCtx) string {
 func (s *tmuxBarServer) allSegments() []barSegment {
 	return []barSegment{
 		{key: widgetCPUPercent, renderFull: segCPUPercent, renderCompact: segCPUCompact},
+		{key: widgetCPUProc, renderFull: segCPUProc},
 		{key: widgetRAMPercent, renderFull: segRAMPercent, renderCompact: segRAMCompact},
+		{key: widgetRAMProc, renderFull: segRAMProc},
 		{key: widgetBattery, renderFull: segBattery, renderCompact: segBatteryCompact},
 		{key: widgetTemp, renderFull: segTemp, renderCompact: segTempCompact},
-		{key: widgetLayout, renderFull: segLayout},
+		{key: widgetWiFiPercent, renderFull: segWiFiPercent, renderCompact: segWiFiCompact},
+		{key: widgetWiFiSSID, renderFull: segWiFiSSID},
 		{key: widgetPower, renderFull: segPower},
 		{key: widgetGPU, renderFull: segGPU},
-		{key: widgetWiFiPercent, renderFull: segWiFiPercent, renderCompact: segWiFiCompact},
-		{key: widgetCPUProc, renderFull: segCPUProc},
-		{key: widgetRAMProc, renderFull: segRAMProc},
-		{key: widgetWiFiSSID, renderFull: segWiFiSSID},
 		{key: widgetTime, renderFull: segTime},
 		{key: widgetDate, renderFull: segDate},
+		{key: widgetLayout, renderFull: segLayout},
 		{key: widgetUser, renderFull: segUser},
 		{key: widgetHost, renderFull: segHost},
 	}
@@ -772,48 +772,82 @@ func (s *tmuxBarServer) renderBar(r *respb.CurrentResponse, maxWidth int) string
 		hostname: s.hostname,
 	}
 
-	remaining := maxWidth
-	var b strings.Builder
-	for _, seg := range s.sortedSegments() {
-		if remaining <= 0 {
-			break
-		}
+	// Segments always render in their fixed visual order; priority only
+	// decides which segments are hidden when the bar is truncated.
+	type item struct {
+		full    string
+		compact string
+		fw      int
+		cw      int
+		prio    int
+	}
+	var items []item
+	total := 0
+	for _, seg := range s.allSegments() {
 		full := seg.renderFull(ctx)
 		if full == "" {
 			continue
 		}
 		fw := visibleWidth(full)
-		if fw <= remaining {
-			b.WriteString(full)
-			remaining -= fw
+		var compact string
+		var cw int
+		if seg.renderCompact != nil {
+			compact = seg.renderCompact(ctx)
+			cw = visibleWidth(compact)
+		}
+		items = append(items, item{full: full, compact: compact, fw: fw, cw: cw, prio: s.priority(seg.key)})
+		total += fw
+	}
+
+	// Hide the lowest-priority segments (highest priority value) until the
+	// bar fits. Ties are broken rightmost-first so the chevron chain at the
+	// right of the bar collapses cleanly.
+	hidden := make([]bool, len(items))
+	if total > maxWidth {
+		idx := make([]int, len(items))
+		for i := range items {
+			idx[i] = i
+		}
+		sort.SliceStable(idx, func(a, b int) bool {
+			pa, pb := items[idx[a]].prio, items[idx[b]].prio
+			if pa != pb {
+				return pa > pb
+			}
+			return idx[a] > idx[b]
+		})
+		for _, i := range idx {
+			if total <= maxWidth {
+				break
+			}
+			hidden[i] = true
+			total -= items[i].fw
+		}
+	}
+
+	// Render the survivors in fixed order, compacting any that still don't
+	// fit (only relevant when even the core segments are too wide).
+	remaining := maxWidth
+	var b strings.Builder
+	for i, it := range items {
+		if hidden[i] {
 			continue
 		}
-		if seg.renderCompact == nil {
-			continue
-		}
-		compact := seg.renderCompact(ctx)
-		if compact == "" {
-			continue
-		}
-		cw := visibleWidth(compact)
-		if cw <= remaining {
-			b.WriteString(compact)
-			remaining -= cw
+		if it.fw <= remaining {
+			b.WriteString(it.full)
+			remaining -= it.fw
+		} else if it.cw > 0 && it.cw <= remaining {
+			b.WriteString(it.compact)
+			remaining -= it.cw
 		}
 	}
 	return b.String()
 }
 
-// sortedSegments returns the bar segments ordered by their current display
-// priority (stable, so equal priorities keep their definition order).
-func (s *tmuxBarServer) sortedSegments() []barSegment {
+// priority returns the current display priority for a segment.
+func (s *tmuxBarServer) priority(key widgetKey) int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := s.allSegments()
-	sort.SliceStable(out, func(i, j int) bool {
-		return s.priorities[out[i].key] < s.priorities[out[j].key]
-	})
-	return out
+	return s.priorities[key]
 }
 
 func toProtoPriorities(m map[widgetKey]int) *pb.WidgetPriorities {
