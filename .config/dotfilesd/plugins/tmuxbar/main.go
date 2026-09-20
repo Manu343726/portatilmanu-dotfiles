@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,9 @@ type tmuxBarServer struct {
 	hostname        string
 	username        string
 	root            string
+
+	mu         sync.RWMutex
+	priorities map[widgetKey]int
 }
 
 type widgetCache struct {
@@ -162,8 +166,34 @@ func formatDuration(m int) string {
 	return fmt.Sprintf("%dh%dm", h, m)
 }
 
+type widgetKey string
+
+const (
+	widgetCPU     widgetKey = "cpu"
+	widgetRAM     widgetKey = "ram"
+	widgetBattery widgetKey = "battery"
+	widgetTemp    widgetKey = "temp"
+	widgetWifi    widgetKey = "wifi"
+	widgetPower   widgetKey = "power_profile"
+	widgetGPU     widgetKey = "gpu_profile"
+)
+
+// defaultPriorities returns the default display order of the bar widgets.
+// Lower values are rendered first and survive width truncation first.
+func defaultPriorities() map[widgetKey]int {
+	return map[widgetKey]int{
+		widgetCPU:     0,
+		widgetRAM:     1,
+		widgetBattery: 2,
+		widgetTemp:    3,
+		widgetWifi:    4,
+		widgetPower:   5,
+		widgetGPU:     6,
+	}
+}
+
 type barWidget struct {
-	priority      int
+	key           widgetKey
 	renderFull    func(*respb.CurrentResponse) string
 	renderCompact func(*respb.CurrentResponse) string
 }
@@ -319,13 +349,13 @@ func wifiWidgetCompact(r *respb.CurrentResponse) string {
 }
 
 var barWidgets = []barWidget{
-	{priority: 0, renderFull: cpuWidgetFull, renderCompact: cpuWidgetCompact},
-	{priority: 1, renderFull: ramWidgetFull, renderCompact: ramWidgetCompact},
-	{priority: 2, renderFull: batteryWidgetFull, renderCompact: batteryWidgetCompact},
-	{priority: 3, renderFull: tempWidgetFull, renderCompact: tempWidgetCompact},
-	{priority: 4, renderFull: wifiWidgetFull, renderCompact: wifiWidgetCompact},
-	{priority: 5, renderFull: powerWidgetBoth, renderCompact: powerWidgetBoth},
-	{priority: 6, renderFull: gpuWidgetBoth, renderCompact: gpuWidgetBoth},
+	{key: widgetCPU, renderFull: cpuWidgetFull, renderCompact: cpuWidgetCompact},
+	{key: widgetRAM, renderFull: ramWidgetFull, renderCompact: ramWidgetCompact},
+	{key: widgetBattery, renderFull: batteryWidgetFull, renderCompact: batteryWidgetCompact},
+	{key: widgetTemp, renderFull: tempWidgetFull, renderCompact: tempWidgetCompact},
+	{key: widgetWifi, renderFull: wifiWidgetFull, renderCompact: wifiWidgetCompact},
+	{key: widgetPower, renderFull: powerWidgetBoth, renderCompact: powerWidgetBoth},
+	{key: widgetGPU, renderFull: gpuWidgetBoth, renderCompact: gpuWidgetBoth},
 }
 
 func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.CPUWidgetRequest]) (*connect.Response[pb.CPUWidgetResponse], error) {
@@ -634,7 +664,7 @@ func renderPinned(r *respb.CurrentResponse, username, root, host, timeStr, dateS
 	return b.String()
 }
 
-func renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string, maxWidth int) string {
+func (s *tmuxBarServer) renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string, maxWidth int) string {
 	if maxWidth <= 0 {
 		maxWidth = 9999
 	}
@@ -644,7 +674,7 @@ func renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr 
 	remaining := maxWidth - pinnedW
 
 	var widgetsStr string
-	for _, w := range barWidgets {
+	for _, w := range s.sortedWidgets() {
 		if remaining <= 0 {
 			break
 		}
@@ -675,6 +705,89 @@ func renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr 
 	return widgetsStr + pinned
 }
 
+// sortedWidgets returns the bar widgets ordered by their current display
+// priority (stable, so equal priorities keep their definition order).
+func (s *tmuxBarServer) sortedWidgets() []barWidget {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]barWidget, len(barWidgets))
+	copy(out, barWidgets)
+	sort.SliceStable(out, func(i, j int) bool {
+		return s.priorities[out[i].key] < s.priorities[out[j].key]
+	})
+	return out
+}
+
+func toProtoPriorities(m map[widgetKey]int) *pb.WidgetPriorities {
+	cpu := int32(m[widgetCPU])
+	ram := int32(m[widgetRAM])
+	battery := int32(m[widgetBattery])
+	temp := int32(m[widgetTemp])
+	wifi := int32(m[widgetWifi])
+	power := int32(m[widgetPower])
+	gpu := int32(m[widgetGPU])
+	return &pb.WidgetPriorities{
+		Cpu:          &cpu,
+		Ram:          &ram,
+		Battery:      &battery,
+		Temp:         &temp,
+		Wifi:         &wifi,
+		PowerProfile: &power,
+		GpuProfile:   &gpu,
+	}
+}
+
+func (s *tmuxBarServer) SetWidgetPriorities(ctx context.Context, req *connect.Request[pb.SetWidgetPrioritiesRequest]) (*connect.Response[pb.SetWidgetPrioritiesResponse], error) {
+	pc := plugin.ExtractContext(ctx)
+	p := req.Msg.GetPriorities()
+
+	s.mu.Lock()
+	if p != nil {
+		if p.Cpu != nil {
+			s.priorities[widgetCPU] = int(*p.Cpu)
+		}
+		if p.Ram != nil {
+			s.priorities[widgetRAM] = int(*p.Ram)
+		}
+		if p.Battery != nil {
+			s.priorities[widgetBattery] = int(*p.Battery)
+		}
+		if p.Temp != nil {
+			s.priorities[widgetTemp] = int(*p.Temp)
+		}
+		if p.Wifi != nil {
+			s.priorities[widgetWifi] = int(*p.Wifi)
+		}
+		if p.PowerProfile != nil {
+			s.priorities[widgetPower] = int(*p.PowerProfile)
+		}
+		if p.GpuProfile != nil {
+			s.priorities[widgetGPU] = int(*p.GpuProfile)
+		}
+	}
+	applied := make(map[widgetKey]int, len(s.priorities))
+	for k, v := range s.priorities {
+		applied[k] = v
+	}
+	s.mu.Unlock()
+
+	msg := "widget priorities updated"
+	if p == nil {
+		msg = "no priorities in request"
+	}
+	if pc != nil {
+		pc.Log().Info("▶ TmuxBar.SetWidgetPriorities", "priorities", applied)
+	}
+	if pc != nil && pc.RenderOutput() {
+		fmt.Fprintln(pc.Stdout(), msg)
+	}
+
+	return connect.NewResponse(&pb.SetWidgetPrioritiesResponse{
+		Priorities: toProtoPriorities(applied),
+		Message:    msg,
+	}), nil
+}
+
 func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.StatusBarRequest]) (*connect.Response[pb.StatusBarResponse], error) {
 	pc := plugin.ExtractContext(ctx)
 	data := s.cache.get()
@@ -685,7 +798,7 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 
 	var text string
 	if data != nil {
-		text = renderBar(data, s.username, s.root, s.hostname, timeStr, dateStr, int(req.Msg.MaxWidth))
+		text = s.renderBar(data, s.username, s.root, s.hostname, timeStr, dateStr, int(req.Msg.MaxWidth))
 	} else {
 		r := &respb.CurrentResponse{}
 		text = renderPinned(r, s.username, s.root, s.hostname, timeStr, dateStr)
@@ -731,6 +844,7 @@ func main() {
 		hostname:        host,
 		username:        username,
 		root:            root,
+		priorities:      defaultPriorities(),
 	}
 	path, handler := tmuxbarconnect.NewTmuxBarServiceHandler(svc)
 

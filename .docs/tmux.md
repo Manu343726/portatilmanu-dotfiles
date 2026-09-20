@@ -90,3 +90,17 @@ Defined in `~/.config/tmux/tmux.conf.local` between `# EOF` and `# "$@"`:
 | `status-bar` | Combined bar: CPU, RAM, battery, temp, WiFi, power + GPU profiles | `dotfilesctl tmuxbar status-bar` |
 | `power-profile-widget` | TLP power profile (`P`/`B`/`S`) | `dotfilesctl tmuxbar power-profile-widget` (reads `tlpctl get`) |
 | `gpu-profile-widget` | GPU mode (`N`/`H`/`I`/`E`) | `dotfilesctl tmuxbar gpu-profile-widget` (reads `supergfxctl -g`) |
+
+### Widget ordering
+
+The render order of the widgets in `status-bar` is configurable at runtime.
+Lower priority renders first and survives width truncation first. Only the
+fields you pass change:
+
+```bash
+dotfilesctl tmuxbar set-widget-priorities --priorities.gpu-profile 1   # move GPU near the front
+dotfilesctl tmuxbar set-widget-priorities --priorities.wifi 0 --priorities.gpu-profile 2  # several at once
+```
+
+Defaults: CPU 0, RAM 1, battery 2, temp 3, WiFi 4, power 5, GPU 6.
+Priorities are in-memory (reset when the daemon restarts).

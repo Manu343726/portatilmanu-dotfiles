@@ -37,6 +37,15 @@ service TmuxBarService {
   // WiFiWidget returns a formatted WiFi signal indicator like
   // "#[fg=#A6E22E]65% (MyNetwork) ◼◼◼◼◼◼◻◻◻◻#[default]".
   rpc WiFiWidget(WiFiWidgetRequest) returns (WiFiWidgetResponse);
+  // SetWidgetPriorities adjusts the display priority of one or more status
+  // bar widgets for the combined StatusBar output.
+  //
+  // Lower priority values are rendered first and are the ones kept when the
+  // bar is truncated to max_width. Only fields explicitly set in the request
+  // are applied — unset widgets keep their current priority, so a single call
+  // can change one or many widgets at a time. The response returns the
+  // resulting priorities for every widget after the update.
+  rpc SetWidgetPriorities(SetWidgetPrioritiesRequest) returns (SetWidgetPrioritiesResponse);
 }
 
 // RAMWidgetRequest configures the RAM widget output.
@@ -161,4 +170,39 @@ message WiFiWidgetResponse {
   double percent = 2;
   // WiFi SSID of the connected network.
   string ssid = 3;
+}
+
+// Display priorities for the combined StatusBar output.
+// A widget's priority only matters relative to the others: lower values are
+// rendered earlier and survive width truncation before higher-priority ones.
+message WidgetPriorities {
+  // Display priority for the CPU widget.
+  optional int32 cpu = 1;
+  // Display priority for the RAM widget.
+  optional int32 ram = 2;
+  // Display priority for the battery widget.
+  optional int32 battery = 3;
+  // Display priority for the CPU temperature widget.
+  optional int32 temp = 4;
+  // Display priority for the WiFi widget.
+  optional int32 wifi = 5;
+  // Display priority for the TLP power profile widget.
+  optional int32 power_profile = 6;
+  // Display priority for the GPU mode widget.
+  optional int32 gpu_profile = 7;
+}
+
+// Request to change widget display priorities for the combined StatusBar.
+message SetWidgetPrioritiesRequest {
+  // New priorities to apply. Only fields set here are applied; unset fields
+  // keep their current priority, so a request can target one or many widgets.
+  WidgetPriorities priorities = 1;
+}
+
+// Response after applying widget priority changes.
+message SetWidgetPrioritiesResponse {
+  // The resulting priorities for all widgets after applying the request.
+  WidgetPriorities priorities = 1;
+  // Human-readable summary of the applied priorities.
+  string message = 2;
 }

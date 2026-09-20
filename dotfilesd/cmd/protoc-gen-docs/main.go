@@ -27,6 +27,9 @@ func main() {
 	}
 
 	var resp pluginpb.CodeGeneratorResponse
+	// Declare support for proto3 optional fields so protoc allows compiling
+	// protos that use the `optional` keyword (they create synthetic oneofs).
+	resp.SupportedFeatures = proto.Uint64(uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL))
 
 	// Only generate docs for proto files that are directly requested for
 	// compilation (not their transitive imports like google/protobuf/*.proto).
@@ -228,6 +231,12 @@ func renderMessage(b *strings.Builder, src *sourceInfo, path []int32, msg *descr
 		renderFieldRow(b, src, fieldPath, f)
 	}
 	for i, o := range msg.GetOneofDecl() {
+		// Skip synthetic oneofs: proto3 optional fields are backed by a
+		// synthetic oneof per field, which is not a real oneof and should
+		// not appear in the docs.
+		if syntheticOneof(msg, int32(i)) {
+			continue
+		}
 		oneofPath := append(path, fieldOneof, int32(i))
 		b.WriteString(fmt.Sprintf("| `%s` | oneof | ", o.GetName()))
 		src.commentInline(b, oneofPath)
@@ -282,6 +291,19 @@ func fieldType(f *descriptorpb.FieldDescriptorProto) string {
 
 func trimPrefixDot(s string) string {
 	return strings.TrimPrefix(s, ".")
+}
+
+// syntheticOneof reports whether the oneof at index i is the synthetic oneof
+// backing a proto3 optional field. Protoc creates one synthetic oneof per
+// proto3 `optional` field; these should be treated as plain optional fields,
+// not real oneofs.
+func syntheticOneof(msg *descriptorpb.DescriptorProto, oneofIndex int32) bool {
+	for _, f := range msg.GetField() {
+		if f.GetProto3Optional() && f.OneofIndex != nil && *f.OneofIndex == oneofIndex {
+			return true
+		}
+	}
+	return false
 }
 
 // protoDocOutputName converts a proto file path to a markdown file path.
@@ -560,7 +582,7 @@ func buildMessageDoc(msg *descriptorpb.DescriptorProto, fqn string, path []int32
 			Description:  src.commentAt(pathKey(fieldPath)),
 			Type:         fieldType(f),
 			Label:        label,
-			IsOneof:      f.OneofIndex != nil,
+			IsOneof:      f.OneofIndex != nil && !f.GetProto3Optional(),
 			DefaultValue: f.GetDefaultValue(),
 		}
 
