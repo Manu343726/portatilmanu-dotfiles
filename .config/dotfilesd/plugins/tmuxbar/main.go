@@ -294,8 +294,10 @@ func gpuWidgetBoth(r *respb.CurrentResponse) string {
 		return "#[fg=#E8871A]NVIDIA#[default] "
 	case respb.GPUProfile_GPU_PROFILE_IGPU:
 		return "#[fg=#66D9EF]IGPU#[default] "
-	default:
+	case respb.GPUProfile_GPU_PROFILE_HYBRID:
 		return "#[fg=#A6E22E]HYBRID#[default] "
+	default:
+		return ""
 	}
 }
 

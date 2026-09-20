@@ -1461,9 +1461,26 @@ func collectPowerProfile() pb.PowerProfile {
 }
 
 func collectGPUProfile() pb.GPUProfile {
+	// eGPU takes priority — reported via ASUS WMI sysfs.
 	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/egpu_connected"); err == nil && strings.TrimSpace(string(raw)) == "1" {
 		return pb.GPUProfile_GPU_PROFILE_EGPU
 	}
+	// supergfxctl is the authoritative source for the actual GPU mode.
+	// The sysfs mux/disable knobs don't reliably reflect the effective mode
+	// (e.g. dgpu_disable stays 0 in Integrated mode on some models).
+	if out, err := exec.Command("supergfxctl", "-g").Output(); err == nil {
+		switch strings.TrimSpace(string(out)) {
+		case "Integrated":
+			return pb.GPUProfile_GPU_PROFILE_IGPU
+		case "Hybrid":
+			return pb.GPUProfile_GPU_PROFILE_HYBRID
+		case "AsusMuxDgpu":
+			return pb.GPUProfile_GPU_PROFILE_NVIDIA
+		case "AsusEgpu":
+			return pb.GPUProfile_GPU_PROFILE_EGPU
+		}
+	}
+	// Fallback heuristic for non-ASUS systems without supergfxctl.
 	muxMode := "0"
 	if raw, err := os.ReadFile("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode"); err == nil {
 		muxMode = strings.TrimSpace(string(raw))
