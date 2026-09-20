@@ -93,14 +93,31 @@ Defined in `~/.config/tmux/tmux.conf.local` between `# EOF` and `# "$@"`:
 
 ### Widget ordering
 
-The render order of the widgets in `status-bar` is configurable at runtime.
-Lower priority renders first and survives width truncation first. Only the
-fields you pass change:
+The status bar is rendered as fine-grained **segments**, each with its own
+priority. Lower priority renders earlier (left) and survives width truncation
+first; higher priority segments are dropped first when space runs out.
+Ordered least → most important:
+
+| Segment | Default priority |
+|---------|------------------|
+| `hostname`, `user` | 20 |
+| `date` | 19 |
+| `time` | 18 |
+| `wifi_ssid` | 17 |
+| `cpu_process`, `ram_process` | 16 |
+| `wifi_percent` | 15 |
+| `power_profile`, `gpu_profile` | 14 |
+| `layout` | 4 |
+| `temp` | 3 |
+| `battery` | 2 |
+| `ram_percent` | 1 |
+| `cpu_percent` | 0 |
+
+Priorities are runtime-configurable — only the fields you pass change:
 
 ```bash
 dotfilesctl tmuxbar set-widget-priorities --priorities.gpu-profile 1   # move GPU near the front
-dotfilesctl tmuxbar set-widget-priorities --priorities.wifi 0 --priorities.gpu-profile 2  # several at once
+dotfilesctl tmuxbar set-widget-priorities --priorities.wifi-percent 3 --priorities.time 5  # several at once
 ```
 
-Defaults: CPU 0, RAM 1, battery 2, temp 3, WiFi 4, power 5, GPU 6.
 Priorities are in-memory (reset when the daemon restarts).

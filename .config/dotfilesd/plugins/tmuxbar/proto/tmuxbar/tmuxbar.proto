@@ -173,23 +173,40 @@ message WiFiWidgetResponse {
 }
 
 // Display priorities for the combined StatusBar output.
-// A widget's priority only matters relative to the others: lower values are
-// rendered earlier and survive width truncation before higher-priority ones.
+// Each field names one fine-grained segment of the bar. A segment's priority
+// only matters relative to the others: lower values are rendered earlier (to
+// the left) and are the ones kept when the bar is truncated to max_width.
 message WidgetPriorities {
-  // Display priority for the CPU widget.
-  optional int32 cpu = 1;
-  // Display priority for the RAM widget.
-  optional int32 ram = 2;
-  // Display priority for the battery widget.
-  optional int32 battery = 3;
-  // Display priority for the CPU temperature widget.
-  optional int32 temp = 4;
-  // Display priority for the WiFi widget.
-  optional int32 wifi = 5;
-  // Display priority for the TLP power profile widget.
-  optional int32 power_profile = 6;
-  // Display priority for the GPU mode widget.
-  optional int32 gpu_profile = 7;
+  // Display priority for the CPU usage segment (percent + bar).
+  optional int32 cpu_percent = 1;
+  // Display priority for the CPU top-process name segment.
+  optional int32 cpu_process = 2;
+  // Display priority for the RAM usage segment (GiB + percent + bar).
+  optional int32 ram_percent = 3;
+  // Display priority for the RAM top-process name segment.
+  optional int32 ram_process = 4;
+  // Display priority for the battery segment.
+  optional int32 battery = 5;
+  // Display priority for the CPU temperature segment.
+  optional int32 temp = 6;
+  // Display priority for the keyboard layout segment.
+  optional int32 layout = 7;
+  // Display priority for the TLP power profile segment.
+  optional int32 power_profile = 8;
+  // Display priority for the GPU mode segment.
+  optional int32 gpu_profile = 9;
+  // Display priority for the WiFi signal segment (percent + bar).
+  optional int32 wifi_percent = 10;
+  // Display priority for the WiFi SSID segment.
+  optional int32 wifi_ssid = 11;
+  // Display priority for the clock time segment.
+  optional int32 time = 12;
+  // Display priority for the date segment.
+  optional int32 date = 13;
+  // Display priority for the username segment.
+  optional int32 user = 14;
+  // Display priority for the hostname segment.
+  optional int32 hostname = 15;
 }
 
 // Request to change widget display priorities for the combined StatusBar.

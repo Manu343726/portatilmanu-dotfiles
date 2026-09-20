@@ -169,66 +169,202 @@ func formatDuration(m int) string {
 type widgetKey string
 
 const (
-	widgetCPU     widgetKey = "cpu"
-	widgetRAM     widgetKey = "ram"
-	widgetBattery widgetKey = "battery"
-	widgetTemp    widgetKey = "temp"
-	widgetWifi    widgetKey = "wifi"
-	widgetPower   widgetKey = "power_profile"
-	widgetGPU     widgetKey = "gpu_profile"
+	widgetCPUPercent widgetKey = "cpu_percent"
+	widgetCPUProc    widgetKey = "cpu_process"
+	widgetRAMPercent widgetKey = "ram_percent"
+	widgetRAMProc    widgetKey = "ram_process"
+	widgetBattery    widgetKey = "battery"
+	widgetTemp       widgetKey = "temp"
+	widgetLayout     widgetKey = "layout"
+	widgetPower      widgetKey = "power_profile"
+	widgetGPU        widgetKey = "gpu_profile"
+	widgetWiFiPercent widgetKey = "wifi_percent"
+	widgetWiFiSSID   widgetKey = "wifi_ssid"
+	widgetTime       widgetKey = "time"
+	widgetDate       widgetKey = "date"
+	widgetUser       widgetKey = "user"
+	widgetHost       widgetKey = "hostname"
 )
 
-// defaultPriorities returns the default display order of the bar widgets.
-// Lower values are rendered first and survive width truncation first.
+// defaultPriorities returns the default display order of the bar segments.
+// Lower values are rendered first (to the left) and survive width truncation
+// first; higher values are dropped first when the bar runs out of space.
 func defaultPriorities() map[widgetKey]int {
 	return map[widgetKey]int{
-		widgetCPU:     0,
-		widgetRAM:     1,
-		widgetBattery: 2,
-		widgetTemp:    3,
-		widgetWifi:    4,
-		widgetPower:   5,
-		widgetGPU:     6,
+		widgetCPUPercent:  0,
+		widgetRAMPercent:  1,
+		widgetBattery:     2,
+		widgetTemp:        3,
+		widgetLayout:      4,
+		widgetPower:       14,
+		widgetGPU:         14,
+		widgetWiFiPercent: 15,
+		widgetCPUProc:     16,
+		widgetRAMProc:     16,
+		widgetWiFiSSID:    17,
+		widgetTime:        18,
+		widgetDate:        19,
+		widgetUser:        20,
+		widgetHost:        20,
 	}
 }
 
-type barWidget struct {
+// renderCtx carries the data every bar segment needs to render.
+type renderCtx struct {
+	r        *respb.CurrentResponse
+	timeStr  string
+	dateStr  string
+	username string
+	root     string
+	hostname string
+}
+
+type barSegment struct {
 	key           widgetKey
-	renderFull    func(*respb.CurrentResponse) string
-	renderCompact func(*respb.CurrentResponse) string
+	renderFull    func(*renderCtx) string
+	renderCompact func(*renderCtx) string
 }
 
-func cpuWidgetFull(r *respb.CurrentResponse) string {
+func segCPUPercent(c *renderCtx) string {
+	r := c.r
 	if r.Cpu == nil {
 		return ""
 	}
 	pct := int(r.Cpu.TotalPercent)
-	return fmt.Sprintf("CPU %s%d%% (%s) %s#[default] ", pctColor(pct), pct, r.TopCpuProcess, bar(pct))
+	return fmt.Sprintf("CPU %s%d%% %s#[default] ", pctColor(pct), pct, bar(pct))
 }
 
-func cpuWidgetCompact(r *respb.CurrentResponse) string {
-	if r.Cpu == nil {
+func segCPUCompact(c *renderCtx) string {
+	if c.r.Cpu == nil {
 		return ""
 	}
-	pct := int(r.Cpu.TotalPercent)
+	pct := int(c.r.Cpu.TotalPercent)
 	return fmt.Sprintf("CPU %s%d%%#[default] ", pctColor(pct), pct)
 }
 
-func ramWidgetFull(r *respb.CurrentResponse) string {
+func segCPUProc(c *renderCtx) string {
+	if c.r.Cpu == nil || c.r.TopCpuProcess == "" {
+		return ""
+	}
+	return fmt.Sprintf("(%s) ", c.r.TopCpuProcess)
+}
+
+func segRAMPercent(c *renderCtx) string {
+	r := c.r
 	if r.Ram == nil {
 		return ""
 	}
 	pct := int(r.Ram.Percent)
 	usedGiB := r.Ram.UsedMb / 1024
-	return fmt.Sprintf("RAM %s%.2fGiB %d%% (%s) %s#[default] ", pctColor(pct), usedGiB, pct, r.TopMemProcess, bar(pct))
+	return fmt.Sprintf("RAM %s%.2fGiB %d%% %s#[default] ", pctColor(pct), usedGiB, pct, bar(pct))
 }
 
-func ramWidgetCompact(r *respb.CurrentResponse) string {
-	if r.Ram == nil {
+func segRAMCompact(c *renderCtx) string {
+	if c.r.Ram == nil {
 		return ""
 	}
-	pct := int(r.Ram.Percent)
-	return fmt.Sprintf("RAM %s%d%%#[default] ", pctColor(pct), pct)
+	pct := int(c.r.Ram.Percent)
+	usedGiB := c.r.Ram.UsedMb / 1024
+	return fmt.Sprintf("RAM %s%.2fGiB %d%%#[default] ", pctColor(pct), usedGiB, pct)
+}
+
+func segRAMProc(c *renderCtx) string {
+	if c.r.Ram == nil || c.r.TopMemProcess == "" {
+		return ""
+	}
+	return fmt.Sprintf("(%s) ", c.r.TopMemProcess)
+}
+
+func segBattery(c *renderCtx) string {
+	return batteryWidgetFull(c.r)
+}
+
+func segBatteryCompact(c *renderCtx) string {
+	return batteryWidgetCompact(c.r)
+}
+
+func segTemp(c *renderCtx) string {
+	return tempWidgetFull(c.r)
+}
+
+func segTempCompact(c *renderCtx) string {
+	return tempWidgetCompact(c.r)
+}
+
+func segLayout(c *renderCtx) string {
+	if c.r.KeyboardLayout == "" {
+		return ""
+	}
+	return fmt.Sprintf("#[fg=#E82572,bg=#272822,none]#[fg=#A6E22E,bg=#E82572,none] %s ", c.r.KeyboardLayout)
+}
+
+func segPower(c *renderCtx) string {
+	return powerWidgetBoth(c.r)
+}
+
+func segGPU(c *renderCtx) string {
+	return gpuWidgetBoth(c.r)
+}
+
+func segWiFiPercent(c *renderCtx) string {
+	if c.r.Wifi == nil || c.r.Wifi.Percent <= 0 {
+		return ""
+	}
+	ipct := int(c.r.Wifi.Percent)
+	return fmt.Sprintf("WIFI %s%d%% %s#[default] ", pctColor(100-ipct), ipct, bar(ipct))
+}
+
+func segWiFiCompact(c *renderCtx) string {
+	if c.r.Wifi == nil || c.r.Wifi.Percent <= 0 {
+		return ""
+	}
+	ipct := int(c.r.Wifi.Percent)
+	return fmt.Sprintf("WIFI %s%d%%#[default] ", pctColor(100-ipct), ipct)
+}
+
+func segWiFiSSID(c *renderCtx) string {
+	if c.r.Wifi == nil || c.r.Wifi.Percent <= 0 || c.r.Wifi.Ssid == "" {
+		return ""
+	}
+	return fmt.Sprintf("(%s) ", c.r.Wifi.Ssid)
+}
+
+func segTime(c *renderCtx) string {
+	return fmt.Sprintf("#[fg=#E8E8E2,bg=#272822,none]   %s ", c.timeStr)
+}
+
+func segDate(c *renderCtx) string {
+	return fmt.Sprintf("#[fg=#E8E8E2,bg=#272822,none]   %s ", c.dateStr)
+}
+
+func segUser(c *renderCtx) string {
+	return fmt.Sprintf("#[fg=#E8E8E2,bg=#E82572,none]#[fg=#272822,bg=#E8E8E2,bold] %s%s ", c.username, c.root)
+}
+
+func segHost(c *renderCtx) string {
+	return fmt.Sprintf("#[fg=#272822,bg=#E8E8E2,none]#[fg=#E8E8E2,bg=#272822,none] %s ", c.hostname)
+}
+
+// allSegments returns every bar segment in definition order (priorities are
+// applied at render time via sortedSegments).
+func (s *tmuxBarServer) allSegments() []barSegment {
+	return []barSegment{
+		{key: widgetCPUPercent, renderFull: segCPUPercent, renderCompact: segCPUCompact},
+		{key: widgetRAMPercent, renderFull: segRAMPercent, renderCompact: segRAMCompact},
+		{key: widgetBattery, renderFull: segBattery, renderCompact: segBatteryCompact},
+		{key: widgetTemp, renderFull: segTemp, renderCompact: segTempCompact},
+		{key: widgetLayout, renderFull: segLayout},
+		{key: widgetPower, renderFull: segPower},
+		{key: widgetGPU, renderFull: segGPU},
+		{key: widgetWiFiPercent, renderFull: segWiFiPercent, renderCompact: segWiFiCompact},
+		{key: widgetCPUProc, renderFull: segCPUProc},
+		{key: widgetRAMProc, renderFull: segRAMProc},
+		{key: widgetWiFiSSID, renderFull: segWiFiSSID},
+		{key: widgetTime, renderFull: segTime},
+		{key: widgetDate, renderFull: segDate},
+		{key: widgetUser, renderFull: segUser},
+		{key: widgetHost, renderFull: segHost},
+	}
 }
 
 func batteryWidgetFull(r *respb.CurrentResponse) string {
@@ -330,32 +466,6 @@ func gpuWidgetBoth(r *respb.CurrentResponse) string {
 	default:
 		return ""
 	}
-}
-
-func wifiWidgetFull(r *respb.CurrentResponse) string {
-	if r.Wifi == nil || r.Wifi.Percent <= 0 {
-		return ""
-	}
-	ipct := int(r.Wifi.Percent)
-	return fmt.Sprintf("WIFI %s%d%% (%s) %s#[default] ", pctColor(100-ipct), ipct, r.Wifi.Ssid, bar(ipct))
-}
-
-func wifiWidgetCompact(r *respb.CurrentResponse) string {
-	if r.Wifi == nil || r.Wifi.Percent <= 0 {
-		return ""
-	}
-	ipct := int(r.Wifi.Percent)
-	return fmt.Sprintf("WIFI %s%d%%#[default] ", pctColor(100-ipct), ipct)
-}
-
-var barWidgets = []barWidget{
-	{key: widgetCPU, renderFull: cpuWidgetFull, renderCompact: cpuWidgetCompact},
-	{key: widgetRAM, renderFull: ramWidgetFull, renderCompact: ramWidgetCompact},
-	{key: widgetBattery, renderFull: batteryWidgetFull, renderCompact: batteryWidgetCompact},
-	{key: widgetTemp, renderFull: tempWidgetFull, renderCompact: tempWidgetCompact},
-	{key: widgetWifi, renderFull: wifiWidgetFull, renderCompact: wifiWidgetCompact},
-	{key: widgetPower, renderFull: powerWidgetBoth, renderCompact: powerWidgetBoth},
-	{key: widgetGPU, renderFull: gpuWidgetBoth, renderCompact: gpuWidgetBoth},
 }
 
 func (s *tmuxBarServer) CPUWidget(ctx context.Context, req *connect.Request[pb.CPUWidgetRequest]) (*connect.Response[pb.CPUWidgetResponse], error) {
@@ -647,71 +757,59 @@ func (s *tmuxBarServer) WiFiWidget(ctx context.Context, req *connect.Request[pb.
 	}), nil
 }
 
-func renderPinned(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string) string {
-	var b strings.Builder
-	b.WriteString("#[fg=#E8E8E2,bg=#272822,none]   ")
-	b.WriteString(timeStr)
-	b.WriteString(" #[fg=#E8E8E2,bg=#272822,none]   ")
-	b.WriteString(dateStr)
-	b.WriteString(" #[fg=#E82572,bg=#272822,none]#[fg=#A6E22E,bg=#E82572,none] ")
-	b.WriteString(r.KeyboardLayout)
-	b.WriteString(" #[fg=#E8E8E2,bg=#E82572,none]#[fg=#272822,bg=#E8E8E2,bold] ")
-	b.WriteString(username)
-	b.WriteString(root)
-	b.WriteString(" #[fg=#272822,bg=#E8E8E2,none]#[fg=#E8E8E2,bg=#272822,none] ")
-	b.WriteString(host)
-	b.WriteString(" ")
-	return b.String()
-}
-
-func (s *tmuxBarServer) renderBar(r *respb.CurrentResponse, username, root, host, timeStr, dateStr string, maxWidth int) string {
+func (s *tmuxBarServer) renderBar(r *respb.CurrentResponse, maxWidth int) string {
 	if maxWidth <= 0 {
 		maxWidth = 9999
 	}
 
-	pinned := renderPinned(r, username, root, host, timeStr, dateStr)
-	pinnedW := visibleWidth(pinned)
-	remaining := maxWidth - pinnedW
+	now := time.Now()
+	ctx := &renderCtx{
+		r:        r,
+		timeStr:  now.Format("15:04"),
+		dateStr:  now.Format("02 Jan"),
+		username: s.username,
+		root:     s.root,
+		hostname: s.hostname,
+	}
 
-	var widgetsStr string
-	for _, w := range s.sortedWidgets() {
+	remaining := maxWidth
+	var b strings.Builder
+	for _, seg := range s.sortedSegments() {
 		if remaining <= 0 {
 			break
 		}
-
-		full := w.renderFull(r)
+		full := seg.renderFull(ctx)
 		if full == "" {
 			continue
 		}
 		fw := visibleWidth(full)
-
 		if fw <= remaining {
-			widgetsStr += full
+			b.WriteString(full)
 			remaining -= fw
 			continue
 		}
-
-		compact := w.renderCompact(r)
+		if seg.renderCompact == nil {
+			continue
+		}
+		compact := seg.renderCompact(ctx)
 		if compact == "" {
 			continue
 		}
 		cw := visibleWidth(compact)
 		if cw <= remaining {
-			widgetsStr += compact
+			b.WriteString(compact)
 			remaining -= cw
 		}
 	}
-
-	return widgetsStr + pinned
+	return b.String()
 }
 
-// sortedWidgets returns the bar widgets ordered by their current display
+// sortedSegments returns the bar segments ordered by their current display
 // priority (stable, so equal priorities keep their definition order).
-func (s *tmuxBarServer) sortedWidgets() []barWidget {
+func (s *tmuxBarServer) sortedSegments() []barSegment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]barWidget, len(barWidgets))
-	copy(out, barWidgets)
+	out := s.allSegments()
 	sort.SliceStable(out, func(i, j int) bool {
 		return s.priorities[out[i].key] < s.priorities[out[j].key]
 	})
@@ -719,21 +817,37 @@ func (s *tmuxBarServer) sortedWidgets() []barWidget {
 }
 
 func toProtoPriorities(m map[widgetKey]int) *pb.WidgetPriorities {
-	cpu := int32(m[widgetCPU])
-	ram := int32(m[widgetRAM])
+	cpuPercent := int32(m[widgetCPUPercent])
+	cpuProc := int32(m[widgetCPUProc])
+	ramPercent := int32(m[widgetRAMPercent])
+	ramProc := int32(m[widgetRAMProc])
 	battery := int32(m[widgetBattery])
 	temp := int32(m[widgetTemp])
-	wifi := int32(m[widgetWifi])
+	layout := int32(m[widgetLayout])
 	power := int32(m[widgetPower])
 	gpu := int32(m[widgetGPU])
+	wifiPercent := int32(m[widgetWiFiPercent])
+	wifiSSID := int32(m[widgetWiFiSSID])
+	tm := int32(m[widgetTime])
+	date := int32(m[widgetDate])
+	user := int32(m[widgetUser])
+	host := int32(m[widgetHost])
 	return &pb.WidgetPriorities{
-		Cpu:          &cpu,
-		Ram:          &ram,
+		CpuPercent:   &cpuPercent,
+		CpuProcess:   &cpuProc,
+		RamPercent:   &ramPercent,
+		RamProcess:   &ramProc,
 		Battery:      &battery,
 		Temp:         &temp,
-		Wifi:         &wifi,
+		Layout:       &layout,
 		PowerProfile: &power,
 		GpuProfile:   &gpu,
+		WifiPercent:  &wifiPercent,
+		WifiSsid:     &wifiSSID,
+		Time:         &tm,
+		Date:         &date,
+		User:         &user,
+		Hostname:     &host,
 	}
 }
 
@@ -743,11 +857,17 @@ func (s *tmuxBarServer) SetWidgetPriorities(ctx context.Context, req *connect.Re
 
 	s.mu.Lock()
 	if p != nil {
-		if p.Cpu != nil {
-			s.priorities[widgetCPU] = int(*p.Cpu)
+		if p.CpuPercent != nil {
+			s.priorities[widgetCPUPercent] = int(*p.CpuPercent)
 		}
-		if p.Ram != nil {
-			s.priorities[widgetRAM] = int(*p.Ram)
+		if p.CpuProcess != nil {
+			s.priorities[widgetCPUProc] = int(*p.CpuProcess)
+		}
+		if p.RamPercent != nil {
+			s.priorities[widgetRAMPercent] = int(*p.RamPercent)
+		}
+		if p.RamProcess != nil {
+			s.priorities[widgetRAMProc] = int(*p.RamProcess)
 		}
 		if p.Battery != nil {
 			s.priorities[widgetBattery] = int(*p.Battery)
@@ -755,14 +875,32 @@ func (s *tmuxBarServer) SetWidgetPriorities(ctx context.Context, req *connect.Re
 		if p.Temp != nil {
 			s.priorities[widgetTemp] = int(*p.Temp)
 		}
-		if p.Wifi != nil {
-			s.priorities[widgetWifi] = int(*p.Wifi)
+		if p.Layout != nil {
+			s.priorities[widgetLayout] = int(*p.Layout)
 		}
 		if p.PowerProfile != nil {
 			s.priorities[widgetPower] = int(*p.PowerProfile)
 		}
 		if p.GpuProfile != nil {
 			s.priorities[widgetGPU] = int(*p.GpuProfile)
+		}
+		if p.WifiPercent != nil {
+			s.priorities[widgetWiFiPercent] = int(*p.WifiPercent)
+		}
+		if p.WifiSsid != nil {
+			s.priorities[widgetWiFiSSID] = int(*p.WifiSsid)
+		}
+		if p.Time != nil {
+			s.priorities[widgetTime] = int(*p.Time)
+		}
+		if p.Date != nil {
+			s.priorities[widgetDate] = int(*p.Date)
+		}
+		if p.User != nil {
+			s.priorities[widgetUser] = int(*p.User)
+		}
+		if p.Hostname != nil {
+			s.priorities[widgetHost] = int(*p.Hostname)
 		}
 	}
 	applied := make(map[widgetKey]int, len(s.priorities))
@@ -792,17 +930,11 @@ func (s *tmuxBarServer) StatusBar(ctx context.Context, req *connect.Request[pb.S
 	pc := plugin.ExtractContext(ctx)
 	data := s.cache.get()
 
-	now := time.Now()
-	timeStr := now.Format("15:04")
-	dateStr := now.Format("02 Jan")
-
-	var text string
+	r := &respb.CurrentResponse{}
 	if data != nil {
-		text = s.renderBar(data, s.username, s.root, s.hostname, timeStr, dateStr, int(req.Msg.MaxWidth))
-	} else {
-		r := &respb.CurrentResponse{}
-		text = renderPinned(r, s.username, s.root, s.hostname, timeStr, dateStr)
+		r = data
 	}
+	text := s.renderBar(r, int(req.Msg.MaxWidth))
 
 	if pc != nil {
 		pc.Log().Info("▶ TmuxBar.StatusBar", "max_width", req.Msg.MaxWidth, "len", len(text))
