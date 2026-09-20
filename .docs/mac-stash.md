@@ -79,7 +79,7 @@ systemctl --user disable mac-stash.service
 ```sh
 systemctl --user status mac-stash.service    # active (running)
 mount | grep mac-stash                       # fuse.rclone on /mnt/mac-stash
-ls /mnt/mac-stash                            # share contents (e.g. Dump)
+ls /mnt/mac-stash                            # share contents (AudioBookShelf Folders, RomM Folder)
 ```
 
 ## Notes
