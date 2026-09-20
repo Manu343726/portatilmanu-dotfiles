@@ -49,6 +49,42 @@ HandleLidSwitchExternalPower=suspend
 Lid-close hibernate is logind's own path and is independent of the UPower
 critical action above.
 
+## GPU modes (supergfxctl)
+
+GPU switching is handled by **supergfxctl** (supergfxd). File:
+`/etc/supergfxd.conf` (system file, not in this repo).
+
+```
+{
+  "mode": "Integrated",      // current/persisted mode
+  "always_reboot": true,     // IMPORTANT, see below
+  "logout_timeout_s": 180,
+  "hotplug_type": "None"
+}
+```
+
+- This machine normally runs **Integrated** (dGPU off, best battery). Switch to
+  **Hybrid** only when the dGPU is needed (e.g. Beyond All Reason).
+- **`always_reboot: true` is required.** Without it, supergfxd waits for a
+  logout before completing a mode switch, but its `wait_logout` **hardcodes a
+  30s timeout** (`src/actions.rs`, still present upstream as of 5.2.7/master)
+  and *ignores* `logout_timeout_s`. If no logout happens in 30s the switch
+  errors and **reverts**, and `/etc/supergfxd.conf` is never updated to the new
+  mode — so after a reboot you're back in Integrated. With `always_reboot: true`
+  the switch runs immediately, persists `"mode"` to the config, and a later
+  reboot keeps the chosen mode.
+- The `resources`/`tmuxbar` plugins read the mode via `supergfxctl -g` and show
+  it in the tmux bar (`gpu-profile-widget`: IGPU/HYBRID/NVIDIA/EGPU).
+
+Switch (dmenu bound script `~/.local/bin/gpu-profile`, or
+`dotfilesctl gpu set-profile --mode=HYBRID`), then reboot to complete:
+
+```bash
+supergfxctl -m Hybrid        # → "A reboot is required..."
+systemctl restart supergfxd  # after editing /etc/supergfxd.conf
+supergfxctl -g               # verify current mode
+```
+
 ## Related
 
 - TLP power profiles and CPU tuning live in `/etc/tlp.d/profiles.conf` — see
