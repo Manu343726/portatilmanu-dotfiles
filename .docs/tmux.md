@@ -88,34 +88,39 @@ Defined in `~/.config/tmux/tmux.conf.local` between `# EOF` and `# "$@"`:
 | Function | Displays | Source |
 |----------|----------|--------|
 | `status-bar` | Combined bar: CPU, RAM, battery, temp, WiFi, power + GPU profiles | `dotfilesctl tmuxbar status-bar` |
-| `power-profile-widget` | TLP power profile (`P`/`B`/`S`) | `dotfilesctl tmuxbar power-profile-widget` (reads `tlpctl get`) |
-| `gpu-profile-widget` | GPU mode (`N`/`H`/`I`/`E`) | `dotfilesctl tmuxbar gpu-profile-widget` (reads `supergfxctl -g`) |
+| `power-profile-widget` | TLP power profile (`PERF`/`BAL`/`SAV`) | `dotfilesctl tmuxbar power-profile-widget` (reads `tlpctl get`) |
+| `gpu-profile-widget` | GPU mode (`NVIDIA`/`IGPU`/`HYBRID`/`EGPU`) | `dotfilesctl tmuxbar gpu-profile-widget` (reads `supergfxctl -g`) |
 
 ### Widget ordering
 
 The status bar is rendered as fine-grained **segments** that always appear in
 a fixed visual order (CPU + process, RAM + process, battery, temp, WiFi +
-SSID, power, GPU, then time, date, keyboard layout, user, host). Each segment
-has a **priority** that only controls whether it is shown or hidden when the
-bar is truncated to `max_width`: when space runs out, the lowest-priority
-segments are hidden first, while the survivors keep their fixed order.
+SSID, power + GPU profiles, then time, date, keyboard layout, user, host).
+Each segment has a **priority** that only controls whether it is shown or
+hidden when the bar is truncated to `max_width`: when space runs out, the
+lowest-priority segments are hidden first, while the survivors keep their
+fixed order.
 
 Priority per segment (least → most important, hidden first):
 
 | Segment | Default priority |
 |---------|------------------|
-| `hostname`, `user` | 20 |
+| `hostname`, `user`, `layout` | 20 |
 | `date` | 19 |
 | `time` | 18 |
 | `wifi_ssid` | 17 |
 | `cpu_process`, `ram_process` | 16 |
 | `wifi_percent` | 15 |
 | `power_profile`, `gpu_profile` | 14 |
-| `layout` | 4 |
 | `temp` | 3 |
 | `battery` | 2 |
 | `ram_percent` | 1 |
 | `cpu_percent` | 0 |
+
+The `status-right` passes `--max-width $((#{client_width} - 55))` (see
+`tmux.conf.local`) so the plugin only fills the space actually available after
+the status-left, window tabs, and prefix flags — otherwise tmux truncates the
+left edge of the bar.
 
 Priorities are runtime-configurable — only the fields you pass change:
 
