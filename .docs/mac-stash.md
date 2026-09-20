@@ -89,3 +89,6 @@ ls /mnt/mac-stash                            # share contents (AudioBookShelf Fo
 - This user unit is **not** versioned in the dotfiles repo (the
   `.config/systemd/user/` path is gitignored) — recreate it from this doc on
   reinstall.
+- The same unit + rclone remote are also deployed on the two DockerHost machines
+  (`DockerHost` 172.25.10.159, `DockerHost2` 172.25.223.123); see
+  `dockerhost-nfs.md` for their NFS/LAN mounts.
