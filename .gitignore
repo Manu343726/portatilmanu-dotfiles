@@ -60,6 +60,13 @@
 /.config/kmscon/*
 !/.config/kmscon/kmscon.conf
 
+# flameshot: Manjaro's xdg-desktop-portal-gtk ships without the Screenshot
+# backend, so the portal call never returns. useX11LegacyScreenshot=true makes
+# flameshot capture via Qt's native X11 grab instead of org.freedesktop.portal.
+!/.config/flameshot/
+/.config/flameshot/*
+!/.config/flameshot/flameshot.ini
+
 # opencode MCP config
 !/.config/opencode/
 /.config/opencode/*
