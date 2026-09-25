@@ -6,6 +6,16 @@
       "command": ["dotfilesctl", "mcp"],
       "enabled": true
     },
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "enabled": true,
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}",
+        "X-MCP-Toolsets": "context,repos,issues,pull_requests,users"
+      }
+    },
     "homeassistant": {
       "type": "remote",
       "url": "${HA_MCP_URL}",
