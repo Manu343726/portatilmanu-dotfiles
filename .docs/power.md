@@ -38,16 +38,44 @@ sudo sed -i 's/^CriticalPowerAction=Auto$/CriticalPowerAction=Hibernate/' /etc/U
 sudo systemctl restart upower
 ```
 
-## Lid close → hibernate
+## Lid close → ignore on AC, hibernate on battery
 
 **File:** `/etc/systemd/logind.conf`
 ```
 HandleLidSwitch=hibernate
-HandleLidSwitchExternalPower=suspend
+HandleLidSwitchExternalPower=ignore
 ```
 
-Lid-close hibernate is logind's own path and is independent of the UPower
-critical action above.
+- **Plugged in / charging (AC): the lid does nothing.** Closing the lid must
+  never suspend while docked, because the machine is meant to keep running.
+  `HandleLidSwitchExternalPower=ignore` is what enforces this — do not set it
+  back to `suspend` (the systemd default on most distros is `suspend`, which is
+  exactly the bug this replaces).
+- **On battery: the lid hibernates.** `HandleLidSwitch=hibernate` keeps the
+  running state across a long unplugged period instead of draining the battery.
+
+`HandleLidSwitchDocked` is left at its default (`ignore`) and
+`HandleLidSwitchExternalDisplay` at its default (falls back to
+`HandleLidSwitchExternalPower`), so a docked lid-close is also inert on AC.
+
+**Note:** xfce4-power-manager is running but defers to logind
+(`/xfce4-power-manager/logind-handle-lid-switch = true`), so it is **not** the
+component acting on the lid. The journal shows `systemd-logind: Lid closed.`
+followed by `Suspending...` as the authoritative actor. Do not "fix" this in
+xfce4-power-manager.
+
+To (re)apply after a fresh install:
+```bash
+sudo sed -i 's/^HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=ignore/' /etc/systemd/logind.conf
+sudo systemctl kill -s HUP systemd-logind   # reload; do NOT restart (avoids dropping sessions)
+```
+
+**Verify:**
+```sh
+systemd-analyze cat-config systemd/logind.conf | grep HandleLidSwitch
+# → HandleLidSwitch=hibernate
+# → HandleLidSwitchExternalPower=ignore
+```
 
 ## GPU modes (supergfxctl)
 
