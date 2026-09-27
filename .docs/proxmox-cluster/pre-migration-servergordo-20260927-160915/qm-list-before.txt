@@ -1,0 +1,2 @@
+      VMID NAME                 STATUS     MEM(MB)    BOOTDISK(GB) PID       
+       100 TrueNAS              stopped    2048              32.00 0         

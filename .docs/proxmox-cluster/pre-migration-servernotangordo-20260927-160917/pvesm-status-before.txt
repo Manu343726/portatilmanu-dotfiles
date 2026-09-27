@@ -1,0 +1,6 @@
+storage 'casa_nas_backups' is not online
+Name                    Type     Status           Total            Used       Available        %
+casa_nas_backups         nfs   inactive               0               0               0    0.00%
+local                    dir     active        98497780        28550432        64897800   28.99%
+local-lvm            lvmthin     active       354275328       208065900       146209427   58.73%
+pve2                     lvm   disabled               0               0               0      N/A

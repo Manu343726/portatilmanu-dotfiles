@@ -1,0 +1,4 @@
+      VMID NAME                 STATUS     MEM(MB)    BOOTDISK(GB) PID       
+       102 DockerHost           stopped    20480            272.00 0         
+       104 homeassistant        stopped    4096              32.00 0         
+       106 DockerHost2          stopped    4096             128.00 0         

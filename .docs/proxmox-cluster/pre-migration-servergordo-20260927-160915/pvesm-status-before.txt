@@ -1,0 +1,5 @@
+Name                    Type     Status           Total            Used       Available        %
+casa_nas_backups         nfs     active      3840912000      2570358016      1270435200   66.92%
+local                    dir     active        98497780        32532236        60915996   33.03%
+local-lvm            lvmthin     active       794595328        32737327       761858000    4.12%
+pve2                     lvm     active       937689088               0       937689088    0.00%

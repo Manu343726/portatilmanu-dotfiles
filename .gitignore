@@ -9,6 +9,10 @@
 !/.docs/
 /.docs/*
 !/.docs/*.md
+# Pre-migration Proxmox config backups (see .docs/proxmox-cluster/README.md).
+# ZeroTier private identity keys (C= field) are redacted before commit.
+!/.docs/proxmox-cluster/
+!/.docs/proxmox-cluster/**
 
 !/.agents/
 /.nvm/

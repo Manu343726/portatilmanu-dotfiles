@@ -116,6 +116,14 @@ Before the move, both hosts sat on one LAN:
 there, which is why `servernotangordo` spent months ARP-looping and why daily
 `aptupdate` failed with exit 100.
 
+**Verbatim backups** of both nodes' `corosync.conf`, `/etc/hosts`,
+`/etc/network/interfaces`, `storage.cfg` and pre-migration `pvecm`/`qm`/`pvesm`
+output are committed under [`proxmox-cluster/`](proxmox-cluster/README.md),
+captured 2026-09-27 16:09 just before the migration. That directory's README
+also documents a **redaction**: the ZeroTier `networks.d/*.conf` files ship with
+each node's **private identity key** (`C=`), which was stripped. A ZeroTier
+identity is a bearer credential, so those must never enter git.
+
 ## What changed on 2026-09-27
 
 ### `servernotangordo` — added real-LAN reachability (additive)
@@ -262,6 +270,8 @@ Port 8006 is the PVE web UI/API and is useful as a liveness probe
 
 ## See also
 
+- `proxmox-cluster/README.md` — committed pre-migration config backups for both
+  nodes, with the redaction note and rollback commands
 - `nas-recovery.md` — TrueNAS VM recovery via the smart plugs
 - `ssh-zerotier-mtu.md` — ZeroTier MTU handling (overlay MTU here is 2800)
 - `dockerhost-nfs.md` / `nfs-media.md` / `synology-nfs.md` — clients that depend
