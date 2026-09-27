@@ -8,9 +8,9 @@ unresponsive — used when the TrueNAS VM hung in 2026-09.
 ## Topology (relevant bits)
 
 - **Proxmox host `servergordo`** runs the TrueNAS VM; **`servernotangordo`**
-  runs DockerHost, DockerHost2, and the Home Assistant VM.
-- The TrueNAS VM is `vmid 100` on `servergordo`, with `onboot=1`,
-  `startup=order=1` (auto-starts on host boot).
+  runs DockerHost, DockerHost2, and the Home Assistant VM. The two hosts live in
+  **different homes** and share only a ZeroTier overlay — see `proxmox-cluster.md`.
+  The TrueNAS VM is `vmid 100` on `servergordo`.
 - Smart plugs in Home Assistant: `enchufe servergordo Socket 1` and
   `enchufe servernotangordo Socket 1` power the two Proxmox hosts. The
   `enchufe servergordo Socket 1` plug was found **off**, which is why the whole
@@ -78,3 +78,6 @@ it pings.
 
 - `dockerhost-nfs.md` — the client-side NFS mounts that depend on these NASes
 - `nfs-media.md` / `synology-nfs.md` — laptop-side mounts over the VPN
+- `proxmox-cluster.md` — the `casa` cluster: node IPs, VM inventory, the
+  two-site split and the pending ZeroTier ring migration. Read this first when
+  both hosts are reachable but the VMs won't start.
