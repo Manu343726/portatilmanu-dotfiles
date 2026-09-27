@@ -54,9 +54,10 @@ HandleLidSwitchExternalPower=ignore
 - **On battery: the lid hibernates.** `HandleLidSwitch=hibernate` keeps the
   running state across a long unplugged period instead of draining the battery.
 
-`HandleLidSwitchDocked` is left at its default (`ignore`) and
-`HandleLidSwitchExternalDisplay` at its default (falls back to
-`HandleLidSwitchExternalPower`), so a docked lid-close is also inert on AC.
+`HandleLidSwitchDocked=` is left at its default, which is already `ignore`, so a
+lid close while docked (docking station, or more than one display connected)
+is inert too. logind's precedence is: docked/external-display first, then
+external power, then the plain `HandleLidSwitch` battery case.
 
 **Note:** xfce4-power-manager is running but defers to logind
 (`/xfce4-power-manager/logind-handle-lid-switch = true`), so it is **not** the
