@@ -3,13 +3,26 @@
 Two standalone Proxmox VE 8.2.0 hosts form a **2-node cluster named `casa`**.
 They live in **two different physical homes** and are joined only by **ZeroTier**.
 
-`servergordo` stayed in the old home. `servernotangordo` was moved to the new
-home. The cluster interconnect was never re-IP'd after the move, so the ring
-(`192.168.100.0/24`) no longer spans the two sites and **quorum has been lost**.
-That loss is why every VM on both hosts is stopped.
+> **Updated 2026-09-28.** This doc used to record quorum as **lost** and every VM as
+> **stopped**. **Both are fixed.** The ring has been migrated to ZeroTier, quorum
+> is healthy (`Quorate: Yes`, 2/2 votes), 3 of 4 VMs are running, and daily backups
+> are landing on the NAS again. Sections below that described the outage are kept
+> as history and clearly marked — don't follow them as current state.
 
 This doc records the current topology, the pre-migration config, the changes
-applied on 2026-09-27, and the migration that is still outstanding.
+applied on 2026-09-27 and 2026-09-28, and what is still outstanding.
+
+## Current state (verified 2026-09-28)
+
+```
+Node ID: 0x00000001  servergordo       Quorate: Yes  Total votes: 2
+Node ID: 0x00000002  servernotangordo  Quorate: Yes  Total votes: 2
+
+100 TrueNAS      servergordo       running
+102 DockerHost   servernotangordo  running
+104 homeassistant servernotangordo running
+106 DockerHost2  servernotangordo  stopped   ← intentionally off
+```
 
 ## Topology
 
@@ -18,16 +31,21 @@ applied on 2026-09-27, and the migration that is still outstanding.
   ┌──────────────────┐              ┌──────────────────────────┐
   │ servergordo      │              │ servernotangordo         │
   │ nodeid 1         │              │ nodeid 2                 │
-  │ 192.168.100.2    │  ✗ dead L2   │ 192.168.100.5 (stale)    │
+  │ 192.168.100.2    │  ✗ dead L2   │ 192.168.100.5 (legacy)   │
+  │                  │              │ 192.168.0.240 (real LAN) │
   │ ZT 172.25.53.62  │◄────ZT──────►│ ZT 172.25.211.19         │
   │ VM 100 TrueNAS   │              │ VM 102 DockerHost        │
   └──────────────────┘              │ VM 104 homeassistant     │
-                                    │ VM 106 DockerHost2       │
+   192.168.100.0/24                  │ VM 106 DockerHost2       │
+   is this LAN only                  │ 192.168.0.0/24 is this LAN│
                                     └──────────────────────────┘
 ```
 
-The `192.168.100.0/24` subnet and the NAS at `192.168.100.112` belong to the
-**old home**. They are not routable from the new home.
+`192.168.100.0/24` belongs to the **old home** and is not routable from the new
+home. `192.168.0.0/24` is the **real** LAN (new home + the router at
+`192.168.0.1`) and is the only one to use for anything you actually operate.
+`servergordo` has **no** address on the real LAN — it is reachable only over
+ZeroTier.
 
 ## Node inventory
 
@@ -60,17 +78,40 @@ The `192.168.100.0/24` subnet and the NAS at `192.168.100.112` belong to the
 
 ## VMs
 
-| VMID | Name | Node | Mem | Disk | Net MAC | onboot |
-|---|---|---|---|---|---|---|
-| 100 | **TrueNAS** | servergordo | 2 GB | 32 GB boot + 3× 8 TB raw passthrough | `BC:24:11:EA:1A:90` | ✅ |
-| 102 | **DockerHost** | servernotangordo | 20 GB | 272 GB | `BC:24:11:FF:EE:4D` | ✅ |
-| 104 | **homeassistant** | servernotangordo | 4 GB | 32 GB | `02:FF:F5:50:70:6C` | ✅ |
-| 106 | **DockerHost2** | servernotangordo | 4 GB | 128 GB | `BC:24:11:7B:65:99` | ✅ |
+| VMID | Name | Node | Mem | Disk | Net MAC | Real LAN | ZeroTier | onboot |
+|---|---|---|---|---|---|---|---|---|
+| 100 | **TrueNAS** | servergordo | 2 GB | 32 GB boot + 3× 8 TB raw passthrough | `BC:24:11:EA:1A:90` | — (old-home only) | `172.25.225.161` | ✅ |
+| 102 | **DockerHost** | servernotangordo | 20 GB | 272 GB | `BC:24:11:FF:EE:4D` | **`192.168.0.251`** | `172.25.10.159` | ✅ |
+| 104 | **homeassistant** | servernotangordo | 4 GB | 32 GB | `02:FF:F5:50:70:6C` | `192.168.0.41` | `172.25.219.62` | ✅ |
+| 106 | **DockerHost2** | servernotangordo | 4 GB | 128 GB | `BC:24:11:7B:65:99` | `192.168.0.252` (last seen) | `172.25.223.123` | ✅ |
 
 No LXC containers on either host. All VMs are attached to `vmbr0`.
 
 TrueNAS passes through three bare 8 TB disks (`scsi1-3`,
 `/dev/disk/by-id/ata-ST8000DM004-*ZR15KEL2/…M28B/…M453`) — do not renumber them.
+
+**Port forwarding:** point it at the VM's **real LAN** address, e.g.
+`192.168.0.251` for DockerHost. Note `net0` carries `firewall=1` on every VM, so
+Proxmox's per-VM firewall can drop packets before any host-level forward lands —
+check it first if a forward "looks right" but nothing arrives. DockerHost's
+`ens18` is a **static** `192.168.0.251/24`, gw `192.168.0.1`
+(NetworkManager, profile `Wired connection 1`), so the address won't move on a
+lease renewal.
+
+### Host addresses on the old-home LAN
+
+Kept for reference — **unreachable from the new home**:
+
+| Host | Old-home LAN | Note |
+|---|---|---|
+| `servergordo` | `192.168.100.2` | |
+| `servernotangordo` | `192.168.100.5` | primary on `vmbr0`; corosync binds it |
+| TrueNAS (VM 100) | `192.168.100.3` | media NFS target |
+| Synology | `192.168.100.112` | `volume1` — **the Synology, not TrueNAS** |
+
+> The old version of this doc labelled `192.168.100.112` as "the TrueNAS VM" and
+> claimed `casa_nas_backups` pointed at it. Both wrong: `.112` is the **Synology**,
+> and TrueNAS is `.3`. The Proxmox storage has never been a TrueNAS target.
 
 ## Storage
 
@@ -80,13 +121,15 @@ Identical `storage.cfg` on both nodes (it is cluster-wide config):
 |---|---|---|---|
 | `local` | dir | active | `/var/lib/vz` |
 | `local-lvm` | lvmthin | active | thinpool `data` on vg `pve` |
-| `casa_nas_backups` | nfs | **inactive** | server `192.168.100.112`, export `/volume1/Backups` — that's the **TrueNAS VM** on `servergordo` |
-| `pve2` | lvm | disabled on `servernotangordo`, active on `servergordo` | `nodes servergordo`, `shared 0` |
+| `casa_nas_backups` | nfs | **active** | server `172.25.106.32` (Synology over ZeroTier), export `/volume1/Backups` |
+| `pve2` | lvm | active on both | `nodes servergordo`, `shared 0` |
 
-`casa_nas_backups` is offline purely because VM 100 (TrueNAS) is stopped — and VM
-100 is stopped because quorum is lost. Circular dependency.
+`casa_nas_backups` was repointed from the dead `192.168.100.112` to the Synology's
+ZeroTier address `172.25.106.32`. It now reports **active**, 67.76 % used
+(2.6 TB of 3.84 TB). Note it is stored on `servergordo`, so `/var/lib/vz/dump/`
+being empty locally is expected — dumps never land there.
 
-## Cluster config (current — still points at the old home)
+## Cluster config (current — ring migrated to ZeroTier)
 
 Identical on both nodes:
 
@@ -95,13 +138,21 @@ cluster_name: casa          config_version: 6
 transport:    knet          secure auth: on
 two_node:     1             link_mode: passive
 mcastport:    5405
-bindnetaddr:  192.168.100.0        ← old-home LAN, does not span the sites
-ring0_addr:   servergordo      = 192.168.100.2
-ring0_addr:   servernotangordo = 192.168.100.5
+bindnetaddr:  172.25.0.0            ← ZeroTier overlay
+ring0_addr:   servergordo      = 172.25.53.62
+ring0_addr:   servernotangordo = 172.25.211.19
 ```
 
-`/etc/hosts` on both nodes maps the two node names to those same `192.168.100.x`
-addresses.
+`/etc/hosts` on both nodes maps the two node names to those same ZeroTier IPs:
+
+```
+172.25.53.62     servergordo.local servergordo
+172.25.211.19    servernotangordo.local servernotangordo
+```
+
+This migration **was completed** (it was the outstanding item in earlier revisions
+of this doc). `knet` + multicast over ZeroTier works in practice — the ring forms
+and holds quorum. `udpu` was considered but not needed.
 
 ## Pre-migration config (the old home, as it was)
 
@@ -109,7 +160,7 @@ Before the move, both hosts sat on one LAN:
 
 - Subnet `192.168.100.0/24`, gateway `192.168.100.1`
 - `servergordo` = `.2`, `servernotangordo` = `.5`
-- TrueNAS VM 100 = `.112` (the NFS target for `casa_nas_backups`)
+- TrueNAS VM 100 = `.3` (media NFS target), Synology = `.112` (volume1)
 - Corosync multicast over that LAN was fine — the nodes were on the same segment
 
 **None of this is reachable from the new home.** `192.168.100.1` never resolves
@@ -175,7 +226,11 @@ The script **exits 0 on timeout** and only logs, so a node in the old home with 
 console access still finishes booting. Set `ZTWAIT_STRICT=1` to make it hard-fail
 instead (refuse to build a ring on a dead overlay).
 
-## Why every VM is stopped
+## Why every VM was stopped (historical — resolved 2026-09-28)
+
+> **Historical.** This outage is over. Quorum is restored and the VMs are running;
+> see *Current state* at the top. Kept because the failure chain explains the
+> boot-ordering work in *ZeroTier before corosync*, which is still load-bearing.
 
 The chain, confirmed in the logs at the 14:37 boot on 2026-09-27:
 
@@ -192,9 +247,9 @@ servergordo (192.168.100.2) unreachable across sites
 no quorum PVE cannot know whether the peer is already running a given VMID, and
 starting one risks two nodes running the same guest.
 
-## Outstanding: migrate the ring to ZeroTier
+## Migrating the ring to ZeroTier — DONE 2026-09-28
 
-The fix, still to be applied. On **both** nodes:
+Applied on **both** nodes:
 
 ```
   servergordo       ring0_addr: 172.25.53.62
@@ -208,30 +263,27 @@ Plus, on both nodes:
 - boot ordering already in place (above), so ZT is up before the ring is built
 
 Measured ZeroTier path between the two nodes: **14–16 ms avg, 0 % loss, ~3 ms
-jitter** (50 probes) — comfortably within corosync's tolerance. So this is viable.
+jitter** (50 probes) — comfortably within corosync's tolerance, and in practice it
+holds quorum steadily.
 
-Open decisions:
+**Decision taken:** `knet` with `mcastport 5405` was kept — ZeroTier does forward
+multicast between members, so no switch to `udpu` was needed. If quorum ever turns
+flaky, `udpu` (unicast) is the first thing to try.
 
-- **Multicast vs unicast.** Current transport is `knet` with `mcastport 5405`.
-  ZeroTier does forward multicast between members, so it may work unchanged, but
-  `udpu` (unicast) is more predictable over a WAN-latency virtual link. Leaning
-  `udpu`.
-- **`casa_nas_backups` still points at `192.168.100.112`.** That is VM 100 on
-  `servergordo`; once the ring is up and VM 100 starts, the NFS target resolves
-  again on the old-home LAN. If the NAS should be reachable from the new home
-  too, it needs its own ZeroTier membership or a new address.
+**Never do this one-sided.** A half-migrated ring is how you lock out both nodes.
+The safety net is that SSH to both hosts runs over **ZeroTier**, which is
+independent of corosync — a broken ring can still be repaired remotely.
 
-Apply one node at a time and verify between. The safety net is that SSH to both
-hosts runs over **ZeroTier**, which is independent of corosync — a broken ring
-can still be repaired remotely.
+## Backups are working again
 
-## Backups are currently broken
+The old "backups are broken" state is resolved. `casa_nas_backups` is **active**
+and daily 05:00 dumps are landing — VM 102 has a run for every day through
+2026-09-28 (~65–69 GiB each, `vma.zst`). Retention is
+`keep-daily=7, keep-weekly=8, keep-monthly=6`.
 
-`/var/lib/vz/dump/` on `servernotangordo` is **empty**, and `vzdump` has been
-failing daily at 05:00 (09-25, 09-26, 09-27 all `job errors`) because
-`casa_nas_backups` is offline. Retention policy is
-`keep-daily=7, keep-weekly=8, keep-monthly=6`. Treat backup restoration as part
-of the cluster migration, not a follow-up.
+`/var/lib/vz/dump/` on `servernotangordo` is still empty and that is **not** a
+fault: the storage resolves to `servergordo`, so dumps never touch the local
+scratch dir. Check `list_backups` (or `pvesm list`) rather than that folder.
 
 ## Power / recovery
 
@@ -262,8 +314,17 @@ ssh ServerNoTanGordo 'pvecm status; qm list'
 # on either node
 pvecm status | grep -E 'Quorate|Total votes'
 qm list
-systemctl status pve-guests     # `activating` == blocked on quorum
+pvesm status                 # casa_nas_backups should read active
 ```
+
+A VM's own address (needs `qemu-guest-agent`, installed and running):
+
+```sh
+ssh ServerNoTanGordo 'qm agent 102 network-get-interfaces'
+```
+
+`servergordo` has no real-LAN address, so it is reachable only via
+`172.25.53.62` — never `192.168.100.2`.
 
 Port 8006 is the PVE web UI/API and is useful as a liveness probe
 (`timeout 2 bash -c 'echo > /dev/tcp/<ip>/8006'`).

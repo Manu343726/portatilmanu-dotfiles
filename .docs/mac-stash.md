@@ -91,4 +91,6 @@ ls /mnt/mac-stash                            # share contents (AudioBookShelf Fo
   reinstall.
 - The same unit + rclone remote are also deployed on the two DockerHost machines
   (`DockerHost` 172.25.10.159, `DockerHost2` 172.25.223.123); see
-  `dockerhost-nfs.md` for their NFS/LAN mounts.
+  `dockerhost-nfs.md` for their NFS mounts. Those VMs sit on the real LAN
+  (`192.168.0.251` / `192.168.0.252`) but reach the NASes over **ZeroTier**, the
+  same as the laptop.

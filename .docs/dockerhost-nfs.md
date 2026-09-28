@@ -1,9 +1,24 @@
 # NFS mounts on the DockerHost machines — TrueNAS media + Synology
 
-The two DockerHost VMs (`DockerHost` 172.25.10.159, `DockerHost2` 172.25.223.123)
-sit on the **LAN** (`192.168.100.x`), so they mount the NAS shares over LAN IPs —
-unlike the laptop (`portatilmanu`), which reaches the same NASes over ZeroTier
-(see `nfs-media.md` / `synology-nfs.md`).
+> **Updated 2026-09-28.** This doc previously said these VMs sit on the old-home
+> LAN (`192.168.100.x`) and mount the NASes over LAN IPs. **Both parts are now
+> wrong.** They moved to the real LAN (`192.168.0.x`) with the host, and the mounts
+> were migrated to **ZeroTier** IPs, same as the laptop. The `192.168.100.x`
+> addresses are dead — see `proxmox-cluster.md`.
+
+## Addresses
+
+| VM | VMID | Real LAN | ZeroTier | State |
+|---|---|---|---|---|
+| `DockerHost` | 102 | **`192.168.0.251`** (static) | `172.25.10.159` | running |
+| `DockerHost2` | 106 | `192.168.0.252` (last seen) | `172.25.223.123` | **stopped** |
+
+NASes, reached over ZeroTier from both the laptop and these VMs:
+
+| Server | ZeroTier | Old-home LAN (dead) |
+|---|---|---|
+| TrueNAS (VM 100, media) | `172.25.225.161` | `192.168.100.3` |
+| Synology (`volume1`) | `172.25.106.32` | `192.168.100.112` |
 
 Mounts use **systemd `.mount` units** (not fstab/automount) so they can be
 mounted/unmounted on demand with `systemctl`, and are enabled to mount at boot.
@@ -15,13 +30,13 @@ mounted/unmounted on demand with `systemctl`, and are enabled to mount at boot.
 ```
 # /etc/systemd/system/mnt-media.mount
 [Unit]
-Description=TrueNAS media (NFS over LAN)
+Description=TrueNAS media (NFS over ZeroTier)
 After=network-online.target
 Wants=network-online.target
 TimeoutSec=60
 
 [Mount]
-What=192.168.100.3:/mnt/media/media
+What=172.25.225.161:/mnt/media/media
 Where=/mnt/media
 Type=nfs
 Options=rw,nolock
@@ -30,13 +45,13 @@ Options=rw,nolock
 ```
 # /etc/systemd/system/mnt-synology.mount
 [Unit]
-Description=Synology volume1 (NFS over LAN)
+Description=Synology volume1 (NFS over ZeroTier)
 After=network-online.target
 Wants=network-online.target
 TimeoutSec=60
 
 [Mount]
-What=192.168.100.112:/volume1
+What=172.25.106.32:/volume1
 Where=/mnt/synology
 Type=nfs
 Options=rw,nolock
@@ -44,6 +59,16 @@ Options=rw,nolock
 
 The Synology mount covers the whole `/volume1` export, so all shares (`Backups`,
 `Descargas`, `Dropbox`, `Google Drive`, `Media`) appear under `/mnt/synology/`.
+
+Verified 2026-09-28 on `192.168.0.251`: both units `active`, `/mnt/media` serving
+real content (`DescargasTorrent`, `Juegos`, `Libros`, `Musica`).
+
+The superseded LAN lines are still in `/etc/fstab`, commented out:
+
+```
+#192.168.100.3:/mnt/media/media     /mnt/media/    nfs defaults 0 0 # replaced by systemd .mount
+#192.168.100.112:/volume1/          /mnt/synology/ nfs defaults 0 0 # replaced by systemd .mount
+```
 
 ## Boot enable
 
