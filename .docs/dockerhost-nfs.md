@@ -6,11 +6,17 @@
 > were migrated to **ZeroTier** IPs, same as the laptop. The `192.168.100.x`
 > addresses are dead — see `proxmox-cluster.md`.
 
+> **Updated again 2026-09-28 (later).** DockerHost moved from the static address
+> `192.168.0.251` to **DHCP**, because the Vodafone router only accepts port
+> forward rules for devices in its DHCP lease table. It is now `192.168.0.225`
+> and the address is not stable — see `dhcp-migration.md`. Prefer the ZeroTier
+> address for anything durable.
+
 ## Addresses
 
 | VM | VMID | Real LAN | ZeroTier | State |
 |---|---|---|---|---|
-| `DockerHost` | 102 | **`192.168.0.251`** (static) | `172.25.10.159` | running |
+| `DockerHost` | 102 | **`192.168.0.225`** (DHCP — was static `.251`) | `172.25.10.159` | running |
 | `DockerHost2` | 106 | `192.168.0.252` (last seen) | `172.25.223.123` | **stopped** |
 
 NASes, reached over ZeroTier from both the laptop and these VMs:
@@ -60,8 +66,10 @@ Options=rw,nolock
 The Synology mount covers the whole `/volume1` export, so all shares (`Backups`,
 `Descargas`, `Dropbox`, `Google Drive`, `Media`) appear under `/mnt/synology/`.
 
-Verified 2026-09-28 on `192.168.0.251`: both units `active`, `/mnt/media` serving
-real content (`DescargasTorrent`, `Juegos`, `Libros`, `Musica`).
+Verified 2026-09-28 on DockerHost (then at `192.168.0.251`, now `.225`): both
+units `active`, `/mnt/media` serving real content (`DescargasTorrent`, `Juegos`,
+`Libros`, `Musica`). Unaffected by the DHCP change — these mounts go over
+ZeroTier, not the LAN address.
 
 The superseded LAN lines are still in `/etc/fstab`, commented out:
 

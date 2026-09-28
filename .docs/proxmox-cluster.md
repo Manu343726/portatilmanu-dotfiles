@@ -81,7 +81,7 @@ ZeroTier.
 | VMID | Name | Node | Mem | Disk | Net MAC | Real LAN | ZeroTier | onboot |
 |---|---|---|---|---|---|---|---|---|
 | 100 | **TrueNAS** | servergordo | 2 GB | 32 GB boot + 3× 8 TB raw passthrough | `BC:24:11:EA:1A:90` | — (old-home only) | `172.25.225.161` | ✅ |
-| 102 | **DockerHost** | servernotangordo | 20 GB | 272 GB | `BC:24:11:FF:EE:4D` | **`192.168.0.251`** | `172.25.10.159` | ✅ |
+| 102 | **DockerHost** | servernotangordo | 20 GB | 272 GB | `BC:24:11:FF:EE:4D` | **`192.168.0.225`** (DHCP) | `172.25.10.159` | ✅ |
 | 104 | **homeassistant** | servernotangordo | 4 GB | 32 GB | `02:FF:F5:50:70:6C` | `192.168.0.41` | `172.25.219.62` | ✅ |
 | 106 | **DockerHost2** | servernotangordo | 4 GB | 128 GB | `BC:24:11:7B:65:99` | `192.168.0.252` (last seen) | `172.25.223.123` | ✅ |
 
@@ -90,13 +90,17 @@ No LXC containers on either host. All VMs are attached to `vmbr0`.
 TrueNAS passes through three bare 8 TB disks (`scsi1-3`,
 `/dev/disk/by-id/ata-ST8000DM004-*ZR15KEL2/…M28B/…M453`) — do not renumber them.
 
-**Port forwarding:** point it at the VM's **real LAN** address, e.g.
-`192.168.0.251` for DockerHost. Note `net0` carries `firewall=1` on every VM, so
-Proxmox's per-VM firewall can drop packets before any host-level forward lands —
-check it first if a forward "looks right" but nothing arrives. DockerHost's
-`ens18` is a **static** `192.168.0.251/24`, gw `192.168.0.1`
-(NetworkManager, profile `Wired connection 1`), so the address won't move on a
-lease renewal.
+**Port forwarding:** point it at the VM's **real LAN** address — `192.168.0.225`
+for DockerHost. Note `net0` carries `firewall=1` on every VM, so Proxmox's per-VM
+firewall can drop packets before any host-level forward lands — check it first if
+a forward "looks right" but nothing arrives.
+
+DockerHost's `ens18` is **DHCP**, not static (changed 2026-09-28 from a static
+`192.168.0.251` because the Vodafone router only issues forward rules to devices
+in its lease table — see `dhcp-migration.md`). Its address is **not stable**;
+`192.168.0.225` holds only as long as the DHCP reservation is honoured. Traefik
+inside the guest listens on host port **444**, not 443. See
+`ddns-and-exposure.md`.
 
 ### Host addresses on the old-home LAN
 
