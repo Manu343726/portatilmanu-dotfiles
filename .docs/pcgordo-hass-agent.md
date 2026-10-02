@@ -95,6 +95,38 @@ The client config lives under the user's AppData and needs no elevation. Its log
 verb for the REST link is `[HASS_API]`; success looks like
 `[HASS_API] System connected with http://172.25.219.62:8123`.
 
+## A second, unrelated HA client: the dotfilesd `pcgordo` plugin
+
+Do not confuse this with HASS.Agent. `~/.config/dotfilesd/plugins/pcgordo` runs
+on **portatilmanu**, not on pcgordo — it drives the PC *through* HA. Separate
+code, separate credentials, separate failure modes. Both were broken in
+September 2026 for unrelated reasons.
+
+- It reads `HA_MCP_URL` / `HA_MCP_TOKEN` from its environment, falling back to
+  `~/.config/opencode/.env`.
+- **It reads them once, at process start.** Rotating the HA token does not reach
+  the running plugin: every call returns `{success:false, message:"unauthorized"}`,
+  and because protojson omits `success:false` the tool result looks like a bare
+  `{"message":"unauthorized"}` — easy to mistake for a *daemon* auth failure. Fix
+  with `dotfilesctl config restart` (or the `config_restart` MCP tool). This is
+  what really broke on 2026-09-28: `.env` was rotated at 20:26 while the daemon
+  had been up since 2026-09-27 21:14.
+- A daemon restart **rebuilds and relaunches all 11 plugins at ~10s each**, so
+  allow ~2 minutes before the tools reappear. The plugin that rebuilt first wins
+  the race if you poll too early.
+- `Status.PcState` reports `PC_STATE_OFFLINE` even when the PC is up.
+  `parsePCState` only accepts `on`/`online`, but the only entity it actually
+  matches is `media_player.pcgordo_2`, whose states are `playing`/`paused`/`idle`.
+  `sensor.pcgordo_pc_state`, which would carry a real value, does not exist.
+  Judge liveness by `sensor.pcgordo_memoryusage` updating within a minute.
+- **The `dotfilesctl mcp` stdio bridge does not survive a daemon restart.** The
+  process dies and opencode keeps the stale tool list, so the entire `dotfilesd.*`
+  namespace disappears until the MCP server is reconnected. Until then,
+  `dotfilesctl pcgordo <cmd>` reaches the same plugin over the same Connect RPC on
+  `127.0.0.1:9105`.
+- `dotfilesctl` prints `source changed since build` after every commit;
+  `--no-verify` silences it.
+
 ## Two pre-existing bugs, unrelated to any of the above
 
 - `[VIRTDESKT] Could not load file or assembly 'WinRT.Runtime, Version=2.2.0.0'`
