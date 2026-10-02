@@ -22,7 +22,13 @@ Node ID: 0x00000002  servernotangordo  Quorate: Yes  Total votes: 2
 102 DockerHost   servernotangordo  running
 104 homeassistant servernotangordo running
 106 DockerHost2  servernotangordo  stopped   ← intentionally off
+108 homelab      servernotangordo  running   ← homelab nuevo (2026-10-02)
 ```
+
+> **Updated 2026-10-02.** VM **108 `homelab`** created on `servernotangordo`: the
+> Manjaro-headless Docker host for the new AI-operable homelab. See
+> [`homelab-vm.md`](homelab-vm.md). Quorum was lost again that day (see *Incident
+> 2026-10-02* below) and was restored by power-cycling `servergordo`.
 
 ## Topology
 
@@ -84,6 +90,12 @@ ZeroTier.
 | 102 | **DockerHost** | servernotangordo | 20 GB | 272 GB | `BC:24:11:FF:EE:4D` | **`192.168.0.225`** (DHCP) | `172.25.10.159` | ✅ |
 | 104 | **homeassistant** | servernotangordo | 4 GB | 32 GB | `02:FF:F5:50:70:6C` | `192.168.0.41` | `172.25.219.62` | ✅ |
 | 106 | **DockerHost2** | servernotangordo | 4 GB | 128 GB | `BC:24:11:7B:65:99` | `192.168.0.252` (last seen) | `172.25.223.123` | ✅ |
+| 108 | **homelab** | servernotangordo | 10 GB | 100 GB | `BC:24:11:C8:84:8A` | **`192.168.0.30`** (DHCP) | — | ✅ |
+
+VM 108 is the **new** homelab: Manjaro headless, Docker host, booting from disk with a
+serial console on `ttyS0`. Reached as `ssh homelab` (real LAN). Full details in
+[`homelab-vm.md`](homelab-vm.md) — including how it was installed, because the
+installation had to work around several host-level storage quirks.
 
 No LXC containers on either host. All VMs are attached to `vmbr0`.
 
