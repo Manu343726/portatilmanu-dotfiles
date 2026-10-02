@@ -52,12 +52,42 @@ func parseDeviceClass(s string) pb.DeviceClass {
 	}
 }
 
+// parsePCState reads an explicit pc_state entity (sensor/binary_sensor).
 func parsePCState(s string) pb.PCState {
 	switch s {
-	case "on", "online":
+	case "on", "online", "true":
 		return pb.PCState_PC_STATE_ONLINE
 	default:
 		return pb.PCState_PC_STATE_OFFLINE
+	}
+}
+
+// zerotierPingEntity is published by Home Assistant itself (a ping binary
+// sensor), not by the agent on PCGORDO.
+const zerotierPingEntity = "binary_sensor.pcgordo_zerotier_ping"
+
+// isAgentEntity reports whether an entity is published *by* the agent running
+// on PCGORDO. The ones Home Assistant publishes itself describe the PC instead
+// of reporting from it -- the ZeroTier ping binary_sensor is HA's own
+// reachability probe (state "off" when the PC is down) and automations are HA's
+// (state "on" unconditionally) -- so counting them as presence makes the PC look
+// permanently online.
+func isAgentEntity(entityID string) bool {
+	if entityID == zerotierPingEntity {
+		return false
+	}
+	return !strings.HasPrefix(entityID, "automation.")
+}
+
+// isConcreteState reports whether a state carries a real reading. HA marks every
+// entity of a device unavailable (or unknown, for buttons) once the agent stops
+// publishing, so an unavailable/unknown state means "the PC is not reporting".
+func isConcreteState(s string) bool {
+	switch s {
+	case "", "unavailable", "unknown":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -148,9 +178,12 @@ func (s *pcgordoServer) Status(ctx context.Context, req *connect.Request[pb.Empt
 	}
 
 	res := &pb.StatusResponse{}
+	// An explicit pc_state entity, if one ever exists, is the only authority on
+	// power state. Everything else is presence: see the fallback below.
+	explicitPcState := false
 	for _, st := range states {
 		if !strings.HasPrefix(st.EntityId, "pcgordo") &&
-			st.EntityId != "binary_sensor.pcgordo_zerotier_ping" &&
+			st.EntityId != zerotierPingEntity &&
 			!strings.Contains(st.EntityId, "pcgordo") {
 			continue
 		}
@@ -169,10 +202,11 @@ func (s *pcgordoServer) Status(ctx context.Context, req *connect.Request[pb.Empt
 		res.Entities = append(res.Entities, es)
 
 		switch {
-		case st.EntityId == "binary_sensor.pcgordo_zerotier_ping":
+		case st.EntityId == zerotierPingEntity:
 			res.ZerotierPingReachable = st.State == "on"
-		case strings.HasSuffix(st.EntityId, "pc_state") || st.EntityId == "media_player.pcgordo_2":
+		case strings.HasSuffix(st.EntityId, "pc_state"):
 			res.PcState = parsePCState(st.State)
+			explicitPcState = true
 		case strings.HasSuffix(st.EntityId, "_lastboot"):
 			res.LastBoot = parseTimestamp(st.State)
 		case strings.HasSuffix(st.EntityId, "_lastactive"):
@@ -191,6 +225,20 @@ func (s *pcgordoServer) Status(ctx context.Context, req *connect.Request[pb.Empt
 			res.ActiveDesktop = st.State
 		case strings.HasSuffix(st.EntityId, "_monitorpowerstate"):
 			res.MonitorPower = parseMonitorPowerState(st.State)
+		}
+
+		// Presence fallback. Every entity reaching this point belongs to
+		// PCGORDO, so any concrete state proves the PC is up and reporting --
+		// whatever the entity is called. This matters because the only entity
+		// that used to drive PcState was media_player.pcgordo_2, whose states
+		// are playing/paused/idle/off and never the "on" that parsePCState
+		// looks for, so a healthy PC always read as PC_STATE_OFFLINE. Matching
+		// on a concrete state instead of a hardcoded entity id also survives
+		// the _2 suffix changing when the HA device is re-registered.
+		// This only ever promotes to ONLINE, so it can never contradict an
+		// explicit pc_state that already said offline.
+		if !explicitPcState && isAgentEntity(st.EntityId) && isConcreteState(st.State) {
+			res.PcState = pb.PCState_PC_STATE_ONLINE
 		}
 	}
 	if res.PcState == pb.PCState_PC_STATE_UNSPECIFIED {

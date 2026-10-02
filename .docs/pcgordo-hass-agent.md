@@ -114,11 +114,15 @@ September 2026 for unrelated reasons.
 - A daemon restart **rebuilds and relaunches all 11 plugins at ~10s each**, so
   allow ~2 minutes before the tools reappear. The plugin that rebuilt first wins
   the race if you poll too early.
-- `Status.PcState` reports `PC_STATE_OFFLINE` even when the PC is up.
-  `parsePCState` only accepts `on`/`online`, but the only entity it actually
-  matches is `media_player.pcgordo_2`, whose states are `playing`/`paused`/`idle`.
-  `sensor.pcgordo_pc_state`, which would carry a real value, does not exist.
-  Judge liveness by `sensor.pcgordo_memoryusage` updating within a minute.
+- `Status.PcState` was permanently `PC_STATE_OFFLINE` until 2026-10-02, because
+  the only entity driving it was `media_player.pcgordo_2`, whose states are
+  `playing`/`paused`/`idle`/`off` and never the `on`/`online` that `parsePCState`
+  accepts. It is now presence-based: any agent-published entity with a concrete
+  state (anything but `unavailable`/`unknown`/`""`) marks the PC online, with an
+  explicit `*pc_state` entity taking precedence if one is ever added. HA-side
+  entities are excluded — `binary_sensor.pcgordo_zerotier_ping` is HA's own
+  reachability probe (`off` when the PC is down) and `automation.*` is `on`
+  unconditionally, so including either pins the result to a constant.
 - **The `dotfilesctl mcp` stdio bridge does not survive a daemon restart.** The
   process dies and opencode keeps the stale tool list, so the entire `dotfilesd.*`
   namespace disappears until the MCP server is reconnected. Until then,
