@@ -16,6 +16,7 @@ esos todavía no se ha migrado nada.
 | Particiones | `sda1` 1 MiB `ef02` (BIOS boot para GRUB) + `sda2` 100 GB ext4 en `/` |
 | CPU / RAM | 6 vCPU (`cpu: host`) / 10 GB (`balloon: 2048`) |
 | Red | `virtio` sobre `vmbr0`, `firewall=1` |
+| Puerto serie | `serial0: socket` (añadido 2026-10-03; ver *Consola*) |
 | Arranque | `order=scsi0`, **sin ISO** (`ide2: none`) |
 | Otros | `onboot: 1`, `startup: order=3,up=30`, `agent: 1`, `serial-getty@ttyS0` |
 
@@ -50,7 +51,7 @@ Adaptado de [`zsh.md`](zsh.md), **no copiado**. Lo que se quitó y por qué:
 |---|---|
 | `ZSH_TMUX_AUTOSTART=true` **eliminado** | En un servidor cada sesión SSH debe ser usable tal cual; autoenvolver en tmux deja al admin encerrado si tmux muere. El plugin `tmux` sí está, para usarlo a propósito: `tmux new -s nombre`. |
 | Rutas `/home/manu343726/...` **eliminadas** | NVM, LM Studio, opencode, nchat y la integración de VSCode son del portatil. |
-| Tema `agnoster` **mantenido**, con `AGOSTER_CHARSET` según `TERM` | Los glifos powerline salen como basura en consolas sin fuente parcheada, así que se degradan a `ansi` automáticamente. |
+| Tema `agnoster` **mantenido**, con charset según la consola | Los glifos powerline salen como basura en consolas sin fuente parcheada, así que se degradan a `ansi` automáticamente (ver `OMZ_CONSOLE` en *Locale, teclado y consola*). |
 | Alias `eza`/`bat`/`rg`/`fd`, `fzf`, `zoxide` **mantenidos** | Se instalaron las herramientas (`eza bat ripgrep fd fzf zoxide tmux`) para que ningún alias quede apuntando a un binario inexistente. |
 | Paleta Monokai **mantenida** | `AGNOSTER_DIR_BG='#A6E22E'`, `AGNOSTER_DIR_FG='#272822'`, `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#75715E'`. |
 
@@ -61,16 +62,51 @@ Adaptado de [`zsh.md`](zsh.md), **no copiado**. Lo que se quitó y por qué:
 Para reproducir el estado del portatil aquí: `cp ~/.zshrc` desde portatilmanu y quitar
 las rutas específicas del portatil.
 
-## Consola serie
+## Locale, teclado y consola
 
-`GRUB_CMDLINE_LINUX_DEFAULT` lleva `console=tty0 console=ttyS0,115200` y
-`serial-getty@ttyS0` está habilitado. Es el único canal fiable para depurar un host sin
-consola física, y el que se usó durante la instalación.
+`LANG=en_US.UTF-8` (teclado americano) y `KEYMAP=us`. El locale se fija en **tres sitios**,
+porque cada uno cubre una vía distinta y basta con uno para que parezca que no funciona:
+
+| Fichero | Cubre |
+|---|---|
+| `/etc/locale.conf` | servicios de systemd |
+| `/etc/environment` | sesiones PAM, o sea **SSH** (`UsePAM yes`) |
+| `/etc/zsh/zshenv` | zsh, que **no lee `/etc/profile`** |
+
+**Hay dos consolas distintas y no conviene mezclarlas:**
+
+| | Dispositivo | Cómo se ve |
+|---|---|---|
+| Web de PVE (noVNC) | `tty0`, VGA de texto | la que sale "fea" sin ajustes |
+| Serie | `ttyS0` (`TERM=vt220`) | texto plano, estable |
+
+> **Corrección (2026-10-03):** antes de esta fecha **la VM no tenía puerto serie**.
+> `qm create` lo dejó sin `serial0`, así que `/var/run/qemu-server/108.serial` era un
+> fichero vacío y `serial-getty@ttyS0` no tenía nada al que conectarse — pese a que la
+> documentación anterior afirmaba lo contrario. Añadido con `qm set 108 --serial0 socket`.
+
+Para que la consola de noVNC deje de verse mal: **sin fuente Unicode y sin paleta
+propia**, los iconos de `eza` y los glifos powerline de agnoster salen como caracteres
+basura. Hay dos_arranques:
+
+- **Fuente:** hook `consolefont` de mkinitcpio con `Lat2-Terminus16` (unicode, del paquete
+  `kbd`). Se aplica al arrancar desde el initramfs, no hace falta `setupcon` — ese paquete
+  **no existe en Manjaro** (es de Debian), y tampoco hay `setconsolepalette`, así que la
+  paleta VGA se queda en la de 16 colores por defecto en vez de la Monokai.
+- **Prompt:** `OMZ_CONSOLE` en el `.zshrc` detecta `TERM` de consola (`linux`, `vt*`,
+  `dumb`…) o un `LANG` no-UTF-8, y en ese caso usa `AGOSTER_CHARSET=ansi`, quita `--icons`
+  de los alias de `eza` y desactiva el título de ventana. Por SSH con
+  `xterm-256color` sigue todo igual que en el portatil.
+
+### Acceder por serie
 
 ```sh
-ssh ServerNoTanGordo 'timeout 30 socat -u /var/run/qemu-server/108.serial -,raw,echo=0'
-# o, con la VM apagada, arrancarla y mirar la consola desde la web de PVE
+ssh ServerNoTanGordo \
+  'socat - UNIX-CONNECT:/var/run/qemu-server/108.serial0'
+# login: root / homelab
 ```
+
+Sin esto, si la VM no arranca, la única vía es la web de PVE (o `qm terminal 108`).
 
 ## Reinstalar
 
