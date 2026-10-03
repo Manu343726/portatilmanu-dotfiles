@@ -33,6 +33,16 @@
       "type": "local",
       "command": ["/home/manu343726/go/bin/mcp-virtualbox"],
       "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "/home/manu343726/.opencode/mcp/playwright/node_modules/.bin/playwright-mcp",
+        "--headless",
+        "--isolated",
+        "--caps", "pdf"
+      ],
+      "enabled": true
     }
   },
   "provider": {
