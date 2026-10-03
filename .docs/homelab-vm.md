@@ -51,7 +51,7 @@ Adaptado de [`zsh.md`](zsh.md), **no copiado**. Lo que se quitó y por qué:
 |---|---|
 | `ZSH_TMUX_AUTOSTART=true` **eliminado** | En un servidor cada sesión SSH debe ser usable tal cual; autoenvolver en tmux deja al admin encerrado si tmux muere. El plugin `tmux` sí está, para usarlo a propósito: `tmux new -s nombre`. |
 | Rutas `/home/manu343726/...` **eliminadas** | NVM, LM Studio, opencode, nchat y la integración de VSCode son del portatil. |
-| Tema `agnoster` **mantenido**, con charset según la consola | Los glifos powerline salen como basura en consolas sin fuente parcheada, así que se degradan a `ansi` automáticamente (ver `OMZ_CONSOLE` en *Locale, teclado y consola*). |
+| Tema `agnoster` **mantenido** con los glifos powerline | Al confundir el síntoma: sin fuente parcheada se ve basura, y degradar a ASCII lo "arregla" pero deja de parecerse al portatil. La causa era que faltaba **Hack Nerd Font**; con ella el prompt va completo, igual que en el portatil. |
 | Alias `eza`/`bat`/`rg`/`fd`, `fzf`, `zoxide` **mantenidos** | Se instalaron las herramientas (`eza bat ripgrep fd fzf zoxide tmux`) para que ningún alias quede apuntando a un binario inexistente. |
 | Paleta Monokai **mantenida** | `AGNOSTER_DIR_BG='#A6E22E'`, `AGNOSTER_DIR_FG='#272822'`, `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#75715E'`. |
 
@@ -85,18 +85,29 @@ porque cada uno cubre una vía distinta y basta con uno para que parezca que no 
 > fichero vacío y `serial-getty@ttyS0` no tenía nada al que conectarse — pese a que la
 > documentación anterior afirmaba lo contrario. Añadido con `qm set 108 --serial0 socket`.
 
-Para que la consola de noVNC deje de verse mal: **sin fuente Unicode y sin paleta
-propia**, los iconos de `eza` y los glifos powerline de agnoster salen como caracteres
-basura. Hay dos_arranques:
+Para que la consola se vea como en el portatil está replicada su configuración exacta
+de TTY, documentada en [`kmscon.md`](kmscon.md):
 
-- **Fuente:** hook `consolefont` de mkinitcpio con `Lat2-Terminus16` (unicode, del paquete
-  `kbd`). Se aplica al arrancar desde el initramfs, no hace falta `setupcon` — ese paquete
-  **no existe en Manjaro** (es de Debian), y tampoco hay `setconsolepalette`, así que la
-  paleta VGA se queda en la de 16 colores por defecto en vez de la Monokai.
-- **Prompt:** `OMZ_CONSOLE` en el `.zshrc` detecta `TERM` de consola (`linux`, `vt*`,
-  `dumb`…) o un `LANG` no-UTF-8, y en ese caso usa `AGOSTER_CHARSET=ansi`, quita `--icons`
-  de los alias de `eza` y desactiva el título de ventana. Por SSH con
-  `xterm-256color` sigue todo igual que en el portatil.
+- `kmscon` en **`tty2`**, con `/etc/kmscon/kmscon.conf` → symlink a
+  `/root/.config/kmscon/kmscon.conf`, **idéntico byte a byte** al del portatil: fuente
+  `Hack Nerd Font Mono` 12px con `font-engine=freetype`, paleta Monokai completa,
+  `xkb-layout=us`, `switchvt`, `multi-monitor=largest`, `session-control`.
+- Paquetes `kmscon fontconfig libx11 ttf-hack-nerd`.
+- El `.zshrc` lleva la misma línea que el portatil:
+  `[[ "$TERM" == kmscon ]] && export TERM=xterm-256color`.
+- `getty@tty1` sigue activo como fallback, igual que en el portatil.
+
+Funciona porque la VGA de QEMU expone KMS (`bochs-drm`, `card0-Virtual-1`), así que
+kmscon tiene contra qué trabajar; no hizo falta cambiar a `virtio-gpu`.
+
+> **Importante — dos consolas.** Como en el portatil, kmscon queda en **tty2** y la
+> consola VGA de texto en **tty1**. La web de PVE (noVNC) muestra la VT activa, así que
+> al arrancar verás **getty en tty1**, no kmscon: hay que cambiar a tty2. Si se prefiere que
+> la consola web muestre kmscon directamente al entrar, hay que mover el servicio a tty1.
+
+**Hack Nerd Font es la clave del aspecto**: trae los glifos powerline y de iconos, que es
+justo lo que agnoster y `eza --icons` necesitan. Sin ella sí que salen como basura. Por eso
+aquí **no** se degrada el prompt a ASCII: en el portatil tampoco se degrada.
 
 ### Acceder por serie
 
