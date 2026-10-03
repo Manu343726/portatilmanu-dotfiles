@@ -29,14 +29,37 @@ Instalado con `pacstrap` (base + `linux`, `linux-firmware`, `grub`, `openssh`, `
 Activos: `systemd-resolved`, `systemd-networkd`, `sshd`, `qemu-guest-agent`, `docker`,
 `serial-getty@ttyS0`. No hay escritorio ni NetworkManager (red con `systemd-networkd`).
 
-Acceso: **solo por clave pública**, sin contraseña (`PermitRootLogin
-prohibit-password`). Las claves de `harmony-owner` y `manu343726@portatilmanu` están en
+Acceso: **solo por clave pública**, sin contraseña por SSH (`PermitRootLogin
+prohibit-password`). Hay password de root (`homelab`) para la consola/serie, donde antes
+no había ninguna. Las claves de `harmony-owner` y `manu343726@portatilmanu` están en
 `/root/.ssh/authorized_keys`.
 
 Red por DHCP a propósito: el router Vodafone solo acepta reglas de port-forward para
 equipos de su tabla DHCP (ver [`dhcp-migration.md`](dhcp-migration.md)), así que una IP
 fija impediría exponer servicios. `systemd-resolved` se añadió después porque el perfil
 mínimo no lo trae y sin él el guest no resolvía nombres.
+
+## Shell: zsh + oh-my-zsh
+
+`zsh` es el shell principal de root (`/usr/bin/zsh`), con Oh My Zsh instalado en
+`/root/.oh-my-zsh`.
+
+Adaptado de [`zsh.md`](zsh.md), **no copiado**. Lo que se quitó y por qué:
+
+| Cambio | Motivo |
+|---|---|
+| `ZSH_TMUX_AUTOSTART=true` **eliminado** | En un servidor cada sesión SSH debe ser usable tal cual; autoenvolver en tmux deja al admin encerrado si tmux muere. El plugin `tmux` sí está, para usarlo a propósito: `tmux new -s nombre`. |
+| Rutas `/home/manu343726/...` **eliminadas** | NVM, LM Studio, opencode, nchat y la integración de VSCode son del portatil. |
+| Tema `agnoster` **mantenido**, con `AGOSTER_CHARSET` según `TERM` | Los glifos powerline salen como basura en consolas sin fuente parcheada, así que se degradan a `ansi` automáticamente. |
+| Alias `eza`/`bat`/`rg`/`fd`, `fzf`, `zoxide` **mantenidos** | Se instalaron las herramientas (`eza bat ripgrep fd fzf zoxide tmux`) para que ningún alias quede apuntando a un binario inexistente. |
+| Paleta Monokai **mantenida** | `AGNOSTER_DIR_BG='#A6E22E'`, `AGNOSTER_DIR_FG='#272822'`, `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#75715E'`. |
+
+`zsh -i -c '...'` emite `(anon):12: character not in range` y `can't change option: zle`;
+**es un quirk de zsh 5.9.2 con `-i -c`, no de esta configuración** — se reproduce con
+`zsh -i -c true` sin cargar nada. En una sesión interactiva real sobre pty no aparece.
+
+Para reproducir el estado del portatil aquí: `cp ~/.zshrc` desde portatilmanu y quitar
+las rutas específicas del portatil.
 
 ## Consola serie
 
