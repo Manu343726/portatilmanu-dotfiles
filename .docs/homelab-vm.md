@@ -88,22 +88,23 @@ porque cada uno cubre una vía distinta y basta con uno para que parezca que no 
 Para que la consola se vea como en el portatil está replicada su configuración exacta
 de TTY, documentada en [`kmscon.md`](kmscon.md):
 
-- `kmscon` en **`tty2`**, con `/etc/kmscon/kmscon.conf` → symlink a
+- `kmscon` en **`tty1`**, con `/etc/kmscon/kmscon.conf` → symlink a
   `/root/.config/kmscon/kmscon.conf`, **idéntico byte a byte** al del portatil: fuente
   `Hack Nerd Font Mono` 12px con `font-engine=freetype`, paleta Monokai completa,
   `xkb-layout=us`, `switchvt`, `multi-monitor=largest`, `session-control`.
 - Paquetes `kmscon fontconfig libx11 ttf-hack-nerd`.
 - El `.zshrc` lleva la misma línea que el portatil:
   `[[ "$TERM" == kmscon ]] && export TERM=xterm-256color`.
-- `getty@tty1` sigue activo como fallback, igual que en el portatil.
+- `serial-getty@ttyS0` sigue activo como segunda vía.
 
 Funciona porque la VGA de QEMU expone KMS (`bochs-drm`, `card0-Virtual-1`), así que
 kmscon tiene contra qué trabajar; no hizo falta cambiar a `virtio-gpu`.
 
-> **Importante — dos consolas.** Como en el portatil, kmscon queda en **tty2** y la
-> consola VGA de texto en **tty1**. La web de PVE (noVNC) muestra la VT activa, así que
-> al arrancar verás **getty en tty1**, no kmscon: hay que cambiar a tty2. Si se prefiere que
-> la consola web muestre kmscon directamente al entrar, hay que mover el servicio a tty1.
+> **tty1, no tty2.** En el portatil kmscon va a tty2 porque tty1 lo ocupa el display
+> manager. Aquí no hay display manager, así que va a **tty1**: es lo que muestra la web de
+> PVE al entrar, sin tener que cambiar de VT. El unit lleva `Conflicts=getty@%i`, así que
+> `getty@tty1` queda desplazado por él, y `autovt@tty1` apunta a `kmsconvt`, de modo que al
+> arrancar la consola web va directa a kmscon. `kmsconvt@tty2` está deshabilitado.
 
 **Hack Nerd Font es la clave del aspecto**: trae los glifos powerline y de iconos, que es
 justo lo que agnoster y `eza --icons` necesitan. Sin ella sí que salen como basura. Por eso
