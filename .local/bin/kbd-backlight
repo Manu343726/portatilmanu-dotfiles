@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+"""ASUS ROG Flow X13 (GV301RC) keyboard backlight control.
+
+Why this script exists instead of /sys/class/leds/asus::kbd_backlight/brightness:
+
+`hid-asus` fails to create that LED on this machine at every boot:
+
+    asus 0003:0B05:19B6.0002: using HID for asus::kbd_backlight
+    asus 0003:0B05:19B6.0002: Asus failed to request functions: -75
+    asus 0003:0B05:19B6.0002: Failed to initialize backlight.
+
+`asus_kbd_register_leds()` calls `asus_kbd_get_functions()`, whose GET_REPORT on
+feature report 0x5a comes back -EOVERFLOW, so the driver gives up before
+registering the class device. Nothing in userspace can then change the level:
+asusd logs `KeyboardLed::new(), asus::kbd_backlight not found` and gives up too.
+
+The SET_REPORT direction on the same report ID works fine (the driver's own
+`asus_kbd_init()` handshake succeeds during the same probe), so we send exactly
+the report upstream would have sent:
+
+    5a ba c5 c4 <level>
+
+The hardware keys are unaffected by the driver bug -- the N-KEY HID device still
+advertises KEY_KBDILLUMTOGGLE/UP/DOWN, which X maps to XF86KbdLightOnOff,
+XF86KbdBrightnessUp and XF86KbdBrightnessDown. i3 binds those to this script.
+
+Usage: kbd-backlight up|down|toggle|on|off|set N|get|restore
+"""
+
+import fcntl
+import os
+import subprocess
+import sys
+
+# Levels accepted by the firmware; matches hid-asus' cdev.max_brightness.
+MAX_LEVEL = 3
+# Level assumed the first time the key is pressed after boot.
+DEFAULT_LEVEL = 1
+# Level restored by `on`/`toggle` once the backlight has been switched off.
+LAST_ON_LEVEL = 2
+
+# The N-KEY HID collection that owns feature report 0x5a (the LED endpoint).
+# The others exposed by the driver are the media-keys, keyboard and mouse
+# interfaces, which have no backlight.
+KBD_HID = "0003:0B05:19B6.0002"
+HID_DRIVER_DIR = "/sys/bus/hid/drivers/asus"
+
+REPORT_ID = 0x5A
+REPORT_PREFIX = bytes((REPORT_ID, 0xBA, 0xC5, 0xC4))
+
+
+def _ioc(direction, typ, nr, size):
+    """Linux _IOC() encoding, so the ioctl number below needs no magic value."""
+    return (
+        (direction << 30)
+        | (ord(typ) << 8)
+        | (nr << 0)
+        | (size << 16)
+    )
+
+
+# HIDIOCSFEATURE(len) = _IOWR('H', 0x06, len)
+_HIDIOCSFEATURE = _ioc(2 | 1, "H", 0x06, 0)  # _IOC_READ | _IOC_WRITE
+
+
+def hidraw_path():
+    node = os.path.join(HID_DRIVER_DIR, KBD_HID, "hidraw")
+    try:
+        names = sorted(os.listdir(node))
+    except OSError:
+        names = []
+    if not names:
+        sys.exit(
+            f"kbd-backlight: {KBD_HID} is not bound to the asus driver "
+            f"(looked in {node}) -- is hid_asus loaded?"
+        )
+    return f"/dev/{names[0]}"
+
+
+def state_file():
+    base = os.environ.get("XDG_STATE_HOME") or os.path.join(
+        os.path.expanduser("~"), ".local", "state"
+    )
+    return os.path.join(base, "asus-kbd-backlight")
+
+
+def read_state():
+    try:
+        with open(state_file(), encoding="ascii") as fh:
+            return int(fh.read().strip())
+    except (OSError, ValueError):
+        return DEFAULT_LEVEL
+
+
+def write_state(level):
+    path = state_file()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="ascii") as fh:
+        fh.write(f"{level}\n")
+
+
+def send(level):
+    """SET the feature report; returns False when the device refuses it."""
+    report = bytearray(REPORT_PREFIX + bytes((level,)))
+    path = hidraw_path()
+    try:
+        fd = os.open(path, os.O_WRONLY)
+    except PermissionError:
+        sys.exit(
+            f"kbd-backlight: no permission to write {path}. The udev rule in "
+            f".docs/keyboard.md has to be installed and re-triggered."
+        )
+    except OSError as exc:
+        sys.exit(f"kbd-backlight: cannot open {path}: {exc}")
+
+    try:
+        fcntl.ioctl(fd, _HIDIOCSFEATURE | (len(report) << 16), report)
+    except OSError as exc:
+        sys.exit(f"kbd-backlight: HIDIOCSFEATURE on {path} failed: {exc}")
+    finally:
+        os.close(fd)
+    return True
+
+
+def notify(level):
+    if not os.environ.get("DISPLAY"):
+        return
+    bars = "█" * level + "░" * (MAX_LEVEL - level)
+    label = "off" if level == 0 else f"{level}/{MAX_LEVEL}"
+    subprocess.run(
+        ["notify-send", "Keyboard backlight", f"{label}  {bars}"],
+        check=False,
+        timeout=5,
+    )
+
+
+def apply(level, quiet=False):
+    level = max(0, min(int(level), MAX_LEVEL))
+    send(level)
+    write_state(level)
+    if not quiet:
+        notify(level)
+    return level
+
+
+def main(argv):
+    args = argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+
+    command = args[0] if args else "up"
+    current = read_state()
+
+    if command == "up":
+        # 0 -> 1 rather than staying dark.
+        level = 1 if current == 0 else current + 1
+    elif command == "down":
+        level = current - 1
+    elif command == "toggle":
+        level = 0 if current else LAST_ON_LEVEL
+    elif command == "on":
+        level = LAST_ON_LEVEL if current == 0 else current
+    elif command == "off":
+        level = 0
+    elif command == "set":
+        if len(args) < 2:
+            sys.exit("kbd-backlight: set needs a level, e.g. `set 2`")
+        try:
+            level = int(args[1])
+        except ValueError:
+            sys.exit(f"kbd-backlight: not a number: {args[1]}")
+    elif command == "get":
+        print(current)
+        return 0
+    elif command == "restore":
+        # Re-assert after suspend: the firmware clears the backlight and the
+        # kernel used to do this from hid-asus' resume hook.
+        apply(current, quiet=True)
+        return 0
+    else:
+        sys.exit(f"kbd-backlight: unknown command: {command}")
+
+    apply(level)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

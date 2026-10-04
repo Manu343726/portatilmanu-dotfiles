@@ -58,6 +58,14 @@ bindsym $mod+Ctrl+m exec terminal -e 'alsamixer'
 # bindsym XF86MonBrightnessUp exec "xbacklight -inc 10; notify-send 'brightness up'"
 # bindsym XF86MonBrightnessDown exec "xbacklight -dec 10; notify-send 'brightness down'"
 
+# Keyboard backlight. Not driven through /sys/class/leds because hid-asus fails
+# to register asus::kbd_backlight on this machine (-EOVERFLOW probing feature
+# report 0x5a), so kbd-backlight writes the HID report itself. See
+# .docs/keyboard.md for the kernel log and the udev rule it needs.
+bindsym XF86KbdBrightnessUp exec --no-startup-id kbd-backlight up
+bindsym XF86KbdBrightnessDown exec --no-startup-id kbd-backlight down
+bindsym XF86KbdLightOnOff exec --no-startup-id kbd-backlight toggle
+
 # Start Applications
 bindsym $mod+Ctrl+b exec terminal -e 'bmenu'
 bindsym $mod+F2 exec palemoon

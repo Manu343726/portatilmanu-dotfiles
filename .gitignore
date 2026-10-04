@@ -119,3 +119,4 @@
 /.config/dotfilesd/plugins/*/api/*/
 *.local/bin/*
 !/.local/bin/power-profile
+!/.local/bin/kbd-backlight
