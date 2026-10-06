@@ -14,11 +14,23 @@ feature report 0x5a comes back -EOVERFLOW, so the driver gives up before
 registering the class device. Nothing in userspace can then change the level:
 asusd logs `KeyboardLed::new(), asus::kbd_backlight not found` and gives up too.
 
-The SET_REPORT direction on the same report ID works fine (the driver's own
-`asus_kbd_init()` handshake succeeds during the same probe), so we send exactly
-the report upstream would have sent:
+The early return is worse than a missing sysfs file. A 6.12.y refactor moved
+`asus_kbd_get_functions()` *ahead* of the two LED-endpoint handshakes, so the
+-EOVERFLOW abort also skips those:
 
+    6.12.0   asus_kbd_init(0x5a) -> asus_kbd_init(0x5d) -> asus_kbd_init(0x5e)
+    6.12.y   asus_kbd_init(0x5a) -> asus_kbd_get_functions() -X-> return
+                                       (0x5d and 0x5e never run)
+
+hid-asus calls those two "The LED endpoint is initialised in two HID", and a
+brightness report is ignored while they stay dormant -- which is why sending
+`5a ba c5 c4 <level>` alone changes nothing. So we replay the whole init
+sequence before setting a level:
+
+    <id> 41 53 55 53 20 54 65 63 68 2e 49 6e 63 2e 00   for id in 5a, 5d, 5e
     5a ba c5 c4 <level>
+
+The handshake payload is the ASCII string "ASUS Tech.Inc.".
 
 The hardware keys are unaffected by the driver bug -- the N-KEY HID device still
 advertises KEY_KBDILLUMTOGGLE/UP/DOWN, which X maps to XF86KbdLightOnOff,
@@ -45,8 +57,15 @@ LAST_ON_LEVEL = 2
 KBD_HID = "0003:0B05:19B6.0002"
 HID_DRIVER_DIR = "/sys/bus/hid/drivers/asus"
 
+# Report IDs the driver touches, in the order it touches them.
 REPORT_ID = 0x5A
+LED_REPORT_ID1 = 0x5D
+LED_REPORT_ID2 = 0x5E
 REPORT_PREFIX = bytes((REPORT_ID, 0xBA, 0xC5, 0xC4))
+
+# asus_kbd_init()'s payload: "ASUS Tech.Inc." plus a trailing NUL.
+HANDSHAKE = bytes((0x41, 0x53, 0x55, 0x53, 0x20, 0x54, 0x65, 0x63,
+                   0x68, 0x2E, 0x49, 0x6E, 0x63, 0x2E, 0x00))
 
 
 def _ioc(direction, typ, nr, size):
@@ -99,12 +118,10 @@ def write_state(level):
         fh.write(f"{level}\n")
 
 
-def send(level):
-    """SET the feature report; returns False when the device refuses it."""
-    report = bytearray(REPORT_PREFIX + bytes((level,)))
+def open_hidraw():
     path = hidraw_path()
     try:
-        fd = os.open(path, os.O_WRONLY)
+        return path, os.open(path, os.O_WRONLY)
     except PermissionError:
         sys.exit(
             f"kbd-backlight: no permission to write {path}. The udev rule in "
@@ -113,10 +130,34 @@ def send(level):
     except OSError as exc:
         sys.exit(f"kbd-backlight: cannot open {path}: {exc}")
 
+
+def set_feature(fd, report, path, label):
+    """HIDIOCSFEATURE one report; aborts the whole sequence if it is refused."""
     try:
         fcntl.ioctl(fd, _HIDIOCSFEATURE | (len(report) << 16), report)
     except OSError as exc:
-        sys.exit(f"kbd-backlight: HIDIOCSFEATURE on {path} failed: {exc}")
+        sys.exit(f"kbd-backlight: HIDIOCSFEATURE {label} on {path} failed: {exc}")
+
+
+def send(level, verbose=False):
+    """Replay hid-asus' init sequence, then set the brightness level."""
+    path, fd = open_hidraw()
+    try:
+        # 0x5a is the keyboard endpoint; 0x5d/0x5e are the two LED endpoints that
+        # hid-asus never gets to on this machine. All three are needed before a
+        # brightness report does anything.
+        for report_id in (REPORT_ID, LED_REPORT_ID1, LED_REPORT_ID2):
+            set_feature(
+                fd,
+                bytearray(bytes((report_id,)) + HANDSHAKE),
+                path,
+                f"handshake 0x{report_id:02x}",
+            )
+            if verbose:
+                print(f"handshake 0x{report_id:02x}: ok", file=sys.stderr)
+        set_feature(fd, bytearray(REPORT_PREFIX + bytes((level,))), path, "brightness")
+        if verbose:
+            print(f"brightness {level}: ok", file=sys.stderr)
     finally:
         os.close(fd)
     return True
@@ -134,9 +175,9 @@ def notify(level):
     )
 
 
-def apply(level, quiet=False):
+def apply(level, quiet=False, verbose=False):
     level = max(0, min(int(level), MAX_LEVEL))
-    send(level)
+    send(level, verbose=verbose)
     write_state(level)
     if not quiet:
         notify(level)
@@ -148,6 +189,12 @@ def main(argv):
     if args and args[0] in ("-h", "--help"):
         print(__doc__.strip())
         return 0
+
+    # `kbd-backlight -v <cmd>` traces every feature report on stderr.
+    verbose = False
+    if args and args[0] in ("-v", "--verbose"):
+        verbose = True
+        args = args[1:]
 
     command = args[0] if args else "up"
     current = read_state()
@@ -176,12 +223,12 @@ def main(argv):
     elif command == "restore":
         # Re-assert after suspend: the firmware clears the backlight and the
         # kernel used to do this from hid-asus' resume hook.
-        apply(current, quiet=True)
+        apply(current, quiet=True, verbose=verbose)
         return 0
     else:
         sys.exit(f"kbd-backlight: unknown command: {command}")
 
-    apply(level)
+    apply(level, verbose=verbose)
     return 0
 
 
