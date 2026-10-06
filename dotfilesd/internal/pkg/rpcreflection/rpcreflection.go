@@ -328,18 +328,27 @@ func BuildServiceSchemas(svcs []ServiceInfo) []*dotfilesdv1.ServiceSchema {
 
 // buildMessageSchema recursively converts a protoreflect.MessageDescriptor
 // into a *dotfilesdv1.MessageSchema, inlining nested messages and enums.
-// The visited map prevents infinite recursion on circular message references.
+//
+// visited tracks the current recursion *path*, not every message seen so far.
+// Sharing one map across siblings looked tempting for size, but it silently
+// dropped any message type referenced by two different fields: the first
+// reference inlined it and every later one was skipped. Clients only search the
+// subtree of the message they were handed, so a request whose sub-message was
+// also used by an earlier message in the same service became unusable from the
+// CLI ("unknown message"). Cloning the set per branch keeps recursion finite
+// while letting a shared type appear under each parent that references it.
 func buildMessageSchema(md protoreflect.MessageDescriptor, visited map[string]bool) *dotfilesdv1.MessageSchema {
 	name := string(md.FullName())
 	if visited[name] {
 		return &dotfilesdv1.MessageSchema{Name: name}
 	}
 	visited[name] = true
+	defer delete(visited, name)
 
 	schema := &dotfilesdv1.MessageSchema{
-		Name:   name,
-		Fields: make([]*dotfilesdv1.FieldSchema, 0, md.Fields().Len()),
-		Enums:  make([]*dotfilesdv1.EnumSchema, 0),
+		Name:     name,
+		Fields:   make([]*dotfilesdv1.FieldSchema, 0, md.Fields().Len()),
+		Enums:    make([]*dotfilesdv1.EnumSchema, 0),
 		Messages: make([]*dotfilesdv1.MessageSchema, 0),
 	}
 
@@ -372,12 +381,8 @@ func buildMessageSchema(md protoreflect.MessageDescriptor, visited map[string]bo
 	for i := 0; i < md.Fields().Len(); i++ {
 		fd := md.Fields().Get(i)
 		if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
-			refMsg := fd.Message()
-			if refMsg != nil {
-				refName := string(refMsg.FullName())
-				if !visited[refName] {
-					schema.Messages = append(schema.Messages, buildMessageSchema(refMsg, visited))
-				}
+			if refMsg := fd.Message(); refMsg != nil {
+				schema.Messages = append(schema.Messages, buildMessageSchema(refMsg, visited))
 			}
 		}
 	}
@@ -479,5 +484,3 @@ func typeNameString(fd protoreflect.FieldDescriptor) string {
 		return ""
 	}
 }
-
-
