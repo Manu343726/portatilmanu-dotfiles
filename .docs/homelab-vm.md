@@ -29,8 +29,9 @@ Instalado con `pacstrap` (base + `linux`, `linux-firmware`, `grub`, `openssh`, `
 
 Activos: `systemd-resolved`, `systemd-networkd`, `sshd`, `qemu-guest-agent`, `docker`,
 `serial-getty@ttyS0`, `pangolin-site` (site de Pangolin Cloud añadido 2026-10-07:
-SSH público sobre SSO — ver [`pangolin-ssh-alias.md`](pangolin-ssh-alias.md)).
-No hay escritorio ni NetworkManager (red con `systemd-networkd`).
+SSH público sobre SSO — documentado en el repo **Homelab**,
+`docs/pangolin-ssh-alias.md`). No hay escritorio ni NetworkManager (red con
+`systemd-networkd`).
 
 Acceso: **solo por clave pública**, sin contraseña por SSH (`PermitRootLogin
 prohibit-password`). Hay password de root (`homelab`) para la consola/serie, donde antes
