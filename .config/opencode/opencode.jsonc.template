@@ -38,7 +38,6 @@
       "type": "local",
       "command": [
         "/home/manu343726/.opencode/mcp/playwright/node_modules/.bin/playwright-mcp",
-        "--headless",
         "--isolated",
         "--caps", "pdf"
       ],
