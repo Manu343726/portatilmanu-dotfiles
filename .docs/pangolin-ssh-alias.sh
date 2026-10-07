@@ -1,53 +1,48 @@
 #!/usr/bin/env bash
-# pangolin-ssh-alias.sh — alias p-manu343726 -> manu343726 en la VM homelab.
+# pangolin-ssh-alias.sh — redirige las sesiones de las cuentas provisionadas por
+# Pangolin (p-manu343726*: el sufijo numerico es aleatorio) a la cuenta real
+# manu343726, en la VM homelab.
 #
-# Fuente en los dotfiles: .docs/pangolin-ssh-alias.sh
-# Doc completa (por qué, comportamiento, rollback): .docs/pangolin-ssh-alias.md
+# Fuente: .docs/pangolin-ssh-alias.sh   ·   Doc: .docs/pangolin-ssh-alias.md
 # Instalado en la VM como: /usr/local/sbin/pangolin-ssh-alias.sh
 #
-# Aplica el bloque de redireccion en los dotfiles de la cuenta creada por el
-# Automated Provisioning de Pangolin (prefijo "p-" hardcodeado). Idempotente:
-# si el bloque ya esta, no hace nada. Backups: <fichero>.bak
+# Idempotente: instala/actualiza el drop-in de /etc/profile.d y limpia bloques
+# viejos (v1) si los hubiera en los homes de las cuentas p-*.
 set -euo pipefail
 
-H=/home/p-manu343726
-U=p-manu343726
-REAL=manu343726
+DROPIN=/etc/profile.d/99-pangolin-alias.sh
 
-read -r -d '' GUARD <<EOF || true
-# --- Pangolin alias: redirige sesiones interactivas de p-manu343726 a manu343726 ---
-# El provisioning JIT de Pangolin crea esta cuenta con prefijo "p-" hardcodeado
-# (fosrl/pangolin signSshKey.ts), asi que las sesiones caen aqui y no en la
-# cuenta real. Este bloque hace que el login interactivo salte a la cuenta real
-# (uid 1000, \$HOME y dotfiles de manu343726) via sudo NOPASSWD. El auth-daemon
-# (copySkelInto) solo anade ficheros que faltan y nunca sobreescribe este,
-# asi que sobrevive a re-provisiones. Rollback: borrar este bloque.
-if [ -t 0 ] && [ "\$(id -un)" = "$U" ]; then
-    exec sudo -u $REAL -i
+cat > "$DROPIN" <<'EOF'
+# Pangolin SSH alias (ver .docs/pangolin-ssh-alias.md en los dotfiles).
+# El provisioning JIT de Pangolin crea la cuenta con prefijo "p-" hardcodeado y
+# sufijo numerico aleatorio si el nombre choca (p-manu343726, p-manu34372631...).
+# Este drop-in redirige las sesiones interactivas de esas cuentas a la cuenta
+# real manu343726 (uid 1000, su $HOME y dotfiles) via sudo NOPASSWD.
+# Solo actua con tty y con nombres p-manu343726*; inerte para todo lo demas.
+if [ -t 0 ]; then
+    case "$(id -un)" in
+        p-manu343726*) exec sudo -u manu343726 -i ;;
+    esac
 fi
-# --- fin bloque alias ---
 EOF
+chmod 644 "$DROPIN"
+echo "OK: $DROPIN"
 
-apply() {
-  local f=$1
-  if [ -f "$f" ] && grep -Fq 'exec sudo -u manu343726 -i' "$f"; then
-    echo "SKIP (ya aplicado): $f"
-    return 0
-  fi
-  cp -a "$f" "${f}.bak"
-  local tmp
-  tmp=$(mktemp)
-  printf '%s\n\n' "$GUARD" > "$tmp"
-  cat "${f}.bak" >> "$tmp"
-  install -o "$U" -g "$U" -m 644 "$tmp" "$f"
-  rm -f "$tmp"
-  echo "OK: $f (backup en ${f}.bak)"
-}
+# Limpieza de bloques v1 (prefijados a mano en .bash_profile/.bashrc).
+shopt -s nullglob
+for H in /home/p-manu343726*; do
+    [ -d "$H" ] || continue
+    for f in "$H/.bash_profile" "$H/.bashrc"; do
+        [ -f "$f" ] || continue
+        if grep -Fq '# --- Pangolin alias:' "$f" || grep -Fq '# --- Pangolin SSH alias' "$f"; then
+            tmp=$(mktemp)
+            sed '/^# --- Pangolin.*---$/,/^# --- fin bloque alias ---$/d' "$f" > "$tmp"
+            cat "$tmp" > "$f"   # redireccion sobre el mismo inodo: conserva owner/modo
+            rm -f "$tmp"
+            echo "limpio bloque viejo en $f"
+        fi
+    done
+done
 
-apply "$H/.bash_profile"
-apply "$H/.bashrc"
-
-echo "--- resultado .bash_profile ---"
-cat "$H/.bash_profile"
-echo "--- ownership ---"
-ls -la "$H/.bash_profile" "$H/.bashrc"
+echo "--- drop-in instalado ---"
+cat "$DROPIN"
