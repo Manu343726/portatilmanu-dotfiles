@@ -29,6 +29,11 @@
       "command": ["sh", "-c", ". /home/manu343726/.config/opencode/proxmox-mcp.env && exec /home/manu343726/.local/bin/uvx proxmox-mcp-plus"],
       "enabled": true
     },
+    "pangolin": {
+      "type": "local",
+      "command": ["sh", "-c", ". /home/manu343726/.config/opencode/pangolin-mcp.env && exec /home/manu343726/.local/bin/mcp-pangolin --openapi /home/manu343726/.local/share/pangolin/pangolin-api.json --base-url https://api.pangolin.net/v1"],
+      "enabled": true
+    },
     "virtualbox": {
       "type": "local",
       "command": ["/home/manu343726/go/bin/mcp-virtualbox"],
