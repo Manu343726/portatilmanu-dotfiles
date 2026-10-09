@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,7 +27,24 @@ func NewMCPBridge(out io.Writer) *MCPBridge {
 	}
 }
 
+// sendRequestTimeout is the default deadline for an MCP request back to the
+// client (e.g. an elicitation form) when the caller does not supply its own
+// context.
+const sendRequestTimeout = 5 * time.Minute
+
+// SendRequest sends an MCP request and waits up to sendRequestTimeout for the
+// response. Callers that need a tighter bound (for example an elicitation
+// prompt that must fall back quickly) should use SendRequestCtx.
 func (b *MCPBridge) SendRequest(method string, params any) (json.RawMessage, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), sendRequestTimeout)
+	defer cancel()
+	return b.SendRequestCtx(ctx, method, params)
+}
+
+// SendRequestCtx sends an MCP request and waits for the response or until ctx
+// is done. On cancellation the pending entry is cleaned up so a late response
+// is dropped instead of delivered to a dead channel.
+func (b *MCPBridge) SendRequestCtx(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	id := fmt.Sprintf("srv_%d", b.idSeq.Add(1))
 	ch := make(chan json.RawMessage, 1)
 
@@ -53,11 +71,11 @@ func (b *MCPBridge) SendRequest(method string, params any) (json.RawMessage, err
 	select {
 	case data := <-ch:
 		return data, nil
-	case <-time.After(5 * time.Minute):
+	case <-ctx.Done():
 		b.mu.Lock()
 		delete(b.pending, id)
 		b.mu.Unlock()
-		return nil, fmt.Errorf("MCP request %s timed out", id)
+		return nil, fmt.Errorf("MCP request %s cancelled: %w", id, ctx.Err())
 	}
 }
 

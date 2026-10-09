@@ -99,9 +99,23 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 		vars := session.Variables()
 
 		// 1. Elicitation — password prompt inside the MCP client's own UI
-		//    (e.g. opencode form). The agent never sees the value.
-		if vars["_cap_elicitation"] == "true" && session.HasCallbackURL() {
-			return s.execSudoWithPassword(ctx, req.Msg.Command, session, timeout)
+		//    (e.g. an in-client form). The agent never sees the value.
+		//    Some clients advertise elicitation but never render the form
+		//    (e.g. opencode), so this is bounded and falls back below.
+		if vars["_cap_elicitation"] == "true" && vars["_elicitation_unavailable"] != "true" && session.HasCallbackURL() {
+			resp, err := s.execSudoWithPassword(ctx, req.Msg.Command, session, timeout)
+			if err == nil {
+				return resp, nil
+			}
+			if isUserDecline(err) {
+				return connect.NewResponse(&dotfilesdv1.ExecResponse{
+					ExitCode: -1,
+					Stderr:   fmt.Sprintf("password prompt failed: %v", err),
+				}), nil
+			}
+			slog.Warn("elicitation sudo prompt failed; falling back", "session_id", session.id, "error", err)
+			// Remember for this session so the timeout is not paid again.
+			session.SetVariables(map[string]string{"_elicitation_unavailable": "true"})
 		}
 
 		// 2. Graphical auth (pkexec) — desktop password dialog, no
@@ -112,7 +126,14 @@ func (s *execServer) Exec(ctx context.Context, req *connect.Request[dotfilesdv1.
 
 		// 3. Terminal callback — fallback for headless terminal sessions.
 		if vars["_cap_terminal"] == "true" && session.HasCallbackURL() {
-			return s.execSudoWithPassword(ctx, req.Msg.Command, session, timeout)
+			resp, err := s.execSudoWithPassword(ctx, req.Msg.Command, session, timeout)
+			if err == nil {
+				return resp, nil
+			}
+			return connect.NewResponse(&dotfilesdv1.ExecResponse{
+				ExitCode: -1,
+				Stderr:   fmt.Sprintf("password prompt failed: %v", err),
+			}), nil
 		}
 
 		// No viable auth method — return a clear error.
@@ -303,6 +324,34 @@ func (s *execServer) resolveSudoTimeout(reqTimeoutSec int32) time.Duration {
 	return s.sudoTimeout
 }
 
+// elicitationPromptTimeout bounds how long the daemon waits for an MCP client
+// to answer an elicitation form. Some clients advertise elicitation support
+// but never render the form (for example opencode, which files the form under
+// the "global" session instead of the calling one), which would otherwise
+// block sudo until the 5-minute bridge timeout. After this bound the daemon
+// falls back to graphical (pkexec) or terminal authentication. Override with
+// DOTFILESD_ELICITATION_TIMEOUT (e.g. "45s").
+func elicitationPromptTimeout() time.Duration {
+	if v := os.Getenv("DOTFILESD_ELICITATION_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 30 * time.Second
+}
+
+// isUserDecline reports whether err means the user explicitly declined or
+// cancelled an elicitation prompt, as opposed to the elicitation mechanism
+// being unavailable (in which case falling back to pkexec/terminal is right).
+func isUserDecline(err error) bool {
+	switch connect.CodeOf(err) {
+	case connect.CodePermissionDenied, connect.CodeCanceled:
+		return true
+	default:
+		return false
+	}
+}
+
 // cacheSudoAfterSuccess stores the password in the session cache on success.
 // pwd is the raw password bytes (will be zeroed after use).
 func (s *execServer) cacheSudoAfterSuccess(session *Session, pwd []byte, timeout time.Duration, command string, exitCode int) {
@@ -355,7 +404,12 @@ func (s *execServer) execStreamSudoWithPassword(
 	}
 	prompt := fmt.Sprintf("[sudo] password for %s: ", user)
 
-	password, err := session.RequestInput(ctx, prompt, "", true)
+	// Bound the wait so a client that advertises elicitation but never
+	// renders the form cannot hang the stream.
+	promptCtx, cancel := context.WithTimeout(ctx, elicitationPromptTimeout())
+	defer cancel()
+
+	password, err := session.RequestInput(promptCtx, prompt, "", true)
 	if err != nil {
 		return stream.Send(&dotfilesdv1.ExecStreamResponse{
 			Done:         true,
@@ -444,12 +498,15 @@ func (s *execServer) execSudoWithPassword(ctx context.Context, command string, s
 	}
 	prompt := fmt.Sprintf("[sudo] password for %s: ", user)
 
-	password, err := session.RequestInput(ctx, prompt, "", true)
+	// Bound the wait so a client that advertises elicitation but never
+	// renders the form cannot block sudo indefinitely; the caller falls
+	// back to graphical/terminal auth on failure.
+	promptCtx, cancel := context.WithTimeout(ctx, elicitationPromptTimeout())
+	defer cancel()
+
+	password, err := session.RequestInput(promptCtx, prompt, "", true)
 	if err != nil {
-		return connect.NewResponse(&dotfilesdv1.ExecResponse{
-			ExitCode: -1,
-			Stderr:   fmt.Sprintf("password prompt failed: %v", err),
-		}), nil
+		return nil, fmt.Errorf("password prompt failed: %w", err)
 	}
 
 	// Copy password to byte slice we can zero after use.
@@ -578,20 +635,27 @@ func (s *execServer) SudoExec(ctx context.Context, req *connect.Request[dotfiles
 	// Try available methods based on session capabilities.
 	vars := session.Variables()
 
-	// 1. Elicitation — MCP client UI prompt.
-	if vars["_cap_elicitation"] == "true" && session.HasCallbackURL() {
+	// 1. Elicitation — MCP client UI prompt. Bounded, and falls back on
+	//    failure because some clients (e.g. opencode) advertise elicitation
+	//    but never render the form.
+	if vars["_cap_elicitation"] == "true" && vars["_elicitation_unavailable"] != "true" && session.HasCallbackURL() {
 		slog.Log(ctx, levelTrace, "SudoExec delegating to secure feedback path (elicitation)", "session_id", session.id)
 		execResp, err := s.execSudoWithPassword(ctx, r.Command, session, timeout)
-		if err != nil {
+		if err == nil {
+			return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
+				Result: &dotfilesdv1.SudoResult{
+					ExitCode: execResp.Msg.ExitCode,
+					Stdout:   execResp.Msg.Stdout,
+					Stderr:   execResp.Msg.Stderr,
+				},
+			}}), nil
+		}
+		if isUserDecline(err) {
 			return nil, err
 		}
-		return connect.NewResponse(&dotfilesdv1.SudoExecResponse{Outcome: &dotfilesdv1.SudoExecResponse_Result{
-			Result: &dotfilesdv1.SudoResult{
-				ExitCode: execResp.Msg.ExitCode,
-				Stdout:   execResp.Msg.Stdout,
-				Stderr:   execResp.Msg.Stderr,
-			},
-		}}), nil
+		slog.Warn("elicitation sudo prompt failed; falling back", "session_id", session.id, "error", err)
+		// Remember for this session so the timeout is not paid again.
+		session.SetVariables(map[string]string{"_elicitation_unavailable": "true"})
 	}
 
 	// 2. Graphical auth (pkexec).

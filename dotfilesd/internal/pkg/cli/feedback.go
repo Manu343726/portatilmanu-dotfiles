@@ -101,7 +101,7 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 			"default":     req.Msg.Default,
 		}
 
-		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
+		raw, err := mcpBridge.SendRequestCtx(ctx, "elicitation/create", map[string]any{
 			"message": req.Msg.Prompt,
 			"mode":    "form",
 			"requestedSchema": map[string]any{
@@ -199,7 +199,7 @@ func (h *confirmHandler) RequestConfirm(ctx context.Context, req *connect.Reques
 	slog.Debug("confirm requested", "message", req.Msg.Message, "default", req.Msg.DefaultConfirm)
 
 	if mcpBridge != nil {
-		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
+		raw, err := mcpBridge.SendRequestCtx(ctx, "elicitation/create", map[string]any{
 			"message": req.Msg.Message,
 			"mode":    "form",
 			"requestedSchema": map[string]any{
@@ -322,7 +322,7 @@ func (h *chooseHandler) RequestChoose(ctx context.Context, req *connect.Request[
 			schema["properties"].(map[string]any)["option"].(map[string]any)["default"] = req.Msg.Options[req.Msg.DefaultIndex]
 		}
 
-		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
+		raw, err := mcpBridge.SendRequestCtx(ctx, "elicitation/create", map[string]any{
 			"message":         req.Msg.Prompt,
 			"mode":            "form",
 			"requestedSchema": schema,

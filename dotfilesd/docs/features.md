@@ -80,6 +80,14 @@ dotfilesctl exec "uname -a"
 dotfilesctl exec --sudo "pacman -Syu"
 ```
 
+`exec --sudo` escalates through `pkexec` (desktop dialog, no terminal prompt). For
+MCP clients the daemon first tries an in-client **elicitation** form (the agent
+never sees the password); some clients advertise elicitation but never render the
+form, so the wait is bounded (default 30s, override with
+`DOTFILESD_ELICITATION_TIMEOUT`) before falling back to `pkexec`/terminal. A
+session that hit an unresponsive elicitation marks it unavailable for the rest of
+the session, so the timeout is only paid once.
+
 ### `script run` / `script list`
 
 Run registered scripts (.dsh files in `~/.config/dotfilesd/scripts/`). Script commands
