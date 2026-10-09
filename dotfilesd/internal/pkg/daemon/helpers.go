@@ -3,8 +3,10 @@ package daemon
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -24,6 +26,86 @@ func hasSudo() bool {
 func hasPkexec() bool {
 	_, err := exec.LookPath("pkexec")
 	return err == nil
+}
+
+// elicitationUnavailable reports whether the session should skip the
+// elicitation prompt: either it already failed once, or the client is known to
+// advertise elicitation but never render the form (opencode, see opencode issue
+// #51856). Skipping avoids paying the bounded elicitation timeout on every new
+// session for these clients; they go straight to the graphical/terminal path.
+func elicitationUnavailable(vars map[string]string) bool {
+	if vars["_elicitation_unavailable"] == "true" {
+		return true
+	}
+	name := strings.ToLower(vars["_cap_client_name"])
+	return strings.Contains(name, "opencode")
+}
+
+// Authentication sentinel errors.
+var (
+	// errAuthCancelled means the user dismissed the authentication dialog.
+	errAuthCancelled = errors.New("authentication cancelled")
+	// errNoGraphicalAskpass means no GUI password-prompt tool is available.
+	errNoGraphicalAskpass = errors.New("no graphical askpass available")
+)
+
+// graphicalAskpassCandidates lists GUI password-prompt tools in preference
+// order. Each reads the password into a dialog and writes it to stdout, which
+// lets the daemon capture it and cache it per session — unlike pkexec, whose
+// polkit authentication happens out-of-band and never reaches the daemon.
+var graphicalAskpassCandidates = []string{
+	"zenity", "yad", "kdialog", "ksshaskpass", "ssh-askpass", "lxqt-openssh-askpass",
+}
+
+// findGraphicalAskpass returns the first available GUI askpass tool, or "".
+func findGraphicalAskpass() string {
+	for _, c := range graphicalAskpassCandidates {
+		if _, err := exec.LookPath(c); err == nil {
+			return c
+		}
+	}
+	return ""
+}
+
+// hasGraphicalAskpass reports whether the daemon can show its own GUI password
+// dialog: it needs a display in its environment (the systemd user service
+// inherits DISPLAY/XAUTHORITY) and one of the askpass tools.
+func hasGraphicalAskpass() bool {
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return false
+	}
+	return findGraphicalAskpass() != ""
+}
+
+// promptGraphicalPassword shows a GUI password dialog on the user's session
+// display and returns the entered password. Returns errAuthCancelled if the
+// user cancels and errNoGraphicalAskpass if no tool is available.
+func promptGraphicalPassword(ctx context.Context, prompt string) ([]byte, error) {
+	tool := findGraphicalAskpass()
+	if tool == "" {
+		return nil, errNoGraphicalAskpass
+	}
+	title := "dotfilesd: sudo authentication"
+	var args []string
+	switch tool {
+	case "zenity", "yad":
+		args = []string{"--password", "--title=" + title}
+	case "kdialog":
+		args = []string{"--password", prompt, "--title", title}
+	default: // ssh-askpass style: the prompt is the argument.
+		args = []string{prompt}
+	}
+	cmd := exec.CommandContext(ctx, tool, args...)
+	var out strings.Builder
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil, errAuthCancelled
+	}
+	pwd := []byte(strings.TrimRight(out.String(), "\r\n"))
+	if len(pwd) == 0 {
+		return nil, errAuthCancelled
+	}
+	return pwd, nil
 }
 
 func truncate(s string, n int) string {

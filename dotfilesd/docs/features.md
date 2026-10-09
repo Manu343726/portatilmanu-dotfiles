@@ -81,14 +81,22 @@ dotfilesctl exec --sudo "pacman -Syu"
 ```
 
 `exec --sudo` prompts for the sudo password and caches it **per session**. The
-daemon uses the first interactive channel the session supports: an in-client
-**elicitation** form (MCP clients; the agent never sees the password), a
-**terminal** prompt (CLI sessions with a TTY), and lastly `pkexec` as a
-graphical fallback for sessions with neither. Some MCP clients advertise
-elicitation but never render the form, so the wait is bounded (default 30s,
-override with `DOTFILESD_ELICITATION_TIMEOUT`) before falling back; a session
-that hit an unresponsive elicitation marks it unavailable, so the timeout is
-only paid once per session.
+daemon uses the first interactive channel the session supports:
+
+1. an in-client **elicitation** form (MCP clients; the agent never sees the password),
+2. a **terminal** prompt (CLI sessions with a TTY),
+3. a GUI dialog the daemon spawns itself (`zenity`/`yad`/`kdialog`, on the
+   session display) — unlike pkexec, the password reaches the daemon so it can
+   be cached,
+4. `pkexec` as the last resort (its polkit authentication is out-of-band and
+   cannot feed the cache).
+
+Some MCP clients advertise elicitation but never render the form (opencode,
+issue #51856); for those the daemon skips elicitation and goes straight to the
+GUI/terminal dialog. For other clients the wait is bounded (default 30s,
+override with `DOTFILESD_ELICITATION_TIMEOUT`) and a session that hit an
+unresponsive elicitation marks it unavailable, so the timeout is only paid once
+per session.
 
 While the cache is alive, later sudo calls in the same session reuse the
 password via `sudo -S` without prompting, and each successful use **slides**
