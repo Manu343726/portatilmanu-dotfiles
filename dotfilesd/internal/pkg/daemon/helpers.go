@@ -28,17 +28,10 @@ func hasPkexec() bool {
 	return err == nil
 }
 
-// elicitationUnavailable reports whether the session should skip the
-// elicitation prompt: either it already failed once, or the client is known to
-// advertise elicitation but never render the form (opencode, see opencode issue
-// #51856). Skipping avoids paying the bounded elicitation timeout on every new
-// session for these clients; they go straight to the graphical/terminal path.
+// elicitationUnavailable reports whether the session already failed an
+// elicitation prompt, in which case the bounded timeout must not be paid again.
 func elicitationUnavailable(vars map[string]string) bool {
-	if vars["_elicitation_unavailable"] == "true" {
-		return true
-	}
-	name := strings.ToLower(vars["_cap_client_name"])
-	return strings.Contains(name, "opencode")
+	return vars["_elicitation_unavailable"] == "true"
 }
 
 // Authentication sentinel errors.
