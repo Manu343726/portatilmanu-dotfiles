@@ -89,15 +89,16 @@ func (h *inputHandler) RequestInput(ctx context.Context, req *connect.Request[do
 	slog.Debug("input requested", "prompt", req.Msg.Prompt, "default", req.Msg.Default)
 
 	if mcpBridge != nil {
+		// MCP form-mode elicitation schemas are a restricted subset of JSON
+		// Schema: string formats are limited to email|uri|date|date-time and
+		// unknown annotations (write-only markers, etc.) are rejected by strict
+		// clients. There is therefore no way to hint a masked password field
+		// here; masked sensitive input (req.Msg.Sensitive) is handled by the
+		// MCP Apps webview instead.
 		inputSchema := map[string]any{
 			"type":        "string",
 			"description": req.Msg.Prompt,
 			"default":     req.Msg.Default,
-		}
-		if req.Msg.Sensitive {
-			// Hint to the client to render a masked password field.
-			inputSchema["format"] = "password"
-			inputSchema["writeOnly"] = true
 		}
 
 		raw, err := mcpBridge.SendRequest("elicitation/create", map[string]any{
