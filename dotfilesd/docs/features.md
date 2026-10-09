@@ -80,13 +80,23 @@ dotfilesctl exec "uname -a"
 dotfilesctl exec --sudo "pacman -Syu"
 ```
 
-`exec --sudo` escalates through `pkexec` (desktop dialog, no terminal prompt). For
-MCP clients the daemon first tries an in-client **elicitation** form (the agent
-never sees the password); some clients advertise elicitation but never render the
-form, so the wait is bounded (default 30s, override with
-`DOTFILESD_ELICITATION_TIMEOUT`) before falling back to `pkexec`/terminal. A
-session that hit an unresponsive elicitation marks it unavailable for the rest of
-the session, so the timeout is only paid once.
+`exec --sudo` prompts for the sudo password and caches it **per session**. The
+daemon uses the first interactive channel the session supports: an in-client
+**elicitation** form (MCP clients; the agent never sees the password), a
+**terminal** prompt (CLI sessions with a TTY), and lastly `pkexec` as a
+graphical fallback for sessions with neither. Some MCP clients advertise
+elicitation but never render the form, so the wait is bounded (default 30s,
+override with `DOTFILESD_ELICITATION_TIMEOUT`) before falling back; a session
+that hit an unresponsive elicitation marks it unavailable, so the timeout is
+only paid once per session.
+
+While the cache is alive, later sudo calls in the same session reuse the
+password via `sudo -S` without prompting, and each successful use **slides**
+the TTL. It defaults to **5 minutes**, configured with `sudo.timeout` in
+`~/.config/dotfilesd/config.yaml` (or `DOTFILESD_SUDO_TIMEOUT`), and can be
+overridden per call with `dotfilesctl exec --sudo --sudo-timeout <sec>` or the
+MCP `exec_run(sudo=true, sudo_timeout=<sec>)` parameter. The cache is zeroed on
+expiry or when the session ends.
 
 ### `script run` / `script list`
 

@@ -75,9 +75,11 @@ log_age: 30
 plugins_dir: ~/.config/dotfilesd/plugins
 plugin_cache_dir: ~/.cache/dotfilesd/plugins
 scripts_dir: ~/.config/dotfilesd/scripts
+sudo:
+  timeout: 300   # per-session sudo credential cache TTL in seconds (default 300)
 ```
 
-Environment variables override config values: `DOTFILESD_PORT`, `DOTFILESD_LOG_LEVEL`, `DOTFILESD_LOG_DIR`.
+Environment variables override config values: `DOTFILESD_PORT`, `DOTFILESD_LOG_LEVEL`, `DOTFILESD_LOG_DIR`, `DOTFILESD_SUDO_TIMEOUT`.
 
 ### Configuration reload
 

@@ -10,3 +10,10 @@ log:
 # Plugin system
 plugins_dir: ~/.config/dotfilesd/plugins
 plugin_cache_dir: ~/.cache/dotfilesd/plugins
+
+# Sudo credential cache: per-session, TTL in seconds. Once a session
+# authenticates (terminal/elicitation prompt), the password is reused by
+# sudo commands in that session while the cache is alive, sliding on use.
+# Per-call override: dotfilesctl exec --sudo-timeout / MCP exec_run sudo_timeout.
+sudo:
+  timeout: 300

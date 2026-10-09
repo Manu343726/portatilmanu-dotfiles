@@ -12,12 +12,13 @@ import (
 	"connectrpc.com/connect"
 )
 
-func execCommand(clients *Clients, sessionID, command string, sudo, noNewline bool) error {
+func execCommand(clients *Clients, sessionID, command string, sudo, noNewline bool, sudoTimeoutSec int32) error {
 	slog.Info("exec", "command", command, "sudo", sudo, "session_id", sessionID)
 	req := connect.NewRequest(&dotfilesdv1.ExecStreamRequest{
-		Command: command,
-		Sudo:    sudo,
-		Session: sessionProto(sessionID),
+		Command:            command,
+		Sudo:               sudo,
+		Session:            sessionProto(sessionID),
+		SudoTimeoutSeconds: sudoTimeoutSec,
 	})
 	stream, err := clients.Exec.ExecStream(context.Background(), req)
 	if err != nil {
@@ -57,10 +58,10 @@ func execCommand(clients *Clients, sessionID, command string, sudo, noNewline bo
 	return nil
 }
 
-func RunExec(clients *Clients, sessionID, command string, noNewline bool) error {
-	return execCommand(clients, sessionID, command, false, noNewline)
+func RunExec(clients *Clients, sessionID, command string, noNewline bool, sudoTimeoutSec int32) error {
+	return execCommand(clients, sessionID, command, false, noNewline, sudoTimeoutSec)
 }
 
-func RunSudoExec(clients *Clients, sessionID, command string, noNewline bool) error {
-	return execCommand(clients, sessionID, command, true, noNewline)
+func RunSudoExec(clients *Clients, sessionID, command string, noNewline bool, sudoTimeoutSec int32) error {
+	return execCommand(clients, sessionID, command, true, noNewline, sudoTimeoutSec)
 }

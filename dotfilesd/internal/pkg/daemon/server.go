@@ -99,7 +99,10 @@ func (d *Daemon) Start() error {
 	bgTasks.SetDiagEngine(d.diag)
 	sudoTimeout := d.config.SudoTimeout
 	if sudoTimeout <= 0 {
-		sudoTimeout = 15 * time.Minute
+		// Per-session sudo credential cache TTL. Configurable via
+		// `sudo.timeout` in config.yaml / DOTFILESD_SUDO_TIMEOUT env,
+		// overridable per call. Slides on each successful cached use.
+		sudoTimeout = 5 * time.Minute
 	}
 	execSvc := &execServer{sessions: d.sessions, bgTasks: bgTasks, diag: d.diag, sudoTimeout: sudoTimeout}
 	keySvc := &keyServer{sessions: d.sessions}

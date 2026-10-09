@@ -115,9 +115,10 @@ var mcpTools = []toolDef{
 		Name:        "exec_run",
 		Description: "Execute a shell command",
 		InputSchema: toolSchema{Type: "object", Properties: map[string]propSchema{
-			"command":    {Type: "string"},
-			"sudo":       {Type: "boolean", Description: "run with sudo (prompts for password securely via feedback or MCP Apps webview)"},
-			"session_id": {Type: "string", Description: "optional session ID for grouping"},
+			"command":      {Type: "string"},
+			"sudo":         {Type: "boolean", Description: "run with sudo (prompts for password securely via feedback or MCP Apps webview)"},
+			"sudo_timeout": {Type: "integer", Description: "sudo credential cache TTL in seconds for this call (0 = daemon default)"},
+			"session_id":   {Type: "string", Description: "optional session ID for grouping"},
 		}, Required: []string{"command"}},
 		Meta: json.RawMessage(`{"ui":{"resourceUri":"ui://dotfilesd/sudo-prompt"}}`),
 	},
@@ -790,8 +791,9 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 
 	case "exec_run":
 		var p struct {
-			Command string `json:"command"`
-			Sudo    bool   `json:"sudo"`
+			Command            string `json:"command"`
+			Sudo               bool   `json:"sudo"`
+			SudoTimeoutSeconds int32  `json:"sudo_timeout"`
 		}
 		json.Unmarshal(args, &p)
 
@@ -848,10 +850,11 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 			}
 
 			resp, err := clients.Exec.SudoExec(context.Background(), connect.NewRequest(&dotfilesdv1.SudoExecRequest{
-				Command:           p.Command,
-				Password:          password,
-				KeyId:             keyID,
-				EncryptedPassword: ciphertext,
+				Command:            p.Command,
+				Password:           password,
+				KeyId:              keyID,
+				EncryptedPassword:  ciphertext,
+				SudoTimeoutSeconds: p.SudoTimeoutSeconds,
 			}))
 			if len(encPwd) > 0 {
 				zeroBytes(encPwd)
@@ -877,9 +880,10 @@ func callTool(clients *Clients, id json.RawMessage, name string, args json.RawMe
 		// For sudo without MCP Apps, the daemon will use the session
 		// callback URL to prompt for the password via elicitation feedback.
 		req := connect.NewRequest(&dotfilesdv1.ExecRequest{
-			Command: p.Command,
-			Sudo:    p.Sudo,
-			Session: sessionFromArgs(args, clients.SessionID),
+			Command:            p.Command,
+			Sudo:               p.Sudo,
+			Session:            sessionFromArgs(args, clients.SessionID),
+			SudoTimeoutSeconds: p.SudoTimeoutSeconds,
 		})
 		resp, err := clients.Exec.Exec(context.Background(), req)
 		if err != nil {
