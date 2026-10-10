@@ -24,14 +24,28 @@
       },
       "enabled": true
     },
-    "proxmox-mcp-plus": {
-      "type": "local",
-      "command": ["sh", "-c", ". /home/manu343726/.config/opencode/proxmox-mcp.env && exec /home/manu343726/.local/bin/uvx proxmox-mcp-plus"],
+    "homelable": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/homelable/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
       "enabled": true
     },
     "pangolin": {
-      "type": "local",
-      "command": ["sh", "-c", ". /home/manu343726/.config/opencode/pangolin-mcp.env && exec /home/manu343726/.local/bin/mcp-pangolin --openapi /home/manu343726/.local/share/pangolin/pangolin-api.json --base-url https://api.pangolin.net/v1"],
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/pangolin/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "proxmox": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/proxmox/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
       "enabled": true
     },
     "virtualbox": {

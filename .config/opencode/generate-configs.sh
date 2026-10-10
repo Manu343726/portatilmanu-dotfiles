@@ -5,13 +5,13 @@
 
 SCRIPT_DIR="${0:A:h}"
 ENV_FILE="$SCRIPT_DIR/.env"
-VARS='${HA_MCP_URL}${HA_MCP_TOKEN}${GITHUB_PERSONAL_ACCESS_TOKEN}'
+VARS='${HA_MCP_URL}${HA_MCP_TOKEN}${GITHUB_PERSONAL_ACCESS_TOKEN}${LITELLM_MCP_URL}${LITELLM_MCP_KEY}'
 
 [ -f "$ENV_FILE" ] && source "$ENV_FILE"
 
 # Fail loudly instead of silently substituting an empty value into a header.
 missing=()
-for name in HA_MCP_URL HA_MCP_TOKEN GITHUB_PERSONAL_ACCESS_TOKEN; do
+for name in HA_MCP_URL HA_MCP_TOKEN GITHUB_PERSONAL_ACCESS_TOKEN LITELLM_MCP_URL LITELLM_MCP_KEY; do
   [ -z "${(P)name}" ] && missing+=("\$$name")
 done
 if (( ${#missing} )); then
