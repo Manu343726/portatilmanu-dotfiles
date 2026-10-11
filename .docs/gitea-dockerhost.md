@@ -1,7 +1,9 @@
 # Gitea git server + GitHub mirror — DockerHost
 
-> **Nota (2026-10-10):** este Gitea (VM 102) **sigue en pie pero ya no es el forge
-> activo**. El día a día usa **Forgejo en Homelab (VM 108)** — ver
+> **Nota (2026-10-11):** este Gitea (VM 102, `DockerHost`) está en **sunset**: a
+> `DockerHost` se le ha quitado el autostart, así que no arranca por defecto y este
+> servicio queda apagado salvo arranque manual; se conserva un backup de seguridad
+> antes de retirarlo. El forge **activo** es **Forgejo en Homelab (VM 108)** — ver
 > [`forgejo-homelab.md`](forgejo-homelab.md). El remote LAN del repo de dotfiles
 > (`ssh://git@192.168.0.30:2222/...`) apunta al Forgejo, no aquí. Este documento se
 > conserva por su servicio `mirror-to-gitea` y por si hay que migrar algo; las

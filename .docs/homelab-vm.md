@@ -1,8 +1,10 @@
 # VM 108 `homelab` — Manjaro headless para el homelab AI-operable
 
 Creada 2026-10-02 en `servernotangordo`. Es el **host Docker del homelab nuevo**, que
-sustituye a los servicios existentes de `DockerHost` (102) y `DockerHost2` (106); de
-esos todavía no se ha migrado nada.
+sustituye a los servicios de `DockerHost` (102) y `DockerHost2` (106). **`DockerHost`
+está en sunset** (2026-10-11): su `onboot` se ha eliminado, así que permanece parado
+entre reinicios, y se conserva un backup de seguridad antes de retirarlo.
+`DockerHost2` sigue parada.
 
 | | |
 |---|---|
