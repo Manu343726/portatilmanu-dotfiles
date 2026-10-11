@@ -18,9 +18,9 @@
     },
     "homeassistant": {
       "type": "remote",
-      "url": "${HA_MCP_URL}",
+      "url": "${LITELLM_MCP_URL}/homeassistant/mcp",
       "headers": {
-        "Authorization": "Bearer ${HA_MCP_TOKEN}"
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
       },
       "enabled": true
     },
@@ -48,18 +48,25 @@
       },
       "enabled": true
     },
-    "virtualbox": {
-      "type": "local",
-      "command": ["/home/manu343726/go/bin/mcp-virtualbox"],
+    "portabase": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/portabase/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
       "enabled": true
     },
     "playwright": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/playwright/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "virtualbox": {
       "type": "local",
-      "command": [
-        "/home/manu343726/.opencode/mcp/playwright/node_modules/.bin/playwright-mcp",
-        "--isolated",
-        "--caps", "pdf"
-      ],
+      "command": ["/home/manu343726/go/bin/mcp-virtualbox"],
       "enabled": true
     }
   },

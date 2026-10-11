@@ -17,9 +17,44 @@
         },
         "homeassistant": {
             "type": "http",
-            "url": "${HA_MCP_URL}",
+            "url": "${LITELLM_MCP_URL}/homeassistant/mcp",
             "headers": {
-                "Authorization": "Bearer ${HA_MCP_TOKEN}"
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "homelable": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/homelable/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "pangolin": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/pangolin/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "proxmox": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/proxmox/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "portabase": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/portabase/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "playwright": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/playwright/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
             }
         }
     }
