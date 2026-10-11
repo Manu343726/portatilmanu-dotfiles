@@ -1,5 +1,12 @@
 # Gitea git server + GitHub mirror — DockerHost
 
+> **Nota (2026-10-10):** este Gitea (VM 102) **sigue en pie pero ya no es el forge
+> activo**. El día a día usa **Forgejo en Homelab (VM 108)** — ver
+> [`forgejo-homelab.md`](forgejo-homelab.md). El remote LAN del repo de dotfiles
+> (`ssh://git@192.168.0.30:2222/...`) apunta al Forgejo, no aquí. Este documento se
+> conserva por su servicio `mirror-to-gitea` y por si hay que migrar algo; las
+> diferencias de puertos/tokens con Forgejo están en el doc nuevo.
+
 The internal git server is **Gitea**, running as a Docker Compose service on
 `DockerHost`. Both the dotfiles repo and other internal repos are pushed here
 (the `origin` remote's LAN push URL), plus GitHub.
