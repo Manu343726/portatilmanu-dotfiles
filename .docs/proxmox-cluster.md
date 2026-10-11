@@ -1,34 +1,30 @@
-# Proxmox cluster `casa` — two sites over ZeroTier
+# Proxmox cluster `casa` — single node `servernotangordo`
 
-Two standalone Proxmox VE 8.2.0 hosts form a **2-node cluster named `casa`**.
-They live in **two different physical homes** and are joined only by **ZeroTier**.
+> **Updated 2026-10-11: `servergordo` no longer exists.** The old-home host has been
+> decommissioned and removed from the cluster, so `casa` is now a **single-node
+> cluster** (`servernotangordo`, nodeid 2, `Quorate: Yes`, 1 vote). Everything below
+> that describes `servergordo`, the two-site topology, the ZeroTier ring migration or
+> the 2/2 quorum is **historical**: it is kept only because it explains the ZeroTier +
+> corosync setup that still runs on the surviving node. Do not read it as current state.
 
-> **Updated 2026-09-28.** This doc used to record quorum as **lost** and every VM as
-> **stopped**. **Both are fixed.** The ring has been migrated to ZeroTier, quorum
-> is healthy (`Quorate: Yes`, 2/2 votes), 3 of 4 VMs are running, and daily backups
-> are landing on the NAS again. Sections below that described the outage are kept
-> as history and clearly marked — don't follow them as current state.
-
-This doc records the current topology, the pre-migration config, the changes
-applied on 2026-09-27 and 2026-09-28, and what is still outstanding.
-
-## Current state (verified 2026-09-28)
+## Current state (verified 2026-10-11)
 
 ```
-Node ID: 0x00000001  servergordo       Quorate: Yes  Total votes: 2
-Node ID: 0x00000002  servernotangordo  Quorate: Yes  Total votes: 2
+Node ID: 0x00000002  servernotangordo  Quorate: Yes  Total votes: 1
 
-100 TrueNAS      servergordo       running
-102 DockerHost   servernotangordo  running
-104 homeassistant servernotangordo running
-106 DockerHost2  servernotangordo  stopped   ← intentionally off
-108 homelab      servernotangordo  running   ← homelab nuevo (2026-10-02)
+102 DockerHost   servernotangordo  stopped   ← being sunset; autostart removed
+104 homeassistant servernotangordo running   ← onboot
+106 DockerHost2  servernotangordo  stopped
+108 homelab      servernotangordo  running   ← onboot
 ```
 
-> **Updated 2026-10-02.** VM **108 `homelab`** created on `servernotangordo`: the
-> Manjaro-headless Docker host for the new AI-operable homelab. See
-> [`homelab-vm.md`](homelab-vm.md). Quorum was lost again that day (see *Incident
-> 2026-10-02* below) and was restored by power-cycling `servergordo`.
+`servergordo` and its VM 100 (TrueNAS) are gone. `DockerHost` (VM 102) is being
+**sunset** — its `onboot` has been removed, so it stays down across reboots — and a
+single full backup is being kept as a safety copy before it is retired. VM 108
+`homelab` is the new Docker host; see [`homelab-vm.md`](homelab-vm.md).
+
+The 2026-10-11 host reboot also cleared a `vzdump` that had hung ~11 h on NFS
+writeback to the Synology (see *Backups are working again* below).
 
 ## Topology
 
