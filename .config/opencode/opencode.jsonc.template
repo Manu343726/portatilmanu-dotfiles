@@ -69,6 +69,17 @@
       "type": "local",
       "command": ["/home/manu343726/go/bin/mcp-virtualbox"],
       "enabled": true
+    },
+    "vaultwarden": {
+      "type": "local",
+      "command": ["/home/manu343726/.opencode/mcp/warden/node_modules/.bin/warden-mcp", "--stdio"],
+      "environment": {
+        "BW_HOST": "${VW_HOST}",
+        "BW_USER": "${VW_USER}",
+        "BW_PASSWORD": "${VW_PASSWORD}",
+        "KEYCHAIN_BW_HOME_ROOT": "/home/manu343726/.local/state/warden-mcp"
+      },
+      "enabled": true
     }
   },
   "provider": {
