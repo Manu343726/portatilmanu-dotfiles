@@ -57,11 +57,12 @@
       "enabled": true
     },
     "playwright": {
-      "type": "remote",
-      "url": "${LITELLM_MCP_URL}/playwright/mcp",
-      "headers": {
-        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
-      },
+      "type": "local",
+      "command": [
+        "/home/manu343726/.opencode/mcp/playwright/node_modules/.bin/playwright-mcp",
+        "--isolated",
+        "--caps", "pdf"
+      ],
       "enabled": true
     },
     "virtualbox": {
