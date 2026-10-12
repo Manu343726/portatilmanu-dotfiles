@@ -23,6 +23,7 @@ real nesting — see the limitation below.
 ```
 Infrastructure      / Proxmox · Network & SNMP · Hosts & TLS
 Databases           / PostgreSQL · MongoDB · DbGate
+Domains             / Dynadot
 Identity & Access   / Authentik · OIDC clients · Pangolin · Traefik
 AI                  / LiteLLM · OpenWebUI · OpenCode · Proxmox MCP
 Observability       / Grafana · Portabase · Dockhand · Homelable · Glance · Exporters
@@ -35,6 +36,8 @@ after the environment variable it came from (e.g. item `grafana` in
 `Observability / Grafana` has hidden fields `GF_SECURITY_ADMIN_PASSWORD`, …). The
 `Identity & Access / OIDC clients` collection instead has one item per Authentik OIDC app
 (`backup`, `coder`, `grafana`, `vaultwarden`, …) with `CLIENT_ID` / `CLIENT_SECRET`.
+`Domains / Dynadot` holds item `dynadot` for the registrar/DDNS credentials (hidden fields
+`DYNADOT_API_KEY`, `DYNADOT_API_SECRET`, `DYNADOT_DDNS_PASSWORD`).
 
 Sources: the homelab VM's `.env` files, `access/pangolin/terraform/terraform.tfvars` (the OIDC
 app clients), and the two `~/.vaultwarden-admin-password` / `~/.homelable-admin-pw` files. The
@@ -100,7 +103,7 @@ vault. Without SMTP, an organization invite is **auto-accepted** (no email neede
 ## Verify
 
 - `vaultwarden_keychain_sync()` → `success: true`.
-- `vaultwarden_keychain_list_org_collections({organizationId})` → the 26 `Area / Service`
+- `vaultwarden_keychain_list_org_collections({organizationId})` → the 29 `Area / Service`
   collections.
 - `vaultwarden_keychain_search_items({organizationId})` → the items; `keychain_get_item` returns
   fields redacted unless `reveal: true`.
