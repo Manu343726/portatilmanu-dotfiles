@@ -61,7 +61,9 @@
       "command": [
         "/home/manu343726/.opencode/mcp/playwright/node_modules/.bin/playwright-mcp",
         "--isolated",
-        "--caps", "pdf"
+        "--caps", "pdf",
+        "--ignore-https-errors",
+        "--config", "/home/manu343726/.config/opencode/playwright-mcp-config.json"
       ],
       "enabled": true
     },

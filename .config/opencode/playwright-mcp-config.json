@@ -1,0 +1,13 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "args": [
+        "--host-resolver-rules=MAP pangolin.manu343726.com 192.168.0.30"
+      ]
+    },
+    "contextOptions": {
+      "ignoreHTTPSErrors": true
+    }
+  }
+}
