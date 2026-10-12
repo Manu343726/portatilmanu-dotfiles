@@ -56,6 +56,12 @@
       },
       "enabled": true
     },
+    "dynadot": {
+      "type": "remote",
+      "url": "https://mcp.dynadot.com/mcp",
+      "enabled": true,
+      "oauth": {}
+    },
     "playwright": {
       "type": "local",
       "command": [
