@@ -33,7 +33,7 @@ Wants=network-online.target
 Type=simple
 Environment=HOME=/home/manu343726
 Environment=XDG_CONFIG_HOME=/home/manu343726/.config
-ExecStart=/home/manu343726/.local/bin/pangolin up --attach
+ExecStart=/home/manu343726/.local/bin/pangolin up --attach --prefer-local-routes --upstream-dns 192.168.0.30 --upstream-dns 1.1.1.1
 Restart=always
 RestartSec=5
 User=root
@@ -57,7 +57,7 @@ Wants=network-online.target
 Type=simple
 Environment=HOME=/home/manu343726
 Environment=XDG_CONFIG_HOME=/home/manu343726/.config
-ExecStart=/home/manu343726/.local/bin/pangolin up --attach
+ExecStart=/home/manu343726/.local/bin/pangolin up --attach --prefer-local-routes --upstream-dns 192.168.0.30 --upstream-dns 1.1.1.1
 Restart=always
 RestartSec=5
 User=root
@@ -71,6 +71,24 @@ sudo systemctl enable --now pangolin-client
 
 ## Gotchas
 
+- **The client overrides the system DNS** — it writes `nameserver 100.96.128.1` into
+  `/etc/resolv.conf` and forwards everything that is not a Pangolin resource to its *own*
+  upstream, so left alone it answers every estate FQDN with the public IP and **undoes the LAN
+  split-brain**. The unit's `--upstream-dns 192.168.0.30 --upstream-dns 1.1.1.1` pins that
+  upstream at Pi-hole, so `*.manu343726.com` resolves through Pi-hole to `192.168.0.30` and only
+  the private resources (`passwords.manu343726.com` → `100.96.128.9`) come from the tunnel.
+- **Without `--upstream-dns` the proxy inherits whatever the system resolver is at start, and
+  that drift is the bug.** If it lands on the router (`192.168.0.1`) every estate FQDN answers the
+  public IP (`47.58.172.246`) and the client cannot even reach its own API
+  (`Get "https://pangolin.manu343726.com/api/v1": remote error: tls: handshake failure`), so
+  `Restart=always` turns it into a crash loop — seen on 2026-10-13 (18:53–18:56, 30 restarts).
+  With the flags present the log says `UpstreamDNS is statically configured ([192.168.0.30:53
+  1.1.1.1:53])` and forwarding no longer follows the system resolver.
+- **A drop-in that sets `ExecStart=` silently drops these flags.** `10-prefer-local-routes.conf`
+  existed for a while and, because a drop-in `ExecStart=` *replaces* the unit's line, the
+  effective command was `pangolin up --attach --prefer-local-routes` — no upstreams. It was
+  removed so the unit file is the single source of truth; if you ever need a drop-in, repeat the
+  **full** `ExecStart` (including `--upstream-dns`) in it.
 - **`--attach` and `--silent` conflict** — the CLI refuses both (`Error: --silent and --attached
   options conflict`). systemd needs `--attach` so the process stays in the foreground for
   `Type=simple`; detached mode daemonises and systemd loses track of it.
@@ -87,8 +105,11 @@ sudo systemctl enable --now pangolin-client
 
 ```sh
 systemctl is-enabled --quiet pangolin-client && systemctl is-active pangolin-client
+journalctl -u pangolin-client -b | grep 'UpstreamDNS is statically configured'   # 192.168.0.30:53 1.1.1.1:53
+systemctl show -p ExecStart --value pangolin-client          # … --upstream-dns 192.168.0.30 --upstream-dns 1.1.1.1
 pangolin status                                              # Connected, site homelab
-getent hosts passwords.manu343726.com                        # 100.96.128.8
+getent hosts test.manu343726.com                             # 192.168.0.30 (Pi-hole split-brain)
+getent hosts passwords.manu343726.com                        # 100.96.128.9 (private, via tunnel)
 curl -sk -o /dev/null -w '%{http_code}\n' https://passwords.manu343726.com/alive   # 200
 ```
 
