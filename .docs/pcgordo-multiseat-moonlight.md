@@ -111,6 +111,26 @@ ssh pcgordo-wsl "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -
 Run everything below **as Administrator** on PCGORDO. Nobody should be streaming while installing
 (the service restarts and every seat drops).
 
+### Install kit already staged on PCGORDO (2026-10-14)
+
+Everything that can be prepared without elevation is already on the machine, in
+`C:\Users\Manu3\Downloads\multiseat\`:
+
+| File | Notes |
+| --- | --- |
+| `multiseat-windows-x64.zip` | v0.6.20, SHA-256 `610fbe38…` — **verified against the release digest**; 383 entries, self-contained (`hostfxr.dll` present) |
+| `PowerShell-7.6.7-win-x64.msi` | SHA-256 `ec575cef…` — verified; this host has only Windows PowerShell 5.1 |
+| `1-prereqs.ps1` | step 1 (elevated): installs PS7 from that MSI and re-launches itself under `pwsh`, turns **Fast Startup off** (keeps Hibernate), extracts the zip, runs `install-prerequisites.ps1` |
+| `2-service.ps1` | step 2 (elevated, after the reboot): `install-service.ps1 -FromZip`, writes `appsettings.local.json` (`nvenc`, `PerSession`) if absent, then runs the verifier |
+| `verify-multiseat.ps1` | read-only checks, works non-elevated: version, log filters, RDPWrap offsets, **firewall rules vs the ZeroTier `Public` profile**, 3389 exposure, free space |
+
+All three pass a PowerShell syntax check, and `verify-multiseat.ps1` was run against the host
+pre-install (it correctly reports "not installed yet", `ZeroTier → Public`, and no 3389 listener).
+
+The install is therefore two elevated commands with a reboot between them — see steps 1–4 below,
+which the scripts automate. Free space was taken from 3.8 GB to ~188 GB beforehand
+(see `pcgordo-disk.md`).
+
 ### 0. Before you start
 
 - **Turn Fast Startup off** (Control Panel → Power Options → *Choose what the power buttons do* →
@@ -385,8 +405,10 @@ The RDP/NLA/machine-policy changes and RDPWrap stay — undo those by hand if th
 
 ## Status
 
-Not installed yet as of 2026-10-14: this document is the plan, validated against PCGORDO's actual
-hardware, software and network (probed over `ssh pcgordo-wsl`; see the table above and *Streaming
-over ZeroTier*). The only real unknown is the **hybrid AMD-iGPU + NVIDIA-dGPU** capture path
-(untested upstream); everything else has a known answer, and the ZeroTier firewall-profile question
-has a check to run right after installing.
+Not installed yet as of 2026-10-14. The plan is validated against PCGORDO's actual hardware,
+software and network (probed over `ssh pcgordo-wsl`; see the table above and *Streaming over
+ZeroTier*), the release and the PowerShell MSI are **downloaded and hash-verified on the machine**,
+and the three launcher scripts are staged and syntax-checked (see *Install kit already staged*).
+Disk pressure was removed first (`pcgordo-disk.md`). The real unknown remains the **hybrid
+AMD-iGPU + NVIDIA-dGPU** capture path (untested upstream); everything else has a known answer, and
+the ZeroTier firewall-profile question has a check to run right after installing.
