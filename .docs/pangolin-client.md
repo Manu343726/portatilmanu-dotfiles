@@ -84,6 +84,32 @@ sudo systemctl enable --now pangolin-client
   `Restart=always` turns it into a crash loop — seen on 2026-10-13 (18:53–18:56, 30 restarts).
   With the flags present the log says `UpstreamDNS is statically configured ([192.168.0.30:53
   1.1.1.1:53])` and forwarding no longer follows the system resolver.
+- **On the home LAN the client must not be allowed to route `192.168.0.30` through the tunnel.**
+  Because that IP is pinned as `--upstream-dns`, the client installs
+  `192.168.0.30/32 dev pangolin` (its own log: `Added route for remote subnet: 192.168.0.30/32`).
+  That `/32` outranks the LAN's `/24`, so it hijacks **every** packet to the homelab VM into the
+  tunnel — including the client's *own* WireGuard peer endpoint, which is `192.168.0.30:21820`
+  (`write udp [::]:49601->192.168.0.30:21820: sendto: network is unreachable`) and Pi-hole itself.
+  The tunnel can then never reach its own peer, so it never comes up, and DNS deadlocks:
+  `Failed to get DNS response for topology.manu343726.com` → public IP → `tls: handshake failure`,
+  forever (seen 2026-10-14, from 04:10 onwards). Fixed by making the LAN win whenever Ethernet is
+  actually on the home LAN — NetworkManager dispatcher
+  `/etc/NetworkManager/dispatcher.d/50-homelab-lan-route` (recreate with `exec_run(sudo=true)`):
+  ```sh
+  ip -4 addr show dev "$IFACE" | grep -q 'inet 192[.]168[.]0[.]' || exit 0
+  ip route replace 192.168.0.30/32 dev "$IFACE" metric 50
+  ```
+  The tunnel's own `metric 9999` route stays in the table; the LAN's `metric 50` just wins. This is
+  also what restores the split-brain (`getent hosts test.manu343726.com` → `192.168.0.30`) and
+  direct LAN access to the VM's services (`192.168.0.30:3004` Forgejo, `:4000` LiteLLM).
+- **KNOWN OPEN ISSUE (server side, not this laptop):** even with the route above, the `homelab`
+  site still connects as `Relay`/`Disconnected` and private resources (Vaultwarden) stay
+  unreachable, because the Pangolin server records the site's endpoint as **`172.24.0.1:<port>`** —
+  the Docker bridge gateway — instead of `192.168.0.30`. The site's `localEndpoints` are correct
+  (`["192.168.0.30:56926","172.25.73.178:56926"]`) but the server hands clients the bogus
+  `endpoint`, so hole punching always fails (`Rapid test: site 1 holepunch FAILED after 5 attempts,
+  will relay`). Diagnosed and handed to the homelab VM's agent on 2026-10-14; the write-up lives in
+  the `docker-compose-services` repo. Don't chase this from the laptop.
 - **A drop-in that sets `ExecStart=` silently drops these flags.** `10-prefer-local-routes.conf`
   existed for a while and, because a drop-in `ExecStart=` *replaces* the unit's line, the
   effective command was `pangolin up --attach --prefer-local-routes` — no upstreams. It was
@@ -110,7 +136,15 @@ systemctl show -p ExecStart --value pangolin-client          # … --upstream-dn
 pangolin status                                              # Connected, site homelab
 getent hosts test.manu343726.com                             # 192.168.0.30 (Pi-hole split-brain)
 getent hosts passwords.manu343726.com                        # 100.96.128.9 (private, via tunnel)
+ip route get 192.168.0.30                                    # …dev enp9s0f4u1u4 (LAN), NOT dev pangolin
+ip route show 192.168.0.30                                   # metric-50 device route + the tunnel's 9999
 curl -sk -o /dev/null -w '%{http_code}\n' https://passwords.manu343726.com/alive   # 200
 ```
+
+If `ip route get 192.168.0.30` says `dev pangolin` instead, the dispatcher script is missing or the
+interface is not on `192.168.0.0/24`; re-check
+`/etc/NetworkManager/dispatcher.d/50-homelab-lan-route` and run it by hand with the interface name.
+The Vaultwarden check above also depends on the server-side issue noted in the Gotchas, so it can
+still time out even when the client itself is healthy.
 
 Logs: `journalctl -u pangolin-client -f` (or `~/.config/pangolin/logs/client.log`).
