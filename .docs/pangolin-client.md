@@ -102,14 +102,22 @@ sudo systemctl enable --now pangolin-client
   The tunnel's own `metric 9999` route stays in the table; the LAN's `metric 50` just wins. This is
   also what restores the split-brain (`getent hosts test.manu343726.com` → `192.168.0.30`) and
   direct LAN access to the VM's services (`192.168.0.30:3004` Forgejo, `:4000` LiteLLM).
-- **KNOWN OPEN ISSUE (server side, not this laptop):** even with the route above, the `homelab`
-  site still connects as `Relay`/`Disconnected` and private resources (Vaultwarden) stay
-  unreachable, because the Pangolin server records the site's endpoint as **`172.24.0.1:<port>`** —
-  the Docker bridge gateway — instead of `192.168.0.30`. The site's `localEndpoints` are correct
-  (`["192.168.0.30:56926","172.25.73.178:56926"]`) but the server hands clients the bogus
-  `endpoint`, so hole punching always fails (`Rapid test: site 1 holepunch FAILED after 5 attempts,
-  will relay`). Diagnosed and handed to the homelab VM's agent on 2026-10-14; the write-up lives in
-  the `docker-compose-services` repo. Don't chase this from the laptop.
+- **The server-side counterpart was FIXED on 2026-10-14 — do not re-diagnose it from the laptop.**
+  Until then the site connected as `Relay`/`Disconnected` and private resources (Vaultwarden) were
+  unreachable, because the Pangolin server recorded the site's endpoint as **`172.24.0.1:<port>`** —
+  the Docker bridge gateway — instead of `192.168.0.30` (the site's `localEndpoints` were already
+  correct, but clients were handed the bogus `endpoint`, so hole punching always failed). The cause
+  was the **rootless** Docker on the homelab VM: `rootlesskit --port-driver=builtin` proxies
+  published ports in user space and rewrites the source address of everything that arrives, so
+  Gerbil saw every peer as one address (`No proxy mapping found for 172.24.0.1:*`), and `builtin`
+  never propagates UDP source addresses at all — which is what WireGuard needs. Fixed with a drop-in
+  on the VM, `~/.config/systemd/user/docker.service.d/20-source-ip-transparent.conf`:
+  `DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns` (that driver propagates the source IP for
+  TCP *and* UDP), plus a restart of the daemon and of `pangolin-site-selfhosted.service` (the
+  connector had come up with `WireGuard device is not initialized` and nothing listening on its UDP
+  port). Result: `pangolin status` now reports `homelab 192.168.0.30:<port> Connected Local` and
+  `https://passwords.manu343726.com/alive` answers 200. Full write-up in the `homelab` repo
+  (`docs/pangolin-site-endpoint-detection.md`).
 - **A drop-in that sets `ExecStart=` silently drops these flags.** `10-prefer-local-routes.conf`
   existed for a while and, because a drop-in `ExecStart=` *replaces* the unit's line, the
   effective command was `pangolin up --attach --prefer-local-routes` — no upstreams. It was
@@ -133,7 +141,7 @@ sudo systemctl enable --now pangolin-client
 systemctl is-enabled --quiet pangolin-client && systemctl is-active pangolin-client
 journalctl -u pangolin-client -b | grep 'UpstreamDNS is statically configured'   # 192.168.0.30:53 1.1.1.1:53
 systemctl show -p ExecStart --value pangolin-client          # … --upstream-dns 192.168.0.30 --upstream-dns 1.1.1.1
-pangolin status                                              # Connected, site homelab
+pangolin status                                              # Connected, site homelab — CONNECTION: Local
 getent hosts test.manu343726.com                             # 192.168.0.30 (Pi-hole split-brain)
 getent hosts passwords.manu343726.com                        # 100.96.128.9 (private, via tunnel)
 ip route get 192.168.0.30                                    # …dev enp9s0f4u1u4 (LAN), NOT dev pangolin
@@ -144,7 +152,7 @@ curl -sk -o /dev/null -w '%{http_code}\n' https://passwords.manu343726.com/alive
 If `ip route get 192.168.0.30` says `dev pangolin` instead, the dispatcher script is missing or the
 interface is not on `192.168.0.0/24`; re-check
 `/etc/NetworkManager/dispatcher.d/50-homelab-lan-route` and run it by hand with the interface name.
-The Vaultwarden check above also depends on the server-side issue noted in the Gotchas, so it can
-still time out even when the client itself is healthy.
+The `CONNECTION` column should read `Local` while the laptop is on the home LAN (`Relay` means the
+homelab VM's rootless Docker is mangling source addresses again — see the Gotchas).
 
 Logs: `journalctl -u pangolin-client -f` (or `~/.config/pangolin/logs/client.log`).
