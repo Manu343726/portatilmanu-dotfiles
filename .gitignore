@@ -71,6 +71,14 @@
 /.config/flameshot/*
 !/.config/flameshot/flameshot.ini
 
+# Bluetooth audio tuning (SMSL AD18): forces SBC and keeps the A2DP node awake.
+# See .docs/bluetooth-audio.md for the whole story.
+!/.config/wireplumber/
+/.config/wireplumber/*
+!/.config/wireplumber/wireplumber.conf.d/
+/.config/wireplumber/wireplumber.conf.d/*
+!/.config/wireplumber/wireplumber.conf.d/51-bluetooth.conf
+
 # opencode MCP config
 !/.config/opencode/
 /.config/opencode/*
