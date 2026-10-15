@@ -22,7 +22,9 @@ con Authentik, `/metrics` nativo, logs a Loki.
 
 ## Direcciones (ojo con la LAN)
 
-- **LAN real `192.168.0.30`** — DHCP a propósito (ver [`dhcp-migration.md`](dhcp-migration.md)).
+- **LAN real `192.168.0.30`** — **fija desde 2026-10-15** (era DHCP; ver
+  [`homelab-vm.md`](homelab-vm.md)): el router solo acepta port-forward para equipos de su
+  tabla DHCP, pero las reglas apuntan a DockerHost, no a este VM.
   Desde `portatilmanu` puede no responder según el momento: el 2026-10-10 los puertos
   `2222` y `3004` daban *timeout* mientras ZeroTier funcionaba.
 - **ZeroTier `172.25.73.178`** — la vía **durable**. `ssh manu343726@172.25.73.178`

@@ -10,7 +10,7 @@ entre reinicios, y se conserva un backup de seguridad antes de retirarlo.
 |---|---|
 | VMID | 108 |
 | Nodo | `servernotangordo` |
-| IP LAN real | `192.168.0.30` (DHCP) |
+| IP LAN real | `192.168.0.30/24` **fija** (estática desde 2026-10-15; reserva `dhcp-host` en Pi-hole para su MAC) |
 | MAC | `BC:24:11:C8:84:8A` |
 | SSH | `ssh homelab` (alias en `~/.ssh/config`, user `root`) |
 | SO | Manjaro Linux, kernel `6.1.187-2-MANJARO`, perfil mínimo sin escritorio |
@@ -31,19 +31,38 @@ Instalado con `pacstrap` (base + `linux`, `linux-firmware`, `grub`, `openssh`, `
 
 Activos: `systemd-resolved`, `systemd-networkd`, `sshd`, `qemu-guest-agent`, `docker`,
 `serial-getty@ttyS0`, `pangolin-site` (site de Pangolin Cloud añadido 2026-10-07:
-SSH público sobre SSO — documentado en el repo **Homelab**,
-`docs/pangolin-ssh-alias.md`). No hay escritorio ni NetworkManager (red con
-`systemd-networkd`).
+SSH público sobre SSO — documentado en Homelable, documento *SSH access*; el script que
+aplica el alias vive en el repo Homelab, `tools/pangolin-ssh-alias.sh`). No hay escritorio ni
+NetworkManager (red con `systemd-networkd`).
 
 Acceso: **solo por clave pública**, sin contraseña por SSH (`PermitRootLogin
 prohibit-password`). Hay password de root (`homelab`) para la consola/serie, donde antes
 no había ninguna. Las claves de `harmony-owner` y `manu343726@portatilmanu` están en
 `/root/.ssh/authorized_keys`.
 
-Red por DHCP a propósito: el router Vodafone solo acepta reglas de port-forward para
-equipos de su tabla DHCP (ver [`dhcp-migration.md`](dhcp-migration.md)), así que una IP
-fija impediría exponer servicios. `systemd-resolved` se añadió después porque el perfil
-mínimo no lo trae y sin él el guest no resolvía nombres.
+**Dirección fija `192.168.0.30/24` desde 2026-10-15**, no DHCP. La máquina *es* el servidor
+DHCP y DNS de la LAN (Pi-hole), así que un cliente DHCP aquí es una carrera consigo misma:
+al arrancar nadie local contesta un `DHCPDISCOVER`, `systemd-networkd-wait-online` agota sus
+120 s y — esto es lo que rompió el 2026-10-15 — los montajes NFS del NAS arrancan justo en
+ese instante, sin ruta (`mount.nfs: Network is unreachable`), y el guard del daemon rootless
+ya no deja arrancar Docker en todo el día (el detalle y las unidades, en el documento
+*vm-108-homelab* de Homelable).
+Mientras no había dirección, un segundo servidor DHCP del segmento (el PLC, `192.168.0.70`)
+le dio `.102` con su propia puerta de enlace, así que Pi-hole quedó escuchando en una
+dirección que nada en la LAN resuelve. Pi-hole conserva la reserva `dhcp-host` de la MAC, de
+modo que esa dirección no se entrega a nadie más. El router sigue aceptando reglas de
+port-forward solo para equipos de su tabla DHCP, pero **las reglas no apuntan a este VM sino
+a DockerHost (`192.168.0.225`, que sigue en DHCP)**, así que la dirección fija no cuesta
+nada que funcionase. `systemd-resolved` se añadió aparte porque el perfil mínimo no lo trae
+y sin él el guest no resolvía nombres.
+
+**El resto de la LAN sí toma su dirección de Pi-hole**: las 17 reservas viven en
+`FTLCONF_dhcp_hosts` (rango `.10–.250`, única puerta de enlace `192.168.0.1`), y desde
+2026-10-15 el propio portátil y su dock están en DHCP con `ipv4.ignore-auto-dns yes`
+(`NGC1701B` en `wlp6s0` → `.87`; `Wired connection 1` en `enp9s0f4u1u4` → `.100`). Así
+ninguna dirección del portátil vive fuera de la tabla de reservas, y el DNS sigue siendo el
+de Olm/Pangolin (`100.96.128.1`, el que resuelve `*.manu343726.com` por el túnel) en lugar
+del que anuncie el DHCP.
 
 ## Shell: zsh + oh-my-zsh
 

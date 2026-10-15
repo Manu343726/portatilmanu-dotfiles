@@ -86,7 +86,7 @@ ZeroTier.
 | 102 | **DockerHost** | servernotangordo | 20 GB | 272 GB | `BC:24:11:FF:EE:4D` | **`192.168.0.225`** (DHCP) | `172.25.10.159` | ✅ |
 | 104 | **homeassistant** | servernotangordo | 4 GB | 32 GB | `02:FF:F5:50:70:6C` | `192.168.0.41` | `172.25.219.62` | ✅ |
 | 106 | **DockerHost2** | servernotangordo | 4 GB | 128 GB | `BC:24:11:7B:65:99` | `192.168.0.252` (last seen) | `172.25.223.123` | ✅ |
-| 108 | **homelab** | servernotangordo | 10 GB | 100 GB | `BC:24:11:C8:84:8A` | **`192.168.0.30`** (DHCP) | — | ✅ |
+| 108 | **homelab** | servernotangordo | 10 GB | 100 GB | `BC:24:11:C8:84:8A` | **`192.168.0.30`** (fija desde 2026-10-15) | — | ✅ |
 
 VM 108 is the **new** homelab: Manjaro headless, Docker host, booting from disk with a
 serial console on `ttyS0`. Reached as `ssh homelab` (real LAN). Full details in

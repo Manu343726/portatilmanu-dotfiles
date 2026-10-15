@@ -116,8 +116,8 @@ sudo systemctl enable --now pangolin-client
   TCP *and* UDP), plus a restart of the daemon and of `pangolin-site-selfhosted.service` (the
   connector had come up with `WireGuard device is not initialized` and nothing listening on its UDP
   port). Result: `pangolin status` now reports `homelab 192.168.0.30:<port> Connected Local` and
-  `https://passwords.manu343726.com/alive` answers 200. Full write-up in the `homelab` repo
-  (`docs/pangolin-site-endpoint-detection.md`).
+  `https://passwords.manu343726.com/alive` answers 200. Full write-up in Homelable, document
+  *Pangolin* (the repository keeps configuration, not documentation).
 - **A drop-in that sets `ExecStart=` silently drops these flags.** `10-prefer-local-routes.conf`
   existed for a while and, because a drop-in `ExecStart=` *replaces* the unit's line, the
   effective command was `pangolin up --attach --prefer-local-routes` — no upstreams. It was
