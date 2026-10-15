@@ -58,11 +58,18 @@ y sin él el guest no resolvía nombres.
 
 **El resto de la LAN sí toma su dirección de Pi-hole**: las 17 reservas viven en
 `FTLCONF_dhcp_hosts` (rango `.10–.250`, única puerta de enlace `192.168.0.1`), y desde
-2026-10-15 el propio portátil y su dock están en DHCP con `ipv4.ignore-auto-dns yes`
+2026-10-15 el propio portátil y su dock están en DHCP
 (`NGC1701B` en `wlp6s0` → `.87`; `Wired connection 1` en `enp9s0f4u1u4` → `.100`). Así
-ninguna dirección del portátil vive fuera de la tabla de reservas, y el DNS sigue siendo el
-de Olm/Pangolin (`100.96.128.1`, el que resuelve `*.manu343726.com` por el túnel) en lugar
-del que anuncie el DHCP.
+ninguna dirección del portátil vive fuera de la tabla de reservas.
+
+El DNS del portátil lo lleva el proxy de Olm/Pangolin (`100.96.128.1`), que reenvía a Pi-hole
+lo que no es recurso privado, y ambos perfiles van con `ipv4.ignore-auto-dns no`: NetworkManager
+conserva así el resolutor que anuncia el DHCP (opción 6 = `192.168.0.30`, el propio Pi-hole) como
+red de seguridad. Eso importa porque el proxy *es* el resolutor del sistema: sin él, parar o
+reiniciar el cliente dejaba al portátil sin DNS y sin poder resolver `pangolin.manu343726.com`
+para volver a arrancar. Antes del 2026-10-15 iban con `ignore-auto-dns yes` (sin red de
+seguridad); el detalle de los dos fallos que esto arregló — la ruta al homelab y el DNS — está en
+[`pangolin-client.md`](pangolin-client.md).
 
 ## Shell: zsh + oh-my-zsh
 
