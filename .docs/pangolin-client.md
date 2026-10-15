@@ -33,6 +33,9 @@ Wants=network-online.target
 Type=simple
 Environment=HOME=/home/manu343726
 Environment=XDG_CONFIG_HOME=/home/manu343726/.config
+# The client installs its own 192.168.0.30/32 through the tunnel and cannot reach its own
+# WireGuard peer through it; put the LAN route in place first (see Gotchas).
+ExecStartPre=-/etc/NetworkManager/dispatcher.d/50-homelab-lan-route
 ExecStart=/home/manu343726/.local/bin/pangolin up --attach --prefer-local-routes --upstream-dns 192.168.0.30 --upstream-dns 1.1.1.1
 Restart=always
 RestartSec=5
@@ -57,6 +60,9 @@ Wants=network-online.target
 Type=simple
 Environment=HOME=/home/manu343726
 Environment=XDG_CONFIG_HOME=/home/manu343726/.config
+# The client installs its own 192.168.0.30/32 through the tunnel and cannot reach its own
+# WireGuard peer through it; put the LAN route in place first (see Gotchas).
+ExecStartPre=-/etc/NetworkManager/dispatcher.d/50-homelab-lan-route
 ExecStart=/home/manu343726/.local/bin/pangolin up --attach --prefer-local-routes --upstream-dns 192.168.0.30 --upstream-dns 1.1.1.1
 Restart=always
 RestartSec=5
@@ -92,16 +98,94 @@ sudo systemctl enable --now pangolin-client
   (`write udp [::]:49601->192.168.0.30:21820: sendto: network is unreachable`) and Pi-hole itself.
   The tunnel can then never reach its own peer, so it never comes up, and DNS deadlocks:
   `Failed to get DNS response for topology.manu343726.com` → public IP → `tls: handshake failure`,
-  forever (seen 2026-10-14, from 04:10 onwards). Fixed by making the LAN win whenever Ethernet is
-  actually on the home LAN — NetworkManager dispatcher
+  forever (seen 2026-10-14, from 04:10 onwards). The proxy then falls back to its second upstream
+  (`1.1.1.1`), so every estate name answers the *public* IP: the split-brain needs a query that
+  arrives **from a LAN address**, and one that arrives through the tunnel is not one.
+  Fixed by making the LAN win whenever some interface is on the home LAN: NetworkManager dispatcher
   `/etc/NetworkManager/dispatcher.d/50-homelab-lan-route` (recreate with `exec_run(sudo=true)`):
   ```sh
-  ip -4 addr show dev "$IFACE" | grep -q 'inet 192[.]168[.]0[.]' || exit 0
-  ip route replace 192.168.0.30/32 dev "$IFACE" metric 50
+  #!/bin/sh
+  # (the installed file carries a longer explanatory header here)
+  set -u
+
+  # The one LAN to care about. Anchored, and the dots are classes, for grep -E.
+  LAN_RE='inet 192[.]168[.]0[.]'
+
+  # The interface carrying the lowest-metric default route: the path the rest of the system is
+  # already using, so the one to prefer when more than one interface is on the LAN.
+  route_iface() {
+      ip -4 route show default 2>/dev/null | awk '
+          { m = 0; dev = ""
+            for (i = 1; i <= NF; i++) { if ($i == "dev") dev = $(i + 1); if ($i == "metric") m = $(i + 1) }
+            if (dev != "") print m, dev }' | sort -n | awk 'NR == 1 { print $2 }'
+  }
+
+  on_lan() {  # on_lan <iface>
+      [ -n "$1" ] || return 1
+      ip -4 addr show dev "$1" 2>/dev/null | grep -qE "$LAN_RE"
+  }
+
+  current_iface() {  # the device our metric-50 /32 currently points at, if any
+      ip -4 route show 192.168.0.30/32 metric 50 2>/dev/null |
+          awk '{ for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }'
+  }
+
+  iface=""
+  if on_lan "$(route_iface)"; then
+      iface="$(route_iface)"
+  else
+      # The default route is not on the LAN (the tunnel or a VPN may own it). Any interface
+      # that is on the LAN will do.
+      for d in /sys/class/net/*; do
+          dev="$(basename "$d")"
+          if on_lan "$dev"; then iface="$dev"; break; fi
+      done
+  fi
+
+  have="$(current_iface)"
+  if [ -n "$iface" ]; then
+      ip route replace 192.168.0.30/32 dev "$iface" metric 50
+      [ "$have" = "$iface" ] || logger -t homelab-lan-route -- \
+          "192.168.0.30/32 -> $iface (metric 50, LAN ahead of the tunnel)"
+  else
+      if [ -n "$have" ]; then
+          ip route del 192.168.0.30/32 metric 50 2>/dev/null || true
+          logger -t homelab-lan-route -- \
+              "off the home LAN: dropped the metric-50 route to 192.168.0.30 (the tunnel's own /32 takes over)"
+      fi
+  fi
+  exit 0
   ```
   The tunnel's own `metric 9999` route stays in the table; the LAN's `metric 50` just wins. This is
   also what restores the split-brain (`getent hosts test.manu343726.com` → `192.168.0.30`) and
   direct LAN access to the VM's services (`192.168.0.30:3004` Forgejo, `:4000` LiteLLM).
+- **The script must recompute on *every* dispatcher event, not just on `up` of one interface.**
+  A route is bound to a device, and the kernel drops it when that device goes down. On 2026-10-15
+  the home WiFi came up *after* the dock's Ethernet, took the `/32` over (same prefix and metric, so
+  `ip route replace` simply moved it), and then went down — taking the route with it. The Ethernet,
+  up since boot, never fired another `up`, so nothing put it back: Pi-hole became unreachable, the
+  tunnel deadlocked on `tls: handshake failure`, and the laptop resolved `homelab.manu343726.com` to
+  the public address while sitting on the LAN (the user's "split brain DNS does not work when I go by
+  Ethernet instead of WiFi"). It picks the lowest-metric default route's interface when that one is
+  on the LAN, else any interface on the LAN, and deletes its route when none is — so a laptop away
+  from home still reaches Pi-hole and the private resources through the tunnel. The unit's
+  `ExecStartPre` calls it too (no arguments), so the route exists even when the client starts before
+  any network event. Watch it with `journalctl -t homelab-lan-route`; it logs transitions only.
+- **The system resolver *is* the client's DNS proxy, so a dead client means a dead laptop.** The
+  client writes `/etc/NetworkManager/conf.d/olm-dns.conf` (`[global-dns-domain-*] servers=100.96.128.1`)
+  and `/etc/resolv.conf` points only at its proxy. Stop, crash or restart the client and nothing
+  resolves — and the client itself cannot start, because it resolves `pangolin.manu343726.com` before
+  its proxy exists (`Error: the server appears to be down: server unreachable: Get
+  "https://pangolin.manu343726.com/api/v1": dial tcp: lookup pangolin.manu343726.com on [::1]:53:
+  connection refused`, seen when restarting it on 2026-10-15). Fixed by leaving NetworkManager a real
+  resolver to fall back on: `nmcli con mod 'Wired connection 1' ipv4.ignore-auto-dns no` and the same
+  on `NGC1701B`. The home DHCP *is* Pi-hole, so option 6 is `192.168.0.30` (`nmcli -f DHCP4.OPTION dev
+  show <iface> | grep domain_name_servers`) and the client logs it as
+  `Original DNS servers backed up: [192.168.0.30]`. The proxy still comes first while it runs
+  (set by the olm config), which is what keeps private names resolving. Do **not** re-add a fixed
+  `ipv4.dns` (a hard-coded Pi-hole would be stale on any other network; the DHCP already hands it
+  out at home).
+
 - **The server-side counterpart was FIXED on 2026-10-14 — do not re-diagnose it from the laptop.**
   Until then the site connected as `Relay`/`Disconnected` and private resources (Vaultwarden) were
   unreachable, because the Pangolin server recorded the site's endpoint as **`172.24.0.1:<port>`** —
@@ -146,12 +230,17 @@ getent hosts test.manu343726.com                             # 192.168.0.30 (Pi-
 getent hosts passwords.manu343726.com                        # 100.96.128.9 (private, via tunnel)
 ip route get 192.168.0.30                                    # …dev enp9s0f4u1u4 (LAN), NOT dev pangolin
 ip route show 192.168.0.30                                   # metric-50 device route + the tunnel's 9999
+journalctl -t homelab-lan-route -n 3                         # last transition of that route
+nmcli -f ipv4.ignore-auto-dns con show 'Wired connection 1'  # no — the client may die without killing DNS
 curl -sk -o /dev/null -w '%{http_code}\n' https://passwords.manu343726.com/alive   # 200
 ```
 
-If `ip route get 192.168.0.30` says `dev pangolin` instead, the dispatcher script is missing or the
-interface is not on `192.168.0.0/24`; re-check
-`/etc/NetworkManager/dispatcher.d/50-homelab-lan-route` and run it by hand with the interface name.
+If `ip route get 192.168.0.30` says `dev pangolin` instead, no interface is on `192.168.0.0/24` or the
+dispatcher script is missing; re-check `/etc/NetworkManager/dispatcher.d/50-homelab-lan-route` and run
+it by hand with **no arguments** (it recomputes for whatever interface is on the LAN). To prove the
+dispatcher really fires, take the link down and up at the device level — `ip link set <iface> down`
+makes the kernel drop the route, and bringing it back up must log a transition and reinstall it:
+`journalctl -u NetworkManager-dispatcher.service -n 5` + `journalctl -t homelab-lan-route -n 3`.
 The `CONNECTION` column should read `Local` while the laptop is on the home LAN (`Relay` means the
 homelab VM's rootless Docker is mangling source addresses again — see the Gotchas).
 
