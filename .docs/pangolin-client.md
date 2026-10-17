@@ -131,15 +131,29 @@ sudo systemctl enable --now pangolin-client
   }
 
   iface=""
-  if on_lan "$(route_iface)"; then
-      iface="$(route_iface)"
-  else
-      # The default route is not on the LAN (the tunnel or a VPN may own it). Any interface
-      # that is on the LAN will do.
-      for d in /sys/class/net/*; do
-          dev="$(basename "$d")"
-          if on_lan "$dev"; then iface="$dev"; break; fi
-      done
+  # Prefer a *wired* interface on the LAN when there is one. Ethernet and WiFi can sit on
+  # 192.168.0.0/24 at the same time, and the dispatcher only fires on link events: when the
+  # cable comes up while WiFi already owns the default route, route_iface() still answers
+  # wlp6s0 and the /32 stays pinned to WiFi (seen 2026-10-17 23:13, reconnecting the dock's
+  # Ethernet: the /32 kept pointing at wlp6s0 with the cable idle at 1 Gb/s).
+  for d in /sys/class/net/*; do
+      dev="$(basename "$d")"
+      case "$dev" in
+          en*|eth*) if on_lan "$dev"; then iface="$dev"; break; fi ;;
+      esac
+  done
+
+  if [ -z "$iface" ]; then
+      if on_lan "$(route_iface)"; then
+          iface="$(route_iface)"
+      else
+          # The default route is not on the LAN (the tunnel or a VPN may own it). Any interface
+          # that is on the LAN will do.
+          for d in /sys/class/net/*; do
+              dev="$(basename "$d")"
+              if on_lan "$dev"; then iface="$dev"; break; fi
+          done
+      fi
   fi
 
   have="$(current_iface)"
