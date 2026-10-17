@@ -1,19 +1,28 @@
 # Vaultwarden MCP — agents maintain the homelab secrets
 
 The homelab's secrets live in Vaultwarden's organization **`homelab secrets`**. AI agents read
-and write it through the local MCP **`vaultwarden`**, so an operator can say "save this API key
+and write it through the MCP **`vaultwarden`**, so an operator can say "save this API key
 as X" and it lands in the vault instead of a chat log or a stray file.
 
 ## What runs
 
 - **Server:** [`@icoretech/warden-mcp`](https://github.com/icoretech/warden-mcp) — a
-  Vaultwarden-first MCP that wraps the Bitwarden CLI (`bw`, bundled). Installed at
-  `~/.opencode/mcp/warden/`, run over stdio (`warden-mcp --stdio`).
-- **Wiring:** `~/.config/opencode/opencode.jsonc.template` (the `vaultwarden` entry) plus
-  `generate-configs.sh` (it substitutes the `VW_*` variables). The rendered `opencode.jsonc`
-  is gitignored; the credentials live in `~/.config/opencode/.env` as `VW_HOST`, `VW_USER`,
-  `VW_PASSWORD` (0600, gitignored).
-- **State:** `KEYCHAIN_BW_HOME_ROOT=~/.local/state/warden-mcp` (the `bw` profile cache).
+  Vaultwarden-first MCP that wraps the Bitwarden CLI (`bw`). Since **2026-10-17** it runs **on
+  VM 108**, not here: the stack is
+  [`docker-compose-services/security/vaultwarden-mcp/`](https://git.manu343726.com/homelab/Homelab/src/branch/main/docker-compose-services/security/vaultwarden-mcp),
+  and it reaches Vaultwarden through a small nginx TLS terminator beside it (`warden-tls`),
+  because the Bitwarden CLI refuses any URL that is not https while Vaultwarden speaks plain
+  HTTP inside the network.
+- **Wiring (portátil):** `~/.config/opencode/opencode.jsonc.template` has a `vaultwarden` entry
+  pointing at the estate's gateway, `${LITELLM_MCP_URL}/vaultwarden/mcp`, like every other
+  estate MCP. There is **no local warden process** any more: the install at
+  `~/.opencode/mcp/warden/` and `KEYCHAIN_BW_HOME_ROOT=~/.local/state/warden-mcp` are left in
+  place but unused by the running config.
+- **Credentials:** `~/.config/opencode/.env` still carries `VW_HOST`/`VW_USER`/`VW_PASSWORD`
+  (0600, gitignored) — the account's master password, kept as the source copy the VM's stack
+  `.env` is filled from. `generate-configs.sh` still requires them, but nothing substitutes them
+  into a file any more (the same is already true of the `HA_MCP_*` pair, which went dead when
+  Home Assistant moved behind the gateway).
 
 ## The vault structure
 
@@ -71,11 +80,17 @@ password is never handed to an agent.
 `bw login <email> <password>` (or a personal API key), not with machine-client credentials. A
 machine client is for the Pangolin *tunnel*, not for the Vaultwarden *API*.
 
-## It only works while the Pangolin client is up
+## The tunnel is for the UI now, not for the agents
 
 Vaultwarden is a **private** Pangolin resource (see `pangolin-client.md`, AGENTS rule 16), so
-`BW_HOST=https://passwords.manu343726.com` resolves only while `pangolin-client.service` is
-connected. If the MCP suddenly cannot reach the server, check the tunnel first.
+`https://passwords.manu343726.com` — the *UI* — resolves only while `pangolin-client.service` is
+connected. If the web vault stops answering, check the tunnel first.
+
+The **MCP** path no longer depends on it: `warden-mcp` runs on the VM and reaches Vaultwarden
+inside the homelab's Docker network, so the portátil's agents read and write secrets through
+`${LITELLM_MCP_URL}/vaultwarden/mcp` over ZeroTier, with the laptop's tunnel up or down. What it
+*does* depend on is the gateway being up and the portátil holding a valid `LITELLM_MCP_KEY` —
+a stale one answers `401` on every server, which looks like the vault being broken.
 
 ## Redaction
 
@@ -92,13 +107,17 @@ vault. Without SMTP, an organization invite is **auto-accepted** (no email neede
    `~/docker-compose-services/security/vaultwarden/.env` and run
    `docker compose up -d --force-recreate`.
 2. Register `homelab-agent@manu343726.com` in the web vault (it sets its own master password;
-   that one goes into `.env` as `VW_PASSWORD`).
+   that one goes into the portátil's `.env` as `VW_PASSWORD`, and from there into the VM stack's
+   `security/vaultwarden-mcp/.env` as `BW_PASSWORD`).
 3. Set `SIGNUPS_ALLOWED=false` and recreate again.
 4. As the owner: **Members → Invite member**, **Confirm** it (fingerprint dialog), then change
    its role to **Admin**.
 5. Recreate the collection tree **through the MCP** (the `Area / Service` list above), then
    repopulate the items from the VM `.env` files.
-6. Regenerate the opencode config: `zsh ~/.config/opencode/generate-configs.sh`.
+6. Copy the credentials onto the VM (`security/vaultwarden-mcp/.env`), `docker compose up -d`
+   that stack, then regenerate the portátil's opencode config:
+   `zsh ~/.config/opencode/generate-configs.sh` (it no longer needs `VW_*`, but the same `.env`
+   is where they are kept).
 
 ## Verify
 

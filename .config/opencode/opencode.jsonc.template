@@ -56,37 +56,79 @@
       },
       "enabled": true
     },
+    "playwright": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/playwright/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "grafana": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/grafana/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "prometheus": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/prometheus/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "pihole": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/pihole/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "authentik": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/authentik/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "forgejo": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/forgejo/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "hindsight": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/hindsight/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
+    "vaultwarden": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/vaultwarden/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
     "dynadot": {
       "type": "remote",
       "url": "https://mcp.dynadot.com/mcp",
       "enabled": true,
       "oauth": {}
     },
-    "playwright": {
-      "type": "local",
-      "command": [
-        "/home/manu343726/.opencode/mcp/playwright/node_modules/.bin/playwright-mcp",
-        "--isolated",
-        "--caps", "pdf",
-        "--ignore-https-errors",
-        "--config", "/home/manu343726/.config/opencode/playwright-mcp-config.json"
-      ],
-      "enabled": true
-    },
     "virtualbox": {
       "type": "local",
       "command": ["/home/manu343726/go/bin/mcp-virtualbox"],
-      "enabled": true
-    },
-    "vaultwarden": {
-      "type": "local",
-      "command": ["/home/manu343726/.opencode/mcp/warden/node_modules/.bin/warden-mcp", "--stdio"],
-      "environment": {
-        "BW_HOST": "${VW_HOST}",
-        "BW_USER": "${VW_USER}",
-        "BW_PASSWORD": "${VW_PASSWORD}",
-        "KEYCHAIN_BW_HOME_ROOT": "/home/manu343726/.local/state/warden-mcp"
-      },
       "enabled": true
     }
   },

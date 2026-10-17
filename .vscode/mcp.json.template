@@ -56,6 +56,55 @@
             "headers": {
                 "Authorization": "Bearer ${LITELLM_MCP_KEY}"
             }
+        },
+        "grafana": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/grafana/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "prometheus": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/prometheus/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "pihole": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/pihole/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "authentik": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/authentik/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "forgejo": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/forgejo/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "hindsight": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/hindsight/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
+        },
+        "vaultwarden": {
+            "type": "http",
+            "url": "${LITELLM_MCP_URL}/vaultwarden/mcp",
+            "headers": {
+                "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+            }
         }
     }
 }
