@@ -5,13 +5,17 @@
 
 SCRIPT_DIR="${0:A:h}"
 ENV_FILE="$SCRIPT_DIR/.env"
-VARS='${HA_MCP_URL}${HA_MCP_TOKEN}${GITHUB_PERSONAL_ACCESS_TOKEN}${LITELLM_MCP_URL}${LITELLM_MCP_KEY}${VW_HOST}${VW_USER}${VW_PASSWORD}'
+# Only what the templates above actually substitute. Home Assistant's token and the
+# Vaultwarden account credentials used to be listed here, from when their MCP servers were
+# local to this machine; both are served by the estate's gateway now, so the templates name
+# `${LITELLM_MCP_URL}/<server>/mcp` and nothing else, and the `.env` keeps only what is read.
+VARS='${GITHUB_PERSONAL_ACCESS_TOKEN}${LITELLM_MCP_URL}${LITELLM_MCP_KEY}'
 
 [ -f "$ENV_FILE" ] && source "$ENV_FILE"
 
 # Fail loudly instead of silently substituting an empty value into a header.
 missing=()
-for name in HA_MCP_URL HA_MCP_TOKEN GITHUB_PERSONAL_ACCESS_TOKEN LITELLM_MCP_URL LITELLM_MCP_KEY VW_HOST VW_USER VW_PASSWORD; do
+for name in GITHUB_PERSONAL_ACCESS_TOKEN LITELLM_MCP_URL LITELLM_MCP_KEY; do
   [ -z "${(P)name}" ] && missing+=("\$$name")
 done
 if (( ${#missing} )); then

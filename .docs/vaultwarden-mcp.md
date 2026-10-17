@@ -16,13 +16,16 @@ as X" and it lands in the vault instead of a chat log or a stray file.
 - **Wiring (portátil):** `~/.config/opencode/opencode.jsonc.template` has a `vaultwarden` entry
   pointing at the estate's gateway, `${LITELLM_MCP_URL}/vaultwarden/mcp`, like every other
   estate MCP. There is **no local warden process** any more: the install at
-  `~/.opencode/mcp/warden/` and `KEYCHAIN_BW_HOME_ROOT=~/.local/state/warden-mcp` are left in
-  place but unused by the running config.
+  `~/.opencode/mcp/warden/` and its `~/.local/state/warden-mcp` state were **deleted** on
+  2026-10-17 (`~/.opencode/mcp/` is gone entirely; the same pass removed this machine's local
+  Playwright MCP install, its `playwright-mcp-config.json`, and the dead
+  `pangolin-mcp.env`/`proxmox-mcp.env` credential files, whose servers the gateway serves too).
 - **Credentials:** `~/.config/opencode/.env` still carries `VW_HOST`/`VW_USER`/`VW_PASSWORD`
-  (0600, gitignored) — the account's master password, kept as the source copy the VM's stack
-  `.env` is filled from. `generate-configs.sh` still requires them, but nothing substitutes them
-  into a file any more (the same is already true of the `HA_MCP_*` pair, which went dead when
-  Home Assistant moved behind the gateway).
+  (0600, gitignored). Nothing substitutes them any more, and that is deliberate: they are the
+  canonical copy of the account's **master password**, which Vaultwarden cannot hold for itself,
+  and the source the VM stack's `.env` is filled from. `HA_MCP_*`, which went dead the same way
+  when Home Assistant moved behind the gateway, is gone from both the `.env` and
+  `generate-configs.sh` — which now lists only the three variables the templates actually use.
 
 ## The vault structure
 
