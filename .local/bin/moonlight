@@ -1,0 +1,32 @@
+#!/bin/sh
+# Moonlight on the NVIDIA dGPU, in Hybrid mode.
+#
+# Why: in Hybrid the internal panel and the external monitor hang off the AMD
+# iGPU (card1-eDP-1 / card1-DP-2), so by default Moonlight's Vulkan renderer and
+# its VAAPI decoder both land on the Radeon 680M. Its VCN tops out around
+# 500 Mpix/s, and 2560x1440 at 120-144 fps needs 440-530 Mpix/s, so the decoder
+# queue overflowed, Moonlight dropped frames and asked for IDR after IDR
+# ("Video decode unit queue overflow" + "Unrecoverable frame" in its log,
+# diagnosed 2026-10-18). The RTX 3050 sits idle in Hybrid, so send everything
+# there:
+#
+#   - Vulkan/GL rendering -> NVIDIA via PRIME render offload.
+#   - VAAPI decode -> NVDEC via libva-nvidia-driver (0.0.18, in extra),
+#     with the direct backend so frames do not bounce through system memory.
+#
+# Verified with `nvidia-smi` (RTX 3050 active) and Moonlight's own log:
+#   "Driver: VA-API NVDEC driver [direct backend]"
+#   "Vulkan rendering device chosen: NVIDIA GeForce RTX 3050 Laptop GPU"
+#
+# In Integrated mode the dGPU is off, so the variables are skipped and Moonlight
+# falls back to the iGPU exactly as before.
+. /etc/os-release 2>/dev/null || true
+
+if [ -e /dev/nvidia0 ] && [ "$(supergfxctl -g 2>/dev/null)" != "Integrated" ]; then
+    export LIBVA_DRIVER_NAME=nvidia
+    export NVD_BACKEND=direct
+    export __NV_PRIME_RENDER_OFFLOAD=1
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+fi
+
+exec /usr/bin/moonlight "$@"
