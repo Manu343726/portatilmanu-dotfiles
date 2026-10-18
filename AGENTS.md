@@ -105,3 +105,22 @@ This is a dotfiles repo for the `portatilmanu` machine (ASUS ROG Flow X13 runnin
     - The wrapper exports `LIBVA_DRIVER_NAME=nvidia`, `NVD_BACKEND=direct`, `__NV_PRIME_RENDER_OFFLOAD=1`, `__GLX_VENDOR_LIBRARY_NAME=nvidia` and execs `/usr/bin/moonlight`; it is skipped when `/dev/nvidia0` is absent or `supergfxctl -g` says `Integrated`, so Integrated mode still works untouched. Since `~/.local/bin` precedes `/usr/bin` in `PATH`, dmenu/i3 launches go through it.
     - It needs **`libva-nvidia-driver`** (extra, 0.0.18) so VAAPI is backed by NVDEC; without it Moonlight can only decode with VAAPI on the AMD VCN. Verify with `nvidia-smi` (RTX 3050 active) and Moonlight's log: `Driver: VA-API NVDEC driver [direct backend]` + `Vulkan rendering device selected: NVIDIA GeForce RTX 3050 Laptop GPU`.
     - **Codec matters as much as the GPU**: Apollo's logs from May show `h264_nvenc`, but today it negotiated `hevc_nvenc` (Apollo 0.4.6, "HEVC P1 async two-pass rfi"), and HEVC on the AMD VCN is far slower. With HEVC the client logged ~1330 `Unrecoverable frame` lines; forcing H.264 (Moonlight → Video codec → H.264, or `--video-codec H.264`) took it to 0 even on the iGPU. Moonlight's codec setting lives in the GUI config; the config file has no key until it is set.
+
+22. **PCGORDO's Realtek NIC: the Moonlight stutter was the *host's* send path dropping whole UDP batches — read this before re-diagnosing.** Diagnosed 2026-10-18 after a long hunt where every client-side and network metric was clean (0 packet loss at the tap, 0 NIC drops, 0 socket backlog, NVDEC + NVIDIA render, GPU idle). The smoking gun is in Apollo/Vibepollo's own log:
+    ```
+    Warning: WSASendMsg() batch failed: 10035; packets=20; bytes=24320; ... batch was not sent
+    Warning: Video frame send aborted: frame=24979; block=0; packets accepted in failed batch=0
+    ```
+    `10035` is `WSAEWOULDBLOCK`: the UDP send buffer filled and the server **discarded the whole batch**, so frames reached the client incomplete, Moonlight asked for IDR after IDR, and the user saw 0.3-0.9 s freezes *with zero measurable packet loss* — because the packets were never sent, not lost in transit. It looked like a network fault because the same stalls appeared over both Ethernet and WiFi, and because a synthetic UDP stream (which paces smoothly instead of bursting whole frames) did not reproduce it.
+    - The NIC is a **Realtek Gaming 2.5GbE** with the usual Realtek power-saving defaults on, which is what throttled the egress. All three now disabled (persistent in the adapter's registry), plus flow control off and a bigger Winsock send window:
+      ```
+      Set-NetAdapterAdvancedProperty -Name Ethernet -RegistryKeyword EnableGreenEthernet -RegistryValue 0
+      Set-NetAdapterAdvancedProperty -Name Ethernet -RegistryKeyword GigaLite           -RegistryValue 0
+      Set-NetAdapterAdvancedProperty -Name Ethernet -RegistryKeyword PowerSavingMode    -RegistryValue 0
+      Set-NetAdapterAdvancedProperty -Name Ethernet -RegistryKeyword '*FlowControl'     -RegistryValue 0
+      # HKLM:\SYSTEM\CurrentControlSet\Services\AFD\Parameters -> DefaultSendWindow (DWORD) = 1048576
+      Restart-NetAdapter -Name Ethernet
+      ```
+      `DefaultSendWindow` only applies to **sockets created after** the change, so the streaming server must be restarted (or the client must reconnect) for it to take effect.
+    - Verified on 2026-10-18 20:50+: video flow went from 26.8 Mbps with gaps up to 805 ms (12 gaps >250 ms per 60 s) to **109 Mbps with a 56.9 ms max gap and zero gaps >100 ms**, and the `WSASendMsg 10035` warnings stopped. A Realtek driver update may reset these five settings — re-check them first if the stutter returns.
+    - Things that were **not** the cause, despite looking like it (all reverted or harmless): Apollo 0.4.6 replacing Vibepollo (reinstalled 2.0.1), USB autosuspend on the portátil's USB-C Ethernet (still worth keeping off, rule 20), ZeroTier vs LAN, HEVC vs H.264, and the game's own frame rate.
