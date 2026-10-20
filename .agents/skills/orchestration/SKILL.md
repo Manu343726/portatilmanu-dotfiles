@@ -211,6 +211,28 @@ Rules for reading the output:
   nothing else got swept into the commit.
 - **A successful push is two lines, not one.** Confirm both URLs, not just the exit code.
 
+## Traps that hang an agent
+
+Two things stop a subagent without ever telling anyone. Both were measured on 2026-10-20, after
+two agents were lost to the first.
+
+**The `dotfilesd` MCP tools, and `dotfilesctl`, in a background subagent.** The daemon's tools can
+ask the operator for feedback: `exec_run` with `sudo: true` requests a password through an
+elicitation prompt. A background subagent has nobody to answer it, so the call never returns - no
+error, no timeout, an agent that looks busy for ever. Use `ssh <host>` and plain shell instead; on
+this estate the work is on another machine anyway, so the daemon's helpers buy nothing. If a
+`dotfilesd` call is genuinely needed, it belongs to the main session, where the operator is there
+to answer.
+
+**Any command against an NFS mount that is not there.** `df`, `du`, `find`, `stat` and `tree` on
+`/mnt/synology/**` block in `TASK_UNINTERRUPTIBLE` when the share is stale, and no signal ends
+them: the subagent waits for ever, and so does the `flock` of anything sharing that path. Measured
+on the same day, when a `df` sat in `D` for forty minutes. Stay out of the mount; if a size is
+needed, get it from a metric or skip it.
+
+The cheap habit that bounds both: **give every shell command a `timeout`**. If it has not returned
+in a minute, that is the finding - kill it and report it instead of waiting.
+
 ## Where it is also written down
 
 - **This laptop:** rule 23 of `/home/manu343726/AGENTS.md`, the dotfiles contract.
