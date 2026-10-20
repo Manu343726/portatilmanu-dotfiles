@@ -120,6 +120,14 @@
       },
       "enabled": true
     },
+    "runtime": {
+      "type": "remote",
+      "url": "${LITELLM_MCP_URL}/runtime/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LITELLM_MCP_KEY}"
+      },
+      "enabled": true
+    },
     "dynadot": {
       "type": "remote",
       "url": "https://mcp.dynadot.com/mcp",
@@ -161,5 +169,10 @@
         }
       }
     }
-  }
+  },
+  // OpenCode Quota: tuiCommandDisplay chooses whether native TUI command output appears in the session transcript or a local popup dialog.
+  // OpenCode Quota: loads the server plugin for slash commands and quota checks.
+  "plugin": [
+    "@slkiser/opencode-quota@latest"
+  ]
 }
