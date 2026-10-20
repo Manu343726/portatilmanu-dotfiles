@@ -120,9 +120,9 @@
       },
       "enabled": true
     },
-    "runtime": {
+    "homelab": {
       "type": "remote",
-      "url": "${LITELLM_MCP_URL}/runtime/mcp",
+      "url": "${LITELLM_MCP_URL}/homelab/mcp",
       "headers": {
         "Authorization": "Bearer ${LITELLM_MCP_KEY}"
       },
