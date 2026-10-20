@@ -126,7 +126,7 @@ in the commit message, it is a fact about the estate that nobody measured.
 
 ## Anti-patterns, and what each one cost
 
-All five are from 2026-10-20, in this repo and in the estate.
+All six are from 2026-10-20, in this repo and in the estate.
 
 **The orchestrator keeps the live work.** Unmounting filesystems, restarting containers,
 running the fix while the subagents do the reading. It feels efficient because the orchestrator
@@ -157,6 +157,19 @@ follow-up that repeats the brief, or starting a second agent on the same questio
 first was quiet. It burns the same quota twice, and when the two answers differ the
 orchestrator has created a disagreement it now has to adjudicate. Wait for the report. If it
 never comes, that is the finding.
+
+**Treating a silent subagent as a success.** Two tasks were delegated in one session and neither
+ever reported: a correction comment on an issue that was never posted, and an issue that was
+never filed. The orchestrator moved on assuming both were done. The tell was the absence of a
+report, and nobody noticed until a later task happened to reveal the gap. The cost is not the
+lost work. It is that the *record* silently disagrees with the estate, and a wrong record is
+worse than a missing one because it is confidently wrong. **A subagent that does not report is a
+task whose outcome you do not know - not a task that succeeded.** Every delegated write (a
+comment, an issue, a document, a commit, a file) is verified by reading it back, the same way a
+metric is queried: `get_issue_by_index` for the comment count and the body, `git log` for the
+commit, a `GET` on the document for the text. Do it as part of closing the workstream, not when
+something later looks odd. And when a subagent does report, its report is still a claim:
+re-measure it.
 
 ## Verification recipes
 
