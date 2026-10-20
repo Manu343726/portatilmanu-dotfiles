@@ -179,6 +179,18 @@ type systemSnapshot struct {
 }
 
 func (s *SharedState) update(snap systemSnapshot) {
+	// Collect the values that require external helper processes BEFORE taking
+	// the lock. These used to run inside the critical section, so any wedged
+	// helper (e.g. supergfxctl blocking on a D-Bus peer that was not up yet at
+	// boot) would hold the write lock forever and deadlock every reader —
+	// get(), getHistory() and therefore the whole RPC surface.
+	// Each call is independently bounded by runWithTimeout.
+	powerProfile := collectPowerProfile()
+	gpuProfile := collectGPUProfile()
+	keyboardLayout := collectKeyboardLayout()
+	topCPUProcess := collectTopCPUProcess()
+	topMemProcess := collectTopMemProcess()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ram = snap.ram
@@ -188,11 +200,11 @@ func (s *SharedState) update(snap systemSnapshot) {
 	s.cpuTemp = snap.cpuTemp
 	s.battery = snap.battery
 	s.wifi = snap.wifi
-	s.powerProfile = collectPowerProfile()
-	s.gpuProfile = collectGPUProfile()
-	s.keyboardLayout = collectKeyboardLayout()
-	s.topCPUProcess = collectTopCPUProcess()
-	s.topMemProcess = collectTopMemProcess()
+	s.powerProfile = powerProfile
+	s.gpuProfile = gpuProfile
+	s.keyboardLayout = keyboardLayout
+	s.topCPUProcess = topCPUProcess
+	s.topMemProcess = topMemProcess
 	s.loadAvg1 = snap.loadAvg1
 	s.loadAvg5 = snap.loadAvg5
 	s.loadAvg15 = snap.loadAvg15
@@ -1418,8 +1430,41 @@ func readWiFiSignal(iface string) int {
 	return 0
 }
 
+// Per-call timeouts for the external helper binaries. Every one of them talks
+// to something that may be slow or wedged (D-Bus / systemd) or simply absent,
+// and each runs on the poll loop, so none may block indefinitely.
+const (
+	// commandTimeoutFast covers local queries that should answer instantly
+	// (iw, xkb-switch).
+	commandTimeoutFast = 1 * time.Second
+	// commandTimeoutMedium covers D-Bus backed helpers (tlpctl, supergfxctl),
+	// which are the ones that can stall on a peer that is not up yet.
+	commandTimeoutMedium = 2 * time.Second
+	// commandTimeoutLong covers ps, which walks the whole process table.
+	commandTimeoutLong = 3 * time.Second
+)
+
+// runWithTimeout runs an external helper with a hard deadline and returns its
+// stdout, mirroring exec.Command(...).Output() semantics for the caller: on
+// timeout (or any failure) err is non-nil and callers keep their existing
+// fallback behaviour.
+//
+// The deadline matters: supergfxctl -g has no timeout of its own, so when it
+// blocks on a D-Bus service that is not answering (seen at boot, before asusd
+// is ready) it sleeps forever and a plain Output() never returns.
+func runWithTimeout(timeout time.Duration, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel() // always release the timer, even on the happy path
+	cmd := exec.CommandContext(ctx, name, args...)
+	// WaitDelay bounds the pipe drain after cancellation: if the child (or a
+	// grandchild holding the stdout pipe) survives the kill, Wait still
+	// returns instead of hanging on io.Copy.
+	cmd.WaitDelay = 500 * time.Millisecond
+	return cmd.Output()
+}
+
 func readWiFiSSID(iface string) string {
-	out, err := exec.Command("iw", "dev", iface, "info").Output()
+	out, err := runWithTimeout(commandTimeoutFast, "iw", "dev", iface, "info")
 	if err != nil {
 		return ""
 	}
@@ -1445,7 +1490,7 @@ func collectWiFi() WiFiSnapshot {
 }
 
 func collectPowerProfile() pb.PowerProfile {
-	out, err := exec.Command("tlpctl", "get").Output()
+	out, err := runWithTimeout(commandTimeoutMedium, "tlpctl", "get")
 	if err != nil {
 		return pb.PowerProfile_POWER_PROFILE_UNSPECIFIED
 	}
@@ -1468,7 +1513,7 @@ func collectGPUProfile() pb.GPUProfile {
 	// supergfxctl is the authoritative source for the actual GPU mode.
 	// The sysfs mux/disable knobs don't reliably reflect the effective mode
 	// (e.g. dgpu_disable stays 0 in Integrated mode on some models).
-	if out, err := exec.Command("supergfxctl", "-g").Output(); err == nil {
+	if out, err := runWithTimeout(commandTimeoutMedium, "supergfxctl", "-g"); err == nil {
 		switch strings.TrimSpace(string(out)) {
 		case "Integrated":
 			return pb.GPUProfile_GPU_PROFILE_IGPU
@@ -1501,7 +1546,7 @@ func collectGPUProfile() pb.GPUProfile {
 }
 
 func collectKeyboardLayout() string {
-	out, err := exec.Command("xkb-switch").Output()
+	out, err := runWithTimeout(commandTimeoutFast, "xkb-switch")
 	if err != nil {
 		return ""
 	}
@@ -1509,7 +1554,7 @@ func collectKeyboardLayout() string {
 }
 
 func collectTopCPUProcess() string {
-	out, err := exec.Command("ps", "-eo", "comm", "--sort=-%cpu").Output()
+	out, err := runWithTimeout(commandTimeoutLong, "ps", "-eo", "comm", "--sort=-%cpu")
 	if err != nil {
 		return ""
 	}
@@ -1527,7 +1572,7 @@ func collectTopCPUProcess() string {
 }
 
 func collectTopMemProcess() string {
-	out, err := exec.Command("ps", "-eo", "comm", "--sort=-%mem").Output()
+	out, err := runWithTimeout(commandTimeoutLong, "ps", "-eo", "comm", "--sort=-%mem")
 	if err != nil {
 		return ""
 	}
