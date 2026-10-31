@@ -105,6 +105,73 @@ docker exec -e PGPASSWORD="$DB_PASSWORD" homelab-postgres \
   psql -U homelab_forgejo -d homelab_forgejo -c "DELETE FROM access_token WHERE name='tmp';"
 ```
 
+## Actions (CI): dos runners de instancia
+
+Desde 2026-10-31 la instancia tiene **dos runners de instancia** (registrados con
+`owner_id 0`, filas de `action_runner` en la DB central), los dos con `capacity: 1` y los dos
+anunciando, además de `docker`, una etiqueta de host para poder fijar un job a una máquina:
+
+| runner | host | etiquetas | dónde vive el registro |
+|---|---|---|---|
+| `forgejo-runner-108` | VM 108 (`Homelab`) | `docker`, `homelab` | volumen `homelab-forgejo-runner-data` |
+| `forgejo-runner-pcgordo` | PCGORDO (WSL) | `docker`, `wsl` | volumen `forgejo-runner_forgejo-runner-data` |
+
+`runs-on: docker` lo coge cualquiera de los dos; `runs-on: [docker, homelab]` y
+`runs-on: [docker, wsl]` fijan el host. Consecuencia directa: **un workflow no puede depender
+de estado local del host** — ni rutas absolutas, ni nada fuera de su propio checkout, ni un
+servicio que exista solo en una de las dos máquinas.
+
+El `capacity: 1` no es prudencia genérica: cada runner trae **su propio par de daemons
+Docker-in-Docker**, declarado en su compose (VM 108: `dev/forgejo/compose.yaml`, servicios
+`ci-dind` y `ship-dind`; PCGORDO: `dev/forgejo/runner-wsl/compose.yaml`, mismos nombres), con
+tmpfs de **3 GiB (`ci-dind`)** y **6 GiB (`ship-dind`)** dimensionados para **una** compilación a
+la vez. Dos compilaciones concurrentes contra el mismo daemon gastan el mismo presupuesto dos veces, y lo
+que pierde la segunda no es un turno de cola sino un `no space left on device` convertido en capa
+truncada u OOM dentro de `dockerd`; además la documentación de docker-access de Forgejo avisa de
+que con `capacity > 1` sobre un dind compartido los contenedores de un job son visibles desde
+otro. El paralelismo es **horizontal**: un job en cada host, nunca dos en el mismo. El precio es
+cola: el CI de `z80-emulator` tiene ~9 jobs, así que como mucho dos vuelan y el resto espera.
+
+Los jobs obtienen Docker **por TCP**, contra `tcp://ci-dind:2375` y `tcp://ship-dind:2375` (en
+la red `homelab` del compose, donde resuelven por nombre en los dos hosts). El socket del host
+**no se monta nunca** dentro del contenedor del job (`docker_host: "-"` en `runner-config.yml`),
+así que ningún job tiene privilegio de kernel sobre el daemon de fuera. La imagen de los jobs es
+stock, `catthehacker/ubuntu:act-24.04` (git, node y python3), y no una que compile este repo: una
+imagen propia solo existe en el host que la construyó, y con un runner hermano en otra máquina eso
+ya no se puede asumir.
+
+Se retiraron en el mismo cambio la pila `dev/ci-dind/` (los dind pasan a ser del compose del
+runner) y el par `dev/forgejo/runner-z80/`, que nunca llegó a desplegarse.
+
+```sh
+# VM 108
+cd ~/docker-compose-services/dev/forgejo
+docker compose up -d forgejo-runner ci-dind ship-dind
+
+# PCGORDO, dentro de WSL: unit de usuario, con linger
+systemctl --user status forgejo-runner.service
+```
+
+- **Editar `runner-config.yml` es un reinicio, no un `up -d`**: es un bind mount, y el daemon lo
+  relee al arrancar. En la VM 108 es `docker compose restart forgejo-runner`; en PCGORDO,
+  `docker compose restart runner` (allí el servicio se llama `runner`). Las etiquetas del fichero
+  mandan sobre las que quedaron horneadas en `.runner` al registrarse, así que cambiar etiquetas
+  también es un reinicio, **no** un re-registro.
+- **El registro de PCGORDO vive en el volumen `forgejo-runner_forgejo-runner-data`** — con el
+  prefijo del proyecto compose, porque allí el proyecto se llama `forgejo-runner` y no `forgejo`.
+  Si ese volumen se pierde hay que **volver a registrar** contra `http://172.25.73.178:3004` (el
+  puerto 3004 de la VM 108 **por ZeroTier**, no por la LAN): sin `.runner` el daemon no arranca
+  como runner.
+- La unit `forgejo-runner.service` es de **usuario y necesita linger** (`loginctl enable-linger`),
+  o no sobrevive a cerrar la sesión de WSL. PCGORDO no tiene el pase de arranque de
+  `homelab-control`, así que esa unit más `restart: unless-stopped` es lo único que levanta los
+  tres contenedores; en la VM 108 el ciclo de vida lo lleva el pase de arranque y por eso el
+  `restart:` se omite a propósito.
+- **El lint del repo de docs ya no manda nada a Loki** (commit `5d50e02`): su paso `report`
+  escribía en `http://loki:3100`, un nombre que solo existe en la red Docker de la VM 108 y que un
+  runner en otro host no resuelve. Por eso se retiró también la alerta de Grafana
+  *CI: the docs repository's lint failed*, que leía ese stream y ya solo podía quedarse muda.
+
 ## Repos conocidos
 
 - `manu343726/portatilmanu-dotfiles` — dotfiles de `portatilmanu`.
