@@ -18,7 +18,8 @@ apunta aquí: `ssh://git@192.168.0.30:2222/manu343726/portatilmanu-dotfiles.git`
 | SSH | `git@192.168.0.30:2222` · canónico `git@git.manu343726.com:2222` |
 
 Como todo servicio del homelab nuevo, sigue `SERVICE-RULES.md`: detrás de Pangolin, OIDC
-con Authentik, `/metrics` nativo, logs a Loki.
+con Authentik, `/metrics` nativo, logs a Loki. **Única excepción: el SSO de Pangolin** en este
+recurso (ver *Direcciones*), porque git no puede responder un challenge interactivo.
 
 ## Direcciones (ojo con la LAN)
 
@@ -30,9 +31,17 @@ con Authentik, `/metrics` nativo, logs a Loki.
 - **ZeroTier `172.25.73.178`** — la vía **durable**. `ssh manu343726@172.25.73.178`
   entra al host; `ssh://git@172.25.73.178:2222/...` es el remote de git. Preferir ZT para
   remotes que deban durar.
-- La web pública va por Pangolin con SSO de Authentik. **Git por HTTPS no es usable**
-  (el challenge SSO no lo puede responder git), así que push/pull van **siempre por SSH**
-  (de ahí `START_SSH_SERVER` en el puerto 2222).
+- La web pública va por Pangolin, pero **el recurso ya no está detrás de su SSO**: desde el
+  2026-10-31 el perímetro es el login propio de Forgejo (`REQUIRE_SIGNIN_VIEW` + OIDC de
+  Authentik), porque git no puede responder un challenge HTML — el cliente recibía un `302` a
+  `https://pangolin.manu343726.com/auth/resource/...` y fallaba con *unable to update url base
+  from redirection*. Las reglas *Bypass Auth* por path de Pangolin no sirven en una versión
+  afectada por [`fosrl/pangolin#2551`](https://github.com/fosrl/pangolin/issues/2551)
+  (medido con `ee-1.24.0`). Ver el registro en `homelab/Homelab#327`.
+  Consecuencia: **git por HTTPS ya funciona** (y es lo que usan los runners), la página de
+  login de Forgejo es alcanzable desde internet, y **los roles de Pangolin ya no deciden
+  quién entra** — lo decide Authentik vía OIDC dentro de Forgejo. Push/pull a mano siguen
+  yendo por SSH (`START_SSH_SERVER` en el puerto 2222), que no ha cambiado.
 
 ## Operación
 
@@ -159,9 +168,12 @@ systemctl --user status forgejo-runner.service
   también es un reinicio, **no** un re-registro.
 - **El registro de PCGORDO vive en el volumen `forgejo-runner_forgejo-runner-data`** — con el
   prefijo del proyecto compose, porque allí el proyecto se llama `forgejo-runner` y no `forgejo`.
-  Si ese volumen se pierde hay que **volver a registrar** contra `http://172.25.73.178:3004` (el
-  puerto 3004 de la VM 108 **por ZeroTier**, no por la LAN): sin `.runner` el daemon no arranca
-  como runner.
+  Si ese volumen se pierde hay que **volver a registrar** contra
+  **`https://git.manu343726.com`**: la URL registrada no es solo la de la API, es también la
+  que el daemon le pasa al job como *clone URL*, así que un nombre interno (`http://forgejo:3000`,
+  `http://172.25.73.178:3004`) haría que los jobs clonasen desde un nombre que solo existe en un
+  host. Los dos runners están registrados con el FQDN público desde el 2026-10-31, y es lo que
+  hace que `actions/checkout` diga `https://git.manu343726.com/...` en el log.
 - La unit `forgejo-runner.service` es de **usuario y necesita linger** (`loginctl enable-linger`),
   o no sobrevive a cerrar la sesión de WSL. PCGORDO no tiene el pase de arranque de
   `homelab-control`, así que esa unit más `restart: unless-stopped` es lo único que levanta los
