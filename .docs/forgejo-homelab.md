@@ -188,6 +188,34 @@ systemctl --user status forgejo-runner.service
   runner en otro host no resuelve. Por eso se retiró también la alerta de Grafana
   *CI: the docs repository's lint failed*, que leía ese stream y ya solo podía quedarse muda.
 
+### Presupuesto y concurrencia (2026-10-31)
+
+| | VM 108 (8 CPUs, 22 GiB) | PCGORDO WSL (24 CPUs, 30 GiB) |
+|---|---|---|
+| Presupuesto de CI | **4 CPU / 8 GB** | **20 CPU / 26 GB** |
+| `ci-dind` (único daemon) | `cpus: 2`, `mem_limit: 6g`, tmpfs 4 GiB | `cpus: 10`, `mem_limit: 14g`, tmpfs 8 GiB |
+| Contenedores de job | `--cpus=2 --memory=2g` | `--cpus=10 --memory=12g` |
+| Daemon del runner | `cpus: 2`, `mem_limit: 512m` | sin tope propio (las dos capas ya suman) |
+
+- **Ya no hay dos dind.** `ship-dind` desapareció; el único `ci-dind` lleva el alias de red
+  `ship-dind`, así que el `DOCKER_HOST: tcp://ship-dind:2375` de z80 sigue resolviendo al mismo
+  dockerd (mismo id de daemon por los dos nombres) y ningún workflow hubo que tocar.
+- **Dos capas, no una:** el contenedor de job **no** vive dentro del dind (lo crea el runner en el
+  daemon del host), así que el dind limita lo que se construye *dentro* y `container.options`
+  limita el job. El peor caso por host suma el presupuesto de arriba.
+- **El `mem_limit` tiene que ser mayor que el tmpfs.** Las páginas de tmpfs se cobran al cgroup
+  del contenedor que las monta (medido en 108: `memory.current` del dind pasó de 679 MB a
+  4,44 GB llenando el store), así que un tope por debajo del tmpfs convierte el fallo limpio
+  (`no space left on device`) en OOM.
+- **Consecuencia que hay que saber:** el job `ship` de `z80-emulator` necesita ~4,8 GB de store,
+  así que **no cabe en la VM 108** (4 GiB) y allí falla limpiamente; necesita PCGORDO. Fijarlo con
+  `runs-on: [docker, wsl]` es una línea en el workflow de *ese* repo, no de este.
+- **Una acción a la vez por runner:** `capacity: 1` en los dos. El daemon declara su capacidad y
+  Forgejo no le entrega un segundo task hasta terminar el primero; el resto queda en cola en la
+  instancia. Probado con dos jobs del mismo workflow y el mismo label (run **587**): nunca hubo
+  más de un contenedor `FORGEJO-ACTIONS-*` en el host y el segundo empezó al acabar el primero.
+  Lo que sí puede correr en paralelo es **una acción por host** — el motivo de tener dos runners.
+
 ## Repos conocidos
 
 - `manu343726/portatilmanu-dotfiles` — dotfiles de `portatilmanu`.
