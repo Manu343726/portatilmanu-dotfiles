@@ -22,7 +22,11 @@
 # falls back to the iGPU exactly as before.
 . /etc/os-release 2>/dev/null || true
 
-if [ -e /dev/nvidia0 ] && [ "$(supergfxctl -g 2>/dev/null)" != "Integrated" ]; then
+# `supergfxd` can wedge (rm_acpi_nvpcf_notify deadlock on driver 610.57.04,
+# 2026-11-13): the D-Bus call never answers and, without a timeout, this wrapper
+# blocks *before* exec'ing moonlight, so the app just "thinks" forever. Cap it:
+# with no answer we fall back to the iGPU launch instead of never starting.
+if [ -e /dev/nvidia0 ] && [ "$(timeout 3 supergfxctl -g 2>/dev/null)" != "Integrated" ]; then
     export LIBVA_DRIVER_NAME=nvidia
     export NVD_BACKEND=direct
     export __NV_PRIME_RENDER_OFFLOAD=1
