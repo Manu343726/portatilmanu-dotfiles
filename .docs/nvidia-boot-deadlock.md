@@ -70,9 +70,11 @@ supergfxctl -g                          # hangs -> wrap it in timeout
 
 There is none in the running session: the `D`-state tasks cannot be killed and
 the lock is inside `rm_init_adapter`. Reboot. A normal `reboot` can itself hang
-on those tasks, so the way out is SysRq: sync then reboot
+on those tasks, so the way out is SysRq. **`/proc/sys/kernel/sysrq` is `16` here,
+which only enables `sync`** — the reboot key needs the mask opened first:
 
 ```
-echo s > /proc/sysrq-trigger   # as root
-echo b > /proc/sysrq-trigger
+echo 1 > /proc/sys/kernel/sysrq   # as root
+echo s > /proc/sysrq-trigger      # sync
+echo b > /proc/sysrq-trigger      # reboot
 ```
